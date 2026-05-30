@@ -1,12 +1,4 @@
-"""Esquema inicial — todas las tablas ABET Eval
-
-Revision ID: 0001
-Revises:
-Create Date: 2026-05-30
-
-"""
 from typing import Sequence, Union
-
 from alembic import op
 import sqlalchemy as sa
 
@@ -17,163 +9,157 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+
     # --- Enum tipo_actividad ---
-    op.execute("CREATE TYPE tipo_actividad AS ENUM ('individual', 'grupal')")
+    bind.execute(sa.text("""
+        DO $$ BEGIN
+            CREATE TYPE tipo_actividad AS ENUM ('individual', 'grupal');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """))
 
     # --- cursos ---
-    op.create_table(
-        "cursos",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("nombre", sa.String(200), nullable=False),
-        sa.Column("codigo", sa.String(50), nullable=False),
-        sa.Column("periodo", sa.String(20), nullable=False),
-        sa.Column("docente_email", sa.String(200), nullable=False),
-        sa.Column("ra_abet", sa.JSON(), nullable=True),
-        sa.Column("activo", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_cursos_id", "cursos", ["id"])
-    op.create_index("ix_cursos_docente_email", "cursos", ["docente_email"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS cursos (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(200) NOT NULL,
+            codigo VARCHAR(50) NOT NULL,
+            periodo VARCHAR(20) NOT NULL,
+            docente_email VARCHAR(200) NOT NULL,
+            ra_abet JSON,
+            activo BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_cursos_id ON cursos(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_cursos_docente_email ON cursos(docente_email)"))
 
     # --- secciones ---
-    op.create_table(
-        "secciones",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("nombre", sa.String(100), nullable=False),
-        sa.Column("curso_id", sa.Integer(), nullable=False),
-        sa.Column("activo", sa.Boolean(), nullable=False, server_default="true"),
-        sa.ForeignKeyConstraint(["curso_id"], ["cursos.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_secciones_id", "secciones", ["id"])
-    op.create_index("ix_secciones_curso_id", "secciones", ["curso_id"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS secciones (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(100) NOT NULL,
+            curso_id INTEGER NOT NULL REFERENCES cursos(id) ON DELETE CASCADE,
+            activo BOOLEAN NOT NULL DEFAULT true
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_secciones_id ON secciones(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_secciones_curso_id ON secciones(curso_id)"))
 
     # --- estudiantes ---
-    op.create_table(
-        "estudiantes",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("nombre_completo", sa.String(200), nullable=False),
-        sa.Column("codigo_estudiante", sa.String(50), nullable=False),
-        sa.Column("seccion_id", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["seccion_id"], ["secciones.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_estudiantes_id", "estudiantes", ["id"])
-    op.create_index("ix_estudiantes_seccion_id", "estudiantes", ["seccion_id"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS estudiantes (
+            id SERIAL PRIMARY KEY,
+            nombre_completo VARCHAR(200) NOT NULL,
+            codigo_estudiante VARCHAR(50) NOT NULL,
+            seccion_id INTEGER NOT NULL REFERENCES secciones(id) ON DELETE CASCADE
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_estudiantes_id ON estudiantes(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_estudiantes_seccion_id ON estudiantes(seccion_id)"))
 
     # --- actividades ---
-    op.create_table(
-        "actividades",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("nombre", sa.String(200), nullable=False),
-        sa.Column("tipo", sa.Enum("individual", "grupal", name="tipo_actividad"), nullable=False),
-        sa.Column("peso_nota_final", sa.Numeric(5, 2), nullable=False),
-        sa.Column("curso_id", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["curso_id"], ["cursos.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_actividades_id", "actividades", ["id"])
-    op.create_index("ix_actividades_curso_id", "actividades", ["curso_id"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS actividades (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(200) NOT NULL,
+            tipo tipo_actividad NOT NULL,
+            peso_nota_final NUMERIC(5,2) NOT NULL,
+            curso_id INTEGER NOT NULL REFERENCES cursos(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_actividades_id ON actividades(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_actividades_curso_id ON actividades(curso_id)"))
 
     # --- aspectos ---
-    op.create_table(
-        "aspectos",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("nombre", sa.String(200), nullable=False),
-        sa.Column("actividad_id", sa.Integer(), nullable=False),
-        sa.Column("orden", sa.Integer(), nullable=False, server_default="0"),
-        sa.ForeignKeyConstraint(["actividad_id"], ["actividades.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_aspectos_id", "aspectos", ["id"])
-    op.create_index("ix_aspectos_actividad_id", "aspectos", ["actividad_id"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS aspectos (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(200) NOT NULL,
+            actividad_id INTEGER NOT NULL REFERENCES actividades(id) ON DELETE CASCADE,
+            orden INTEGER NOT NULL DEFAULT 0
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_aspectos_id ON aspectos(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_aspectos_actividad_id ON aspectos(actividad_id)"))
 
     # --- criterios ---
-    op.create_table(
-        "criterios",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("texto", sa.String(500), nullable=False),
-        sa.Column("peso_porcentaje", sa.Numeric(5, 2), nullable=False),
-        sa.Column("aspecto_id", sa.Integer(), nullable=False),
-        sa.Column("orden", sa.Integer(), nullable=False, server_default="0"),
-        sa.CheckConstraint("peso_porcentaje >= 0 AND peso_porcentaje <= 100", name="ck_criterio_peso_rango"),
-        sa.ForeignKeyConstraint(["aspecto_id"], ["aspectos.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_criterios_id", "criterios", ["id"])
-    op.create_index("ix_criterios_aspecto_id", "criterios", ["aspecto_id"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS criterios (
+            id SERIAL PRIMARY KEY,
+            texto VARCHAR(500) NOT NULL,
+            peso_porcentaje NUMERIC(5,2) NOT NULL,
+            aspecto_id INTEGER NOT NULL REFERENCES aspectos(id) ON DELETE CASCADE,
+            orden INTEGER NOT NULL DEFAULT 0,
+            CONSTRAINT ck_criterio_peso_rango CHECK (peso_porcentaje >= 0 AND peso_porcentaje <= 100)
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_criterios_id ON criterios(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_criterios_aspecto_id ON criterios(aspecto_id)"))
 
     # --- equipos_trabajo ---
-    op.create_table(
-        "equipos_trabajo",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("nombre", sa.String(100), nullable=False),
-        sa.Column("actividad_id", sa.Integer(), nullable=False),
-        sa.Column("seccion_id", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["actividad_id"], ["actividades.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["seccion_id"], ["secciones.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_equipos_trabajo_id", "equipos_trabajo", ["id"])
-    op.create_index("ix_equipos_trabajo_actividad_id", "equipos_trabajo", ["actividad_id"])
-    op.create_index("ix_equipos_trabajo_seccion_id", "equipos_trabajo", ["seccion_id"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS equipos_trabajo (
+            id SERIAL PRIMARY KEY,
+            nombre VARCHAR(100) NOT NULL,
+            actividad_id INTEGER NOT NULL REFERENCES actividades(id) ON DELETE CASCADE,
+            seccion_id INTEGER NOT NULL REFERENCES secciones(id) ON DELETE CASCADE
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_equipos_trabajo_id ON equipos_trabajo(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_equipos_trabajo_actividad_id ON equipos_trabajo(actividad_id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_equipos_trabajo_seccion_id ON equipos_trabajo(seccion_id)"))
 
     # --- miembros_equipo ---
-    op.create_table(
-        "miembros_equipo",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("equipo_id", sa.Integer(), nullable=False),
-        sa.Column("estudiante_id", sa.Integer(), nullable=False),
-        sa.ForeignKeyConstraint(["equipo_id"], ["equipos_trabajo.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["estudiante_id"], ["estudiantes.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("equipo_id", "estudiante_id", name="uq_miembro_equipo"),
-    )
-    op.create_index("ix_miembros_equipo_id", "miembros_equipo", ["id"])
-    op.create_index("ix_miembros_equipo_equipo_id", "miembros_equipo", ["equipo_id"])
-    op.create_index("ix_miembros_equipo_estudiante_id", "miembros_equipo", ["estudiante_id"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS miembros_equipo (
+            id SERIAL PRIMARY KEY,
+            equipo_id INTEGER NOT NULL REFERENCES equipos_trabajo(id) ON DELETE CASCADE,
+            estudiante_id INTEGER NOT NULL REFERENCES estudiantes(id) ON DELETE CASCADE,
+            CONSTRAINT uq_miembro_equipo UNIQUE (equipo_id, estudiante_id)
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_miembros_equipo_id ON miembros_equipo(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_miembros_equipo_equipo_id ON miembros_equipo(equipo_id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_miembros_equipo_estudiante_id ON miembros_equipo(estudiante_id)"))
 
     # --- calificaciones ---
-    op.create_table(
-        "calificaciones",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("criterio_id", sa.Integer(), nullable=False),
-        sa.Column("valor", sa.SmallInteger(), nullable=False),
-        sa.Column("equipo_id", sa.Integer(), nullable=True),
-        sa.Column("estudiante_id", sa.Integer(), nullable=True),
-        sa.Column("nota_calculada", sa.Numeric(6, 4), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.CheckConstraint(
-            "(equipo_id IS NULL) != (estudiante_id IS NULL)",
-            name="ck_calificacion_xor_equipo_estudiante",
-        ),
-        sa.CheckConstraint("valor IN (0, 1)", name="ck_calificacion_valor_binario"),
-        sa.CheckConstraint(
-            "nota_calculada >= 0.0 AND nota_calculada <= 5.0",
-            name="ck_calificacion_nota_rango",
-        ),
-        sa.ForeignKeyConstraint(["criterio_id"], ["criterios.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["equipo_id"], ["equipos_trabajo.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["estudiante_id"], ["estudiantes.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_calificaciones_id", "calificaciones", ["id"])
-    op.create_index("ix_calificaciones_criterio_id", "calificaciones", ["criterio_id"])
-    op.create_index("ix_calificaciones_equipo_id", "calificaciones", ["equipo_id"])
-    op.create_index("ix_calificaciones_estudiante_id", "calificaciones", ["estudiante_id"])
+    bind.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS calificaciones (
+            id SERIAL PRIMARY KEY,
+            criterio_id INTEGER NOT NULL REFERENCES criterios(id) ON DELETE CASCADE,
+            valor SMALLINT NOT NULL,
+            equipo_id INTEGER REFERENCES equipos_trabajo(id) ON DELETE CASCADE,
+            estudiante_id INTEGER REFERENCES estudiantes(id) ON DELETE CASCADE,
+            nota_calculada NUMERIC(6,4) NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            CONSTRAINT ck_calificacion_xor_equipo_estudiante
+                CHECK ((equipo_id IS NULL) != (estudiante_id IS NULL)),
+            CONSTRAINT ck_calificacion_valor_binario
+                CHECK (valor IN (0, 1)),
+            CONSTRAINT ck_calificacion_nota_rango
+                CHECK (nota_calculada >= 0.0 AND nota_calculada <= 5.0)
+        )
+    """))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_calificaciones_id ON calificaciones(id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_calificaciones_criterio_id ON calificaciones(criterio_id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_calificaciones_equipo_id ON calificaciones(equipo_id)"))
+    bind.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_calificaciones_estudiante_id ON calificaciones(estudiante_id)"))
 
 
 def downgrade() -> None:
-    op.drop_table("calificaciones")
-    op.drop_table("miembros_equipo")
-    op.drop_table("equipos_trabajo")
-    op.drop_table("criterios")
-    op.drop_table("aspectos")
-    op.drop_table("actividades")
-    op.drop_table("estudiantes")
-    op.drop_table("secciones")
-    op.drop_table("cursos")
-    op.execute("DROP TYPE tipo_actividad")
+    bind = op.get_bind()
+    bind.execute(sa.text("DROP TABLE IF EXISTS calificaciones CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS miembros_equipo CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS equipos_trabajo CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS criterios CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS aspectos CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS actividades CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS estudiantes CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS secciones CASCADE"))
+    bind.execute(sa.text("DROP TABLE IF EXISTS cursos CASCADE"))
+    bind.execute(sa.text("DROP TYPE IF EXISTS tipo_actividad"))
