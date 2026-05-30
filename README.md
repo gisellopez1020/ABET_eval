@@ -11,7 +11,7 @@ Sistema de evaluación por criterios ABET para la Universidad Autónoma de Occid
 ### 1. Clonar el repositorio y configurar variables de entorno
 
 ```bash
-git clone <url-del-repositorio>
+git clone https://github.com/gisellopez1020/ABET_eval.git
 cd abet-eval
 cp .env.example .env
 ```
