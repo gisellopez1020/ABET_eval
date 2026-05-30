@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: abet-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-abet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-abet_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-abet_eval}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-abet}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: abet-backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://abet:abet_pass@postgres:5432/abet_eval}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-PLACEHOLDER}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-PLACEHOLDER}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-PLACEHOLDER}
+      ONEDRIVE_FOLDER_NAME: ${ONEDRIVE_FOLDER_NAME:-ABET_Eval}
+      SKIP_AUTH: ${SKIP_AUTH:-true}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: abet-frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-PLACEHOLDER}
+      VITE_AZURE_TENANT_ID: ${AZURE_TENANT_ID:-PLACEHOLDER}
+      VITE_REDIRECT_URI: ${VITE_REDIRECT_URI:-http://localhost:5173}
+      VITE_SKIP_AUTH: ${SKIP_AUTH:-true}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
