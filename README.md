@@ -63,12 +63,6 @@ Con `SKIP_AUTH=true` (valor por defecto en `.env`), el botón "Iniciar sesión c
 
 ---
 
-## Integración Microsoft (producción)
-
-Ver [SETUP_MICROSOFT.md](./SETUP_MICROSOFT.md) para configurar Azure AD con credenciales reales del tenant UAO.
-
----
-
 ## Estructura del proyecto
 
 ```
