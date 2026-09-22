@@ -48,9 +48,6 @@ services:
     container_name: abet-frontend
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
-      VITE_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-PLACEHOLDER}
-      VITE_AZURE_TENANT_ID: ${AZURE_TENANT_ID:-PLACEHOLDER}
-      VITE_REDIRECT_URI: ${VITE_REDIRECT_URI:-http://localhost:5173}
       VITE_SKIP_AUTH: ${SKIP_AUTH:-true}
     ports:
       - "5173:5173"
