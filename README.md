@@ -46,7 +46,9 @@ docker-compose exec backend python scripts/seed.py
 - **Frontend:** http://localhost:5173
 - **API Swagger:** http://localhost:8000/docs
 
-Con `SKIP_AUTH=true` (valor por defecto en `.env`), el botón "Iniciar sesión con Microsoft" hace login directo sin credenciales reales.
+Con `SKIP_AUTH=true` (valor por defecto en `.env`), el botón "Iniciar sesión con Google" hace login directo sin credenciales reales.
+
+Para configurar el login real con Google y la sincronización con Google Drive, consulta [SETUP_GOOGLE.md](./SETUP_GOOGLE.md).
 
 ---
 
