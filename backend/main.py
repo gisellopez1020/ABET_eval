@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth, cursos, secciones, estudiantes, actividades
-from app.routers import criterios, equipos, calificaciones, reportes, onedrive
+from app.routers import criterios, equipos, calificaciones, reportes, drive
 
 app = FastAPI(
     title="ABET Eval API",
@@ -29,7 +29,7 @@ app.include_router(criterios.router)
 app.include_router(equipos.router)
 app.include_router(calificaciones.router)
 app.include_router(reportes.router)
-app.include_router(onedrive.router)
+app.include_router(drive.router)
 
 
 @app.get("/health", tags=["Estado"])
