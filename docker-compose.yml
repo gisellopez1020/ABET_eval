@@ -25,10 +25,12 @@ services:
     container_name: abet-backend
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://abet:abet_pass@postgres:5432/abet_eval}
-      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-PLACEHOLDER}
-      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-PLACEHOLDER}
-      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-PLACEHOLDER}
-      ONEDRIVE_FOLDER_NAME: ${ONEDRIVE_FOLDER_NAME:-ABET_Eval}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-PLACEHOLDER}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-PLACEHOLDER}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/callback}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-PLACEHOLDER}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      GOOGLE_DRIVE_FOLDER_NAME: ${GOOGLE_DRIVE_FOLDER_NAME:-ABET_Eval}
       SKIP_AUTH: ${SKIP_AUTH:-true}
     ports:
       - "8000:8000"
@@ -46,9 +48,6 @@ services:
     container_name: abet-frontend
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
-      VITE_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-PLACEHOLDER}
-      VITE_AZURE_TENANT_ID: ${AZURE_TENANT_ID:-PLACEHOLDER}
-      VITE_REDIRECT_URI: ${VITE_REDIRECT_URI:-http://localhost:5173}
       VITE_SKIP_AUTH: ${SKIP_AUTH:-true}
     ports:
       - "5173:5173"

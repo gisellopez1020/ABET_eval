@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/Login/LoginPage';
+import { AuthCallbackPage } from './pages/Auth/AuthCallbackPage';
 import { DashboardPage } from './pages/Dashboard/DashboardPage';
 import { CoursePage } from './pages/Course/CoursePage';
 import { CoursesPage } from './pages/Course/CoursesPage';
@@ -13,6 +14,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
          <Route  path="/cursos" element={<CoursesPage />}/>
          <Route path="/cursos/nueva" element={<CoursePage />}/>

@@ -1,5 +1,6 @@
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-import httpx
+
 from fastapi import Header, HTTPException, status
 from jose import jwt, JWTError
 
@@ -10,27 +11,17 @@ MOCK_USER = {
     "nombre": "Profesor Test UAO",
 }
 
-_jwks_cache: Optional[dict] = None
 
-
-async def _get_jwks() -> dict:
-    global _jwks_cache
-    if _jwks_cache:
-        return _jwks_cache
-    url = (
-        f"https://login.microsoftonline.com/{settings.azure_tenant_id}"
-        "/discovery/v2.0/keys"
-    )
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-    _jwks_cache = resp.json()
-    return _jwks_cache
+def create_access_token(email: str, nombre: str) -> str:
+    """Emite el JWT propio de la app para un docente ya autenticado con Google."""
+    expira = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
+    payload = {"email": email, "nombre": nombre, "exp": expira}
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
 def get_current_user(authorization: Optional[str] = Header(default=None)) -> dict:
     """
-    Devuelve el usuario autenticado a partir del JWT de Microsoft.
+    Devuelve el usuario autenticado a partir del JWT propio de la app.
     En modo SKIP_AUTH=true retorna un usuario mock sin validar el token.
     """
     if settings.skip_auth:
@@ -44,30 +35,13 @@ def get_current_user(authorization: Optional[str] = Header(default=None)) -> dic
 
     token = authorization.removeprefix("Bearer ").strip()
     try:
-        header = jwt.get_unverified_header(token)
-        kid = header.get("kid")
-
-        import httpx as _httpx
-        jwks_url = (
-            f"https://login.microsoftonline.com/{settings.azure_tenant_id}"
-            "/discovery/v2.0/keys"
-        )
-        jwks = _httpx.get(jwks_url).json()
-        key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
-        if not key:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token inválido: clave pública no encontrada",
-            )
-
         payload = jwt.decode(
             token,
-            key,
-            algorithms=["RS256"],
-            audience=settings.azure_client_id,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
         )
-        email = payload.get("preferred_username") or payload.get("upn") or payload.get("email")
-        nombre = payload.get("name", "")
+        email = payload.get("email")
+        nombre = payload.get("nombre", "")
         if not email:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

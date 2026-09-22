@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
-import { useMsal } from '@azure/msal-react';
-import { loginRequest, SKIP_AUTH } from '../../auth/msalConfig';
-import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 
+const SKIP_AUTH = import.meta.env.VITE_SKIP_AUTH === 'true';
+
 export function LoginPage() {
-  const { instance } = useMsal();
   const { setAuth, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -25,16 +23,10 @@ export function LoginPage() {
         return;
       }
 
-      const result = await instance.loginPopup(loginRequest);
-      const token = result.accessToken;
-      localStorage.setItem('auth_token', token);
-      const user = await authApi.login(token);
-      setAuth(user, token);
-      navigate('/dashboard');
+      window.location.href = `${import.meta.env.VITE_API_URL}/auth/login`;
     } catch (e: any) {
       const msg = e?.response?.data?.detail || e?.message || 'Error al iniciar sesión';
       setError(msg);
-      localStorage.removeItem('auth_token');
     } finally {
       setLoading(false);
     }

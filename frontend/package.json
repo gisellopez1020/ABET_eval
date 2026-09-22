@@ -10,8 +10,6 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@azure/msal-browser": "^3.14.0",
-    "@azure/msal-react": "^2.1.0",
     "axios": "^1.7.2",
     "jspdf": "^2.5.1",
     "lucide-react": "^1.47.0",
