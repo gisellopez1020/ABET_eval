@@ -27,7 +27,7 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    to: '/asignaturas',
+    to: '/cursos',
     label: 'Asignaturas',
     icon: BookOpen,
   },

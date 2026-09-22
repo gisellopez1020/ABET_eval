@@ -2,8 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/Login/LoginPage';
 import { DashboardPage } from './pages/Dashboard/DashboardPage';
 import { CoursePage } from './pages/Course/CoursePage';
+import { CoursesPage } from './pages/Course/CoursesPage';
 import { SectionPage } from './pages/Section/SectionPage';
-import { ActivityPage } from './pages/Activity/ActivityPage';
 import { GradingSelectionPage } from './pages/Grading/Selection/GradingSelectionPage';
 import { GradingTemplatePage } from './pages/Grading/Template/GradingTemplatePage';
 import { ReportsPage } from './pages/Reports/ReportsPage';
@@ -14,9 +14,11 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+         <Route  path="/cursos" element={<CoursesPage />}/>
+         <Route path="/cursos/nueva" element={<CoursePage />}/>
         <Route path="/cursos/:cursoId" element={<CoursePage />} />
         <Route path="/cursos/:cursoId/secciones/:seccionId" element={<SectionPage />} />
-        <Route path="/actividades/:actividadId" element={<ActivityPage />} />
+       
         <Route
           path="/actividades/:actividadId/calificar/:seccionId"
           element={<GradingSelectionPage />}

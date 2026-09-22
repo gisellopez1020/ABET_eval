@@ -74,15 +74,12 @@ export function DashboardPage() {
       <div className="px-5 py-3">
         {/* Encabezado */}
         <div className="mb-4">
-          <p className="text-[11px] text-gray-400">
-            Inicio
-          </p>
 
-          <h1 className="mt-1 text-xl font-semibold text-gray-900">
+          <h1 className="mt-1 text-2xl font-semibold text-gray-900">
             Panel general
           </h1>
 
-          <p className="mt-1 text-[11px] text-gray-600">
+          <p className="mt-1 text-sm text-gray-600">
             Bienvenido
           </p>
         </div>

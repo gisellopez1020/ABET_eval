@@ -1,5 +1,6 @@
 import { Curso } from '../../types';
 import { ChevronDown } from 'lucide-react';
+import { useCourseStore } from '../../store/courseStore';
 
 interface CourseSelectorProps {
   cursos: Curso[];
@@ -14,6 +15,20 @@ export function CourseSelector({
   loading,
   onChange,
 }: CourseSelectorProps) {
+  const { setSelectedCourse, clearSelectedCourse } =
+    useCourseStore();
+
+  const handleChange = (cursoId: string) => {
+    onChange(cursoId);
+
+    if (cursoId === '') {
+      clearSelectedCourse();
+      return;
+    }
+
+    setSelectedCourse(Number(cursoId));
+  };
+
   return (
     <section className="mb-4 rounded-xl border border-gray-200 bg-white px-2 py-2 shadow-sm">
       <div className="flex items-center justify-between gap-4">
@@ -25,7 +40,9 @@ export function CourseSelector({
           <select
             id="curso"
             value={selectedCursoId}
-            onChange={(event) => onChange(event.target.value)}
+            onChange={(event) =>
+              handleChange(event.target.value)
+            }
             disabled={loading}
             className="h-7 w-full appearance-none rounded-sm border border-gray-200 bg-white px-3 pr-7 text-[12px] text-gray-500 outline-none transition focus:border-[#9E0B0F]"
           >
