@@ -12,17 +12,21 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (isAuthenticated()) return <Navigate to="/dashboard" replace />;
+  if (SKIP_AUTH || isAuthenticated()) return <Navigate to="/dashboard" replace />;
 
   const handleLogin = async () => {
     setLoading(true);
     setError('');
     try {
-      let token = 'mock-token';
-      if (!SKIP_AUTH) {
-        const result = await instance.loginPopup(loginRequest);
-        token = result.accessToken;
+      if (SKIP_AUTH) {
+        const demoUser = { email: 'docente@demo.edu.co', nombre: 'Docente demo' };
+        setAuth(demoUser, 'mock-token');
+        navigate('/dashboard');
+        return;
       }
+
+      const result = await instance.loginPopup(loginRequest);
+      const token = result.accessToken;
       localStorage.setItem('auth_token', token);
       const user = await authApi.login(token);
       setAuth(user, token);
