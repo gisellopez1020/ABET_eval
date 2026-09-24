@@ -13,7 +13,7 @@ if config.config_file_name is not None:
 from app.models.base import Base
 from app.models import (  # noqa: F401
     Curso, Seccion, Estudiante, Actividad, Aspecto,
-    Criterio, EquipoTrabajo, MiembroEquipo, Calificacion,
+    Criterio, EquipoTrabajo, MiembroEquipo, Calificacion, RaAbetCatalogo,
 )
 
 target_metadata = Base.metadata

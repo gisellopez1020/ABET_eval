@@ -10,6 +10,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Target,
 } from 'lucide-react';
 
 import { useAuthStore } from '../../store/authStore';
@@ -39,6 +40,11 @@ const navItems = [
     to: '/proyectos',
     label: 'Proyectos y equipos',
     icon: FolderKanban,
+  },
+  {
+    to: '/student-outcomes',
+    label: 'Student Outcomes',
+    icon: Target,
   },
   {
     to: '/rubrica',
