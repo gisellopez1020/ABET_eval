@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
   Filter,
   BookOpen,
   Users,
-  X,
   Eye,
   Pencil,
   Trash2,
@@ -24,6 +23,7 @@ import { estudiantesApi } from '../../api/estudiantes';
 import { Curso, Seccion } from '../../types';
 import { useCourseStore } from '../../store/courseStore';
 import { CourseDetailsModal } from './components/CourseDetailsModal';
+import { CourseFormModal } from './components/CourseFormModal';
 
 interface CourseStats {
   sections: Seccion[];
@@ -34,6 +34,7 @@ type StatusFilter = 'todos' | 'activo' | 'cerrado';
 
 export function CoursesPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const { selectedCourseId, setSelectedCourse } = useCourseStore();
 
@@ -48,9 +49,6 @@ export function CoursesPage() {
   const [showFilter, setShowFilter] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [courseToView, setCourseToView] = useState<Curso | null>(null);
-  const [newCourse, setNewCourse] = useState({ nombre: '', codigo: '', periodo: '' });
-  const [createError, setCreateError] = useState('');
-  const [createLoading, setCreateLoading] = useState(false);
 
   const loadCourses = async () => {
     try {
@@ -108,6 +106,14 @@ export function CoursesPage() {
     loadCourses();
   }, []);
 
+  // /cursos/nueva redirige a /cursos?nueva=1: abre el modal y limpia el parámetro
+  useEffect(() => {
+    if (searchParams.get('nueva') === '1') {
+      setShowCreateModal(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   const filteredCourses = useMemo(() => {
     const normalizedSearch = search.toLowerCase().trim();
 
@@ -158,42 +164,13 @@ export function CoursesPage() {
     }
   };
 
-  const handleCreateCourse = async () => {
-    if (!newCourse.nombre.trim()) {
-      setCreateError('El nombre es obligatorio');
-      return;
-    }
-    if (!newCourse.codigo.trim()) {
-      setCreateError('El código es obligatorio');
-      return;
-    }
-    if (!newCourse.periodo.trim()) {
-      setCreateError('El período es obligatorio');
-      return;
-    }
-
-    setCreateLoading(true);
-    setCreateError('');
-
-    try {
-      const createdCourse = await cursosApi.create({
-        nombre: newCourse.nombre.trim(),
-        codigo: newCourse.codigo.trim(),
-        periodo: newCourse.periodo.trim(),
-        ra_abet: [],
-      });
-
-      setCourses((prev) => [createdCourse, ...prev]);
-      setSelectedCourse(createdCourse.id);
-      setNewCourse({ nombre: '', codigo: '', periodo: '' });
-      setShowCreateModal(false);
-      setSearch('');
-      setStatusFilter('todos');
-    } catch (error: any) {
-      setCreateError(error?.response?.data?.detail || 'No se pudo crear la asignatura');
-    } finally {
-      setCreateLoading(false);
-    }
+  // La validación, el POST y los errores viven en CourseFormModal
+  const handleCourseCreated = (createdCourse: Curso) => {
+    setCourses((prev) => [createdCourse, ...prev]);
+    setSelectedCourse(createdCourse.id);
+    setShowCreateModal(false);
+    setSearch('');
+    setStatusFilter('todos');
   };
 
   const getGroups = (courseId: number) => {
@@ -428,87 +405,12 @@ export function CoursesPage() {
         />
       )}
 
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Nueva asignatura</h2>
-                <p className="text-sm text-gray-500">Crea una asignatura sin salir de esta página</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setCreateError('');
-                }}
-                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-              >
-                <X size={19} />
-              </button>
-            </div>
-
-            <div className="space-y-4 px-6 py-5">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Nombre</label>
-                <input
-                  value={newCourse.nombre}
-                  onChange={(e) => setNewCourse((prev) => ({ ...prev, nombre: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-                  placeholder="Ej: Fundamentos de programación"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Código</label>
-                <input
-                  value={newCourse.codigo}
-                  onChange={(e) => setNewCourse((prev) => ({ ...prev, codigo: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-                  placeholder="Ej: FIS-101"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Período</label>
-                <input
-                  value={newCourse.periodo}
-                  onChange={(e) => setNewCourse((prev) => ({ ...prev, periodo: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-                  placeholder="Ej: 2026-1"
-                />
-              </div>
-
-              {createError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {createError}
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setCreateError('');
-                }}
-                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={createLoading}
-                onClick={handleCreateCourse}
-                className="rounded-lg bg-[#9E0B0F] px-4 py-2 text-sm font-medium text-white hover:bg-[#82090d] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {createLoading ? 'Creando...' : 'Crear asignatura'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CourseFormModal
+        open={showCreateModal}
+        mode="create"
+        onClose={() => setShowCreateModal(false)}
+        onSaved={handleCourseCreated}
+      />
     </AppLayout>
   );
 }

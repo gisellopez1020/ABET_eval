@@ -12,6 +12,7 @@ import { ReportsPage } from './pages/Reports/ReportsPage';
 import { ProjectsPage } from './pages/Proyects/ProjectsPage';
 import EvaluacionesPage from './pages/evaluaciones/EvaluacionesPage';
 import RubricaPage from './pages/rubrica/RubricaPage';
+import { StudentOutcomesPage } from './pages/StudentOutcomes/StudentOutcomesPage';
 
 export default function App() {
   return (
@@ -26,7 +27,8 @@ export default function App() {
         <Route path="/rubrica" element={<RubricaPage />} />
         <Route path="/evaluaciones" element={<EvaluacionesPage />} />
         <Route path="/evaluaciones" element={<EvaluacionesPage />} />
-        <Route path="/cursos/nueva" element={<CoursePage />} />
+        <Route path="/cursos/nueva" element={<Navigate to="/cursos?nueva=1" replace />} />
+        <Route path="/student-outcomes" element={<StudentOutcomesPage />} />
         <Route path="/cursos/:cursoId" element={<CoursePage />} />
         <Route path="/cursos/:cursoId/secciones/:seccionId" element={<SectionPage />} />
        

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Pencil } from 'lucide-react';
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Header } from '../../components/Layout/Header';
 import { Button } from '../../components/ui/Button';
@@ -12,6 +13,7 @@ import { seccionesApi } from '../../api/secciones';
 import { actividadesApi, ActividadCreate } from '../../api/actividades';
 import { estudiantesApi } from '../../api/estudiantes';
 import { Curso, Seccion, Actividad, rubricaCompleta } from '../../types';
+import { CourseFormModal } from './components/CourseFormModal';
 
 function estadoActividad(a: Actividad): { label: string; variant: 'neutral' | 'warning' | 'info' | 'success' } {
   return { label: a.tipo === 'grupal' ? 'Grupal' : 'Individual', variant: 'info' };
@@ -20,7 +22,6 @@ function estadoActividad(a: Actividad): { label: string; variant: 'neutral' | 'w
 export function CoursePage() {
   const { cursoId } = useParams<{ cursoId: string }>();
   const id = Number(cursoId);
-  const isCreateMode = !cursoId || Number.isNaN(id);
   const navigate = useNavigate();
 
   const [curso, setCurso] = useState<Curso | null>(null);
@@ -29,14 +30,7 @@ export function CoursePage() {
   const [estudiantesCount, setEstudiantesCount] = useState<Record<number, number>>({});
   const [selectedSeccion, setSelectedSeccion] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [newCourse, setNewCourse] = useState({
-    nombre: '',
-    codigo: '',
-    periodo: '',
-    activo: true,
-  });
-  const [createError, setCreateError] = useState('');
-  const [createLoading, setCreateLoading] = useState(false);
+  const [editModal, setEditModal] = useState(false);
 
   const [newSeccionModal, setNewSeccionModal] = useState(false);
   const [newSeccionNombre, setNewSeccionNombre] = useState('');
@@ -48,11 +42,6 @@ export function CoursePage() {
   const [actError, setActError] = useState('');
 
   useEffect(() => {
-    if (isCreateMode) {
-      setLoading(false);
-      return;
-    }
-
     Promise.all([
       cursosApi.get(id),
       seccionesApi.list(id),
@@ -74,7 +63,7 @@ export function CoursePage() {
     }).catch(() => {
       setCurso(null);
     }).finally(() => setLoading(false));
-  }, [id, isCreateMode]);
+  }, [id]);
 
   const handleCreateSeccion = async () => {
     if (!newSeccionNombre.trim()) return;
@@ -107,39 +96,6 @@ export function CoursePage() {
     }
   };
 
-  const handleCreateCurso = async () => {
-    if (!newCourse.nombre.trim()) {
-      setCreateError('El nombre es obligatorio');
-      return;
-    }
-    if (!newCourse.codigo.trim()) {
-      setCreateError('El código es obligatorio');
-      return;
-    }
-    if (!newCourse.periodo.trim()) {
-      setCreateError('El período es obligatorio');
-      return;
-    }
-
-    setCreateLoading(true);
-    setCreateError('');
-
-    try {
-      const created = await cursosApi.create({
-        nombre: newCourse.nombre.trim(),
-        codigo: newCourse.codigo.trim(),
-        periodo: newCourse.periodo.trim(),
-        ra_abet: [],
-      });
-
-      navigate(`/cursos/${created.id}`);
-    } catch (e: any) {
-      setCreateError(e?.response?.data?.detail || 'No se pudo crear la asignatura');
-    } finally {
-      setCreateLoading(false);
-    }
-  };
-
   if (loading) {
     return (
       <AppLayout>
@@ -147,85 +103,6 @@ export function CoursePage() {
         <div className="p-6 space-y-4">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-4 w-40" />
-        </div>
-      </AppLayout>
-    );
-  }
-
-  if (isCreateMode) {
-    return (
-      <AppLayout>
-        <div className="p-6">
-          <div className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
-            <div className="mb-6 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Nueva asignatura</h2>
-                <p className="text-sm text-gray-500">Completa la información de la asignatura</p>
-              </div>
-              <Button variant="secondary" onClick={() => navigate('/cursos')}>
-                Volver
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Input
-                label="Nombre"
-                value={newCourse.nombre}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, nombre: e.target.value }))}
-                placeholder="Ej: Fundamentos de programación"
-              />
-              <Input
-                label="Código"
-                value={newCourse.codigo}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, codigo: e.target.value }))}
-                placeholder="Ej: FIS-101"
-              />
-              <Input
-                label="Período"
-                value={newCourse.periodo}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, periodo: e.target.value }))}
-                placeholder="Ej: 2026-1"
-              />
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-gray-700">Estado</label>
-                <div className="flex items-center gap-6 rounded-lg border border-gray-300 px-3 py-2">
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="radio"
-                      name="curso-estado"
-                      checked={newCourse.activo}
-                      onChange={() => setNewCourse((prev) => ({ ...prev, activo: true }))}
-                    />
-                    Activa
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="radio"
-                      name="curso-estado"
-                      checked={!newCourse.activo}
-                      onChange={() => setNewCourse((prev) => ({ ...prev, activo: false }))}
-                    />
-                    Inactiva
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {createError && (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {createError}
-              </div>
-            )}
-
-            <div className="mt-6 flex justify-end gap-3">
-              <Button variant="ghost" onClick={() => navigate('/cursos')}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreateCurso} loading={createLoading}>
-                Crear asignatura
-              </Button>
-            </div>
-          </div>
         </div>
       </AppLayout>
     );
@@ -247,9 +124,14 @@ export function CoursePage() {
             <h2 className="text-2xl font-bold text-uao-dark">{curso.nombre}</h2>
             <p className="text-sm text-gray-500">{curso.codigo} · {curso.periodo}</p>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => navigate(`/cursos/${id}/reportes`)}>
-            Ver reportes ABET
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" icon={<Pencil size={14} />} onClick={() => setEditModal(true)}>
+              Editar asignatura
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => navigate(`/cursos/${id}/reportes`)}>
+              Ver reportes ABET
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -412,6 +294,17 @@ export function CoursePage() {
           </div>
         </div>
       </Modal>
+
+      <CourseFormModal
+        open={editModal}
+        mode="edit"
+        course={curso}
+        onClose={() => setEditModal(false)}
+        onSaved={(updated) => {
+          setCurso(updated);
+          setEditModal(false);
+        }}
+      />
     </AppLayout>
   );
 }
