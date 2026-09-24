@@ -475,8 +475,18 @@ export default function RubricaPage() {
             </div>
           )}
           {savedMsg && (
-            <div className="mb-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-              {savedMsg}
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              <span>{savedMsg}</span>
+              {/* Las actividades grupales necesitan equipos antes de calificar */}
+              {selectedActividad?.tipo === 'grupal' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/proyectos?actividadId=${selectedActividad.id}`)}
+                >
+                  Ir a Proyectos y Equipos
+                </Button>
+              )}
             </div>
           )}
 

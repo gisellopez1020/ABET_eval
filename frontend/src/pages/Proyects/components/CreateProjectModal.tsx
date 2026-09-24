@@ -10,6 +10,8 @@ interface CreateProjectModalProps {
   open: boolean;
   sections: Seccion[];
   activities: Actividad[];
+  /** Actividad a preseleccionar (p. ej. desde /proyectos?actividadId=…) en vez de la primera. */
+  initialActividadId?: number;
   onClose: () => void;
   onCreate: (payload: {
     nombre: string;
@@ -23,6 +25,7 @@ export function CreateProjectModal({
   open,
   sections,
   activities,
+  initialActividadId,
   onClose,
   onCreate,
 }: CreateProjectModalProps) {
@@ -44,9 +47,10 @@ export function CreateProjectModal({
     }
 
     if (activities.length > 0 && !actividadId) {
-      setActividadId(activities[0].id);
+      const preseleccionada = activities.find((activity) => activity.id === initialActividadId);
+      setActividadId(preseleccionada?.id ?? activities[0].id);
     }
-  }, [open, sections, activities, seccionId, actividadId]);
+  }, [open, sections, activities, seccionId, actividadId, initialActividadId]);
 
   useEffect(() => {
     const loadStudents = async () => {

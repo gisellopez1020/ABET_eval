@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Filter,
   FolderKanban,
@@ -50,6 +50,9 @@ export function ProjectsPage() {
 
   const navigate = useNavigate();
   const { selectedCourseId } = useCourseStore();
+  // ?actividadId=… (p. ej. desde RubricaPage): usa el curso de esa actividad y la preselecciona al crear equipo
+  const [searchParams] = useSearchParams();
+  const actividadIdParam = Number(searchParams.get('actividadId')) || null;
 
   const [sections, setSections] = useState<Seccion[]>([]);
   const [activities, setActivities] = useState<Actividad[]>([]);
@@ -157,10 +160,19 @@ export function ProjectsPage() {
       try {
         const courseList = await cursosApi.list();
 
-        const effectiveCourseId =
+        let effectiveCourseId =
           selectedCourseId ??
           courseList[0]?.id ??
           null;
+
+        if (actividadIdParam) {
+          try {
+            const actividad = await actividadesApi.get(actividadIdParam);
+            effectiveCourseId = actividad.curso_id;
+          } catch (error) {
+            console.error('Actividad de la URL no disponible:', error);
+          }
+        }
 
         setSelectedCourse(effectiveCourseId);
 
@@ -172,7 +184,7 @@ export function ProjectsPage() {
     };
 
     void loadInitialCourse();
-  }, [selectedCourseId]);
+  }, [selectedCourseId, actividadIdParam]);
   const filteredProjects = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -499,6 +511,11 @@ export function ProjectsPage() {
         open={createModalOpen}
         sections={sections}
         activities={activities}
+        initialActividadId={
+          activities.some((activity) => activity.id === actividadIdParam)
+            ? actividadIdParam ?? undefined
+            : undefined
+        }
         onClose={() => setCreateModalOpen(false)}
         onCreate={handleCreateProject}
       />
