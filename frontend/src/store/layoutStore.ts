@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-interface CourseStore {
-  selectedCourseId: number | null;
-  setSelectedCourse: (courseId: number) => void;
-  clearSelectedCourse: () => void;
+interface LayoutState {
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleSidebar: () => void;
 }
 
 const storage = createJSONStorage(() => ({
@@ -31,21 +31,16 @@ const storage = createJSONStorage(() => ({
   },
 }));
 
-export const useCourseStore = create<CourseStore>()(
+export const useLayoutStore = create<LayoutState>()(
   persist(
     (set) => ({
-      selectedCourseId: null,
-
-      setSelectedCourse: (courseId) => {
-        set({ selectedCourseId: courseId });
-      },
-
-      clearSelectedCourse: () => {
-        set({ selectedCourseId: null });
-      },
+      sidebarCollapsed: false,
+      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      toggleSidebar: () =>
+        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
     }),
     {
-      name: 'abet-course-selection',
+      name: 'abet-layout-state',
       storage,
     }
   )

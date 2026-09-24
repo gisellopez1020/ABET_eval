@@ -1,7 +1,18 @@
+# Environment variables
 .env
 .env.example
+
+# Node
 node_modules/
 dist/
+
+# Python virtual environments
 venv/
+.venv/
+backend/.venv/
+
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
