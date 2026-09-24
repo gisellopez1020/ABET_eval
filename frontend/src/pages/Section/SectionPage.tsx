@@ -106,12 +106,23 @@ export function SectionPage() {
     setCsvError('');
     try {
       const result = await estudiantesApi.importCsv(sid, csvFile);
-      setEstudiantes((prev) => [...prev, ...result]);
+      setEstudiantes(await estudiantesApi.list(sid));
+      if (result.errores.length > 0) {
+        setCsvError(`Importados: ${result.importados}. ${result.errores.join(' · ')}`);
+        return;
+      }
       setCsvModal(false);
       setCsvFile(null);
       setCsvPreview([]);
     } catch (e: any) {
-      setCsvError(e?.response?.data?.detail || 'Error al importar CSV');
+      const detail = e?.response?.data?.detail;
+      setCsvError(
+        Array.isArray(detail)
+          ? detail.map((d: any) => d?.msg ?? String(d)).join(' · ')
+          : typeof detail === 'string'
+            ? detail
+            : 'Error al importar CSV'
+      );
     } finally {
       setCsvLoading(false);
     }

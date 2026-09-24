@@ -6,6 +6,11 @@ export interface EstudianteCreate {
   codigo_estudiante: string;
 }
 
+export interface ImportacionCSVResultado {
+  importados: number;
+  errores: string[];
+}
+
 export const estudiantesApi = {
   list: (seccionId: number) =>
     apiClient.get<Estudiante[]>(`/secciones/${seccionId}/estudiantes`).then((r) => r.data),
@@ -15,9 +20,9 @@ export const estudiantesApi = {
       .then((r) => r.data),
   importCsv: (seccionId: number, file: File) => {
     const form = new FormData();
-    form.append('file', file);
+    form.append('archivo', file);
     return apiClient
-      .post<Estudiante[]>(`/secciones/${seccionId}/estudiantes/csv`, form, {
+      .post<ImportacionCSVResultado>(`/secciones/${seccionId}/estudiantes/csv`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       .then((r) => r.data);

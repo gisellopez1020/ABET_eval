@@ -268,10 +268,13 @@ export function CoursePage() {
                 </p>
               )}
               {secciones.map((s) => (
-                <button
+                <div
                   key={s.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedSeccion(s.id)}
-                  className={`w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors ${selectedSeccion === s.id ? 'bg-blue-50 border-l-4 border-uao-mid' : ''}`}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedSeccion(s.id); } }}
+                  className={`cursor-pointer w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors ${selectedSeccion === s.id ? 'bg-blue-50 border-l-4 border-uao-mid' : ''}`}
                 >
                   <div>
                     <p className="font-medium text-gray-900 text-sm">{s.nombre}</p>
@@ -288,7 +291,7 @@ export function CoursePage() {
                       Gestionar
                     </Button>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </div>
@@ -310,10 +313,13 @@ export function CoursePage() {
               {actividades.map((a) => {
                 const { label, variant } = estadoActividad(a);
                 return (
-                  <button
+                  <div
                     key={a.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => navigate(`/actividades/${a.id}`)}
-                    className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors"
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/actividades/${a.id}`); } }}
+                    className="cursor-pointer w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors"
                   >
                     <div>
                       <p className="font-medium text-gray-900 text-sm">{a.nombre}</p>
@@ -334,7 +340,7 @@ export function CoursePage() {
                         </Button>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
