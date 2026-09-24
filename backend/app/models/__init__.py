@@ -7,6 +7,7 @@ from .aspecto import Aspecto
 from .criterio import Criterio
 from .equipo import EquipoTrabajo, MiembroEquipo
 from .calificacion import Calificacion
+from .ra_abet_catalogo import RaAbetCatalogo
 
 __all__ = [
     "Base",
@@ -20,4 +21,5 @@ __all__ = [
     "EquipoTrabajo",
     "MiembroEquipo",
     "Calificacion",
+    "RaAbetCatalogo",
 ]
