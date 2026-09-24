@@ -3,13 +3,31 @@ export interface Docente {
   nombre: string;
 }
 
+/** Rango del reporte ABET: intervalo cerrado [minimo, maximo] en la escala 0-5. */
+export interface RangoCalificacion {
+  etiqueta: string;
+  minimo: number;
+  maximo: number;
+}
+
+/** Entrada del catálogo global de Student Outcomes / RA ABET. */
+export interface RaAbet {
+  codigo: string;
+  so: string | null;
+  competencia: string;
+  descripcion: string;
+  programa: string;
+}
+
 export interface Curso {
   id: number;
   nombre: string;
   codigo: string;
   periodo: string;
   docente_email: string;
+  /** Códigos del catálogo RA ABET (ej. ["2.1", "4.2"]) */
   ra_abet: string[];
+  rangos_calificacion: RangoCalificacion[];
   activo: boolean;
   created_at: string;
 }

@@ -1,11 +1,13 @@
 import apiClient from './client';
-import { Curso } from '../types';
+import { Curso, RangoCalificacion } from '../types';
 
 export interface CursoCreate {
   nombre: string;
   codigo: string;
   periodo: string;
   ra_abet: string[];
+  /** Si se omite, el backend aplica los 3 rangos por defecto. */
+  rangos_calificacion?: RangoCalificacion[];
 }
 
 export const cursosApi = {
