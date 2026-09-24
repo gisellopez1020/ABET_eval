@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PencilLine, Plus, Save, Trash2 } from 'lucide-react';
+import { PencilLine, Plus, Save, Trash2, Upload } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Badge } from '../../components/ui/Badge';
@@ -14,6 +14,7 @@ import { cursosApi } from '../../api/cursos';
 import { apiErrorMessage } from '../../api/errors';
 import { useCourseStore } from '../../store/courseStore';
 import { Actividad, Aspecto, Curso } from '../../types';
+import { decodeCsvBytes, parseRubricaCsv, RubricaCsvAspecto } from './rubricaCsv';
 
 // La rúbrica se edita como borrador local y se guarda completa de una sola vez:
 // el backend (PUT /actividades/{id}/criterios) reemplaza todo y exige que los
@@ -84,6 +85,12 @@ export default function RubricaPage() {
   const [criterioForm, setCriterioForm] = useState<CriterioForm | null>(null);
   const [aspectoForm, setAspectoForm] = useState<AspectoForm | null>(null);
   const [formError, setFormError] = useState('');
+
+  const [csvModal, setCsvModal] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<RubricaCsvAspecto[]>([]);
+  const [csvError, setCsvError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const keySeq = useRef(0);
   const newKey = (prefix: string) => `${prefix}-new-${++keySeq.current}`;
@@ -270,6 +277,49 @@ export default function RubricaPage() {
     );
   };
 
+  // ── Importar CSV (solo rellena el borrador; se guarda con "Guardar rúbrica") ──
+  const closeCsvModal = () => {
+    setCsvModal(false);
+    setCsvFile(null);
+    setCsvPreview([]);
+    setCsvError('');
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const handleCsvSelect = (file: File) => {
+    setCsvFile(file);
+    setCsvPreview([]);
+    setCsvError('');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = parseRubricaCsv(decodeCsvBytes(e.target?.result as ArrayBuffer));
+      if (result.ok) {
+        setCsvPreview(result.aspectos);
+      } else {
+        setCsvError(result.error);
+      }
+    };
+    reader.onerror = () => setCsvError('No se pudo leer el archivo.');
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleCsvImport = () => {
+    if (csvPreview.length === 0 || !confirmDiscard()) return;
+    updateDraft(
+      csvPreview.map((aspecto) => ({
+        key: newKey('a'),
+        nombre: aspecto.nombre,
+        criterios: aspecto.criterios.map((c) => ({ key: newKey('c'), texto: c.texto, peso: c.peso })),
+      }))
+    );
+    closeCsvModal();
+  };
+
+  const csvTotal = round2(
+    csvPreview.reduce((sum, a) => sum + a.criterios.reduce((acc, c) => acc + c.peso, 0), 0)
+  );
+  const csvCriterios = csvPreview.reduce((sum, a) => sum + a.criterios.length, 0);
+
   // ── Guardar ─────────────────────────────────────────────────────────────
   const saveRubrica = async () => {
     if (!selectedActividadId || !canSave) return;
@@ -354,6 +404,15 @@ export default function RubricaPage() {
                 disabled={!selectedActividad}
               >
                 Agregar aspecto
+              </Button>
+              <Button
+                variant="outline"
+                size="md"
+                icon={<Upload size={16} />}
+                onClick={() => setCsvModal(true)}
+                disabled={!selectedActividad}
+              >
+                Importar CSV
               </Button>
               <Button
                 variant="primary"
@@ -459,9 +518,14 @@ export default function RubricaPage() {
                 <p className="mb-4 text-sm text-gray-500">
                   Esta actividad aún no tiene rúbrica. Empieza agregando un aspecto.
                 </p>
-                <Button variant="outline" size="sm" icon={<Plus size={14} />} onClick={() => openAspectoModal()}>
-                  Agregar aspecto
-                </Button>
+                <div className="flex justify-center gap-2">
+                  <Button variant="outline" size="sm" icon={<Plus size={14} />} onClick={() => openAspectoModal()}>
+                    Agregar aspecto
+                  </Button>
+                  <Button variant="outline" size="sm" icon={<Upload size={14} />} onClick={() => setCsvModal(true)}>
+                    Importar CSV
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="divide-y divide-[#e5e7eb]">
@@ -621,6 +685,94 @@ export default function RubricaPage() {
             </Button>
             <Button variant="primary" onClick={submitCriterio} className="bg-[#9E0B0F] hover:bg-[#82090d]">
               {criterioForm?.criterioKey ? 'Aplicar' : 'Agregar'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal CSV */}
+      <Modal open={csvModal} onClose={closeCsvModal} title="Importar rúbrica desde CSV" maxWidth="max-w-xl">
+        <div className="space-y-4">
+          <div
+            className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-uao-mid transition-colors"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files[0];
+              if (f) handleCsvSelect(f);
+            }}
+          >
+            <p className="text-sm text-gray-500">
+              {csvFile ? csvFile.name : 'Arrastra un CSV aquí o haz clic para seleccionar'}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">Formato: Aspecto,Criterio,Peso (con encabezado)</p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvSelect(f); }}
+            />
+          </div>
+
+          {csvPreview.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Vista previa ({csvPreview.length} aspecto{csvPreview.length !== 1 ? 's' : ''}, {csvCriterios} criterio
+                {csvCriterios !== 1 ? 's' : ''})
+              </p>
+              <div className="max-h-64 overflow-y-auto border rounded-lg text-xs">
+                {csvPreview.map((aspecto, aspectoIndex) => {
+                  const subtotal = round2(aspecto.criterios.reduce((acc, c) => acc + c.peso, 0));
+                  return (
+                    <div key={aspectoIndex} className="border-b last:border-b-0">
+                      <div className="flex items-center justify-between bg-gray-50 px-3 py-2 font-semibold text-gray-800">
+                        <span>
+                          <span className="mr-2 text-[#9E0B0F]">{String.fromCharCode(65 + aspectoIndex)}</span>
+                          {aspecto.nombre}
+                        </span>
+                        <span className="text-gray-500">{subtotal}%</span>
+                      </div>
+                      {aspecto.criterios.map((criterio, criterioIndex) => (
+                        <div key={criterioIndex} className="flex items-start justify-between gap-4 px-3 py-2">
+                          <span className="text-gray-700">
+                            <span className="mr-2 font-medium text-[#9E0B0F]">
+                              {buildCodeName(aspectoIndex, criterioIndex)}
+                            </span>
+                            {criterio.texto}
+                          </span>
+                          <span className="shrink-0 font-medium text-gray-700">{criterio.peso}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+              <div
+                className={`mt-2 flex items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold ${
+                  csvTotal === 100 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                }`}
+              >
+                <span>
+                  Total
+                  {csvTotal < 100 && <span className="ml-2 font-normal">(faltan {round2(100 - csvTotal)}%)</span>}
+                  {csvTotal > 100 && <span className="ml-2 font-normal">(excede {round2(csvTotal - 100)}%)</span>}
+                </span>
+                <span>{csvTotal}%</span>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Reemplazará el borrador actual. Nada se guarda hasta pulsar "Guardar rúbrica".
+              </p>
+            </div>
+          )}
+
+          {csvError && <p className="text-sm text-uao-accent">{csvError}</p>}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={closeCsvModal}>Cancelar</Button>
+            <Button onClick={handleCsvImport} disabled={csvPreview.length === 0}>
+              Importar al borrador
             </Button>
           </div>
         </div>
