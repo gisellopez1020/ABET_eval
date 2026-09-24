@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Curso
+from app.models import Curso, RaAbetCatalogo
 from app.schemas import CursoCreate, CursoUpdate, CursoOut
 
 router = APIRouter(prefix="/cursos", tags=["Cursos"])
@@ -15,6 +15,22 @@ def _verificar_propietario(curso: Curso, email: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tiene permiso para acceder a este curso",
+        )
+
+
+def _validar_ra_abet(codigos: List[str], db: Session) -> None:
+    """Cada código de ra_abet debe existir en ra_abet_catalogo (no se puede validar en el schema: requiere BD)."""
+    if not codigos:
+        return
+    existentes = {
+        codigo
+        for (codigo,) in db.query(RaAbetCatalogo.codigo).filter(RaAbetCatalogo.codigo.in_(codigos))
+    }
+    desconocidos = [c for c in codigos if c not in existentes]
+    if desconocidos:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Códigos RA ABET que no existen en el catálogo: {', '.join(desconocidos)}",
         )
 
 
@@ -34,6 +50,7 @@ def crear_curso(
     usuario: dict = Depends(get_current_user),
 ):
     """Crea un nuevo curso asociado al docente autenticado."""
+    _validar_ra_abet(body.ra_abet, db)
     curso = Curso(**body.model_dump(), docente_email=usuario["email"])
     db.add(curso)
     db.commit()
@@ -67,6 +84,8 @@ def editar_curso(
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     _verificar_propietario(curso, usuario["email"])
+    if body.ra_abet is not None:
+        _validar_ra_abet(body.ra_abet, db)
 
     for campo, valor in body.model_dump(exclude_none=True).items():
         setattr(curso, campo, valor)
