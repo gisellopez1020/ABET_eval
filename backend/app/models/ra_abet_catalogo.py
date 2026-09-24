@@ -16,7 +16,7 @@ class RaAbetCatalogo(Base):
 
     codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
     so: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    competencia: Mapped[str] = mapped_column(String(200), nullable=False)
+    competencia: Mapped[str] = mapped_column(Text, nullable=False)
     descripcion: Mapped[str] = mapped_column(Text, nullable=False)
     programa: Mapped[str] = mapped_column(
         String(200), nullable=False, default=PROGRAMA_DEFAULT, server_default=PROGRAMA_DEFAULT

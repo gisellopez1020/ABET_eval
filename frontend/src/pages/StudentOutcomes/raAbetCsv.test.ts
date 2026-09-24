@@ -40,9 +40,15 @@ describe('parseRaAbetCsv', () => {
     expect(!r.ok && r.error).toBe('Fila 4: el código "1.1" ya aparece en la fila 2.');
   });
 
-  it('falla si el código o la competencia exceden el largo de la columna', () => {
-    expect(parseRaAbetCsv(`Codigo,Competencia,Descripcion\n${'9'.repeat(21)},A,B\n`).ok).toBe(false);
-    expect(parseRaAbetCsv(`Codigo,Competencia,Descripcion\n1.1,${'x'.repeat(201)},B\n`).ok).toBe(false);
+  it('falla si el código excede el largo de la columna', () => {
+    const r = parseRaAbetCsv(`Codigo,Competencia,Descripcion\n${'9'.repeat(21)},A,B\n`);
+    expect(!r.ok && r.error).toMatch(/máximo 20 caracteres/);
+  });
+
+  it('acepta competencias largas (la redacción oficial supera 200 caracteres)', () => {
+    const competencia = 'x'.repeat(280);
+    const r = parseRaAbetCsv(`Codigo,Competencia,Descripcion\n1.1,${competencia},B\n`);
+    expect(r.ok && r.items[0].competencia).toBe(competencia);
   });
 
   it('falla si no hay filas de datos', () => {

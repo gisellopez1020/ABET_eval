@@ -85,6 +85,18 @@ class TestCrudCatalogo:
         resp = client.post("/catalogo/ra-abet", json=_ra("2.1", competencia="  "))
         assert resp.status_code == 422
 
+    def test_competencia_larga_se_acepta(self, client):
+        """La redacción oficial de algunas competencias supera los 200 caracteres."""
+        competencia = "x" * 280
+        resp = client.post("/catalogo/ra-abet", json=_ra("2.1", competencia=competencia))
+        assert resp.status_code == 201
+        assert resp.json()["competencia"] == competencia
+
+        resp = client.post("/catalogo/ra-abet/importar", json={"items": [_ra("4.2", competencia=competencia)]})
+        assert resp.status_code == 200
+        catalogo = {r["codigo"]: r for r in client.get("/catalogo/ra-abet").json()}
+        assert catalogo["4.2"]["competencia"] == competencia
+
     def test_listar_ordenado_por_codigo(self, client):
         for codigo in ["4.2", "1.1", "2.1"]:
             client.post("/catalogo/ra-abet", json=_ra(codigo))

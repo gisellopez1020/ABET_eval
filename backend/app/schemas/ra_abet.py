@@ -33,7 +33,7 @@ class RaAbetCreate(BaseModel):
     @field_validator("competencia")
     @classmethod
     def validar_competencia(cls, v: str) -> str:
-        return _texto_requerido(v, "La competencia", 200)
+        return _texto_requerido(v, "La competencia")
 
     @field_validator("descripcion")
     @classmethod
@@ -67,7 +67,7 @@ class RaAbetUpdate(BaseModel):
     @field_validator("competencia")
     @classmethod
     def validar_competencia(cls, v: Optional[str]) -> Optional[str]:
-        return _texto_requerido(v, "La competencia", 200) if v is not None else v
+        return _texto_requerido(v, "La competencia") if v is not None else v
 
     @field_validator("descripcion")
     @classmethod

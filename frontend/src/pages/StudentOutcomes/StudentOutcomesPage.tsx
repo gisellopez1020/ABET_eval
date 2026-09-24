@@ -232,11 +232,11 @@ export function StudentOutcomesPage() {
         />
       </td>
       <td className="px-3 py-2 align-top">
-        <input
+        <textarea
           value={draft.competencia}
           onChange={(e) => setDraft((d) => ({ ...d, competencia: e.target.value }))}
           aria-label="Competencia"
-          maxLength={200}
+          rows={2}
           className={INPUT_CLASS}
         />
       </td>

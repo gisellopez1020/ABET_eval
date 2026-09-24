@@ -13,9 +13,8 @@ export type RaAbetCsvResult =
   | { ok: true; items: RaAbetCsvItem[] }
   | { ok: false; error: string };
 
-// Límites de las columnas en ra_abet_catalogo
+// Límite de la columna codigo en ra_abet_catalogo (competencia y descripcion son TEXT)
 const MAX_CODIGO = 20;
-const MAX_COMPETENCIA = 200;
 
 /** El SO es la parte del código antes del primer punto: "2.1" -> "2" (igual que el backend). */
 export const deducirSo = (codigo: string) => codigo.split('.', 1)[0].trim();
@@ -54,9 +53,6 @@ export function parseRaAbetCsv(input: string): RaAbetCsvResult {
     }
     if (codigo.length > MAX_CODIGO) {
       return { ok: false, error: `Fila ${fila}: el código admite máximo ${MAX_CODIGO} caracteres.` };
-    }
-    if (competencia.length > MAX_COMPETENCIA) {
-      return { ok: false, error: `Fila ${fila}: la competencia admite máximo ${MAX_COMPETENCIA} caracteres.` };
     }
     const repetida = filaPorCodigo.get(codigo);
     if (repetida !== undefined) {
