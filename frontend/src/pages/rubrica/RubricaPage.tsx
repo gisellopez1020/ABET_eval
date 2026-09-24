@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { PencilLine, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { PencilLine, Plus, Save, Trash2 } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Badge } from '../../components/ui/Badge';
@@ -10,180 +11,302 @@ import { Modal } from '../../components/ui/Modal';
 import { actividadesApi } from '../../api/actividades';
 import { criteriosApi } from '../../api/criterios';
 import { cursosApi } from '../../api/cursos';
+import { apiErrorMessage } from '../../api/errors';
 import { useCourseStore } from '../../store/courseStore';
 import { Actividad, Aspecto, Curso } from '../../types';
 
-interface FormState {
-  aspectoId: number | null;
+// La rúbrica se edita como borrador local y se guarda completa de una sola vez:
+// el backend (PUT /actividades/{id}/criterios) reemplaza todo y exige que los
+// pesos sumen exactamente 100%.
+interface DraftCriterio {
+  key: string;
   texto: string;
-  peso_porcentaje: string;
+  peso: number;
 }
 
-const EMPTY_FORM: FormState = {
-  aspectoId: null,
-  texto: '',
-  peso_porcentaje: '20',
-};
+interface DraftAspecto {
+  key: string;
+  nombre: string;
+  criterios: DraftCriterio[];
+}
+
+interface CriterioForm {
+  aspectoKey: string;
+  criterioKey: string | null; // null = crear, string = editar
+  texto: string;
+  peso: string;
+}
+
+interface AspectoForm {
+  aspectoKey: string | null; // null = crear, string = renombrar
+  nombre: string;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function toDraft(aspectos: Aspecto[]): DraftAspecto[] {
+  return aspectos.map((aspecto) => ({
+    key: `a${aspecto.id}`,
+    nombre: aspecto.nombre,
+    criterios: aspecto.criterios.map((criterio) => ({
+      key: `c${criterio.id}`,
+      texto: criterio.texto,
+      peso: Number(criterio.peso_porcentaje),
+    })),
+  }));
+}
 
 function buildCodeName(aspectoIndex: number, criterioIndex: number) {
   return `${String.fromCharCode(65 + aspectoIndex)}.${criterioIndex + 1}`;
 }
 
+const SELECT_CLASS =
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10';
+
 export default function RubricaPage() {
-  const { selectedCourseId, setSelectedCourse } = useCourseStore();
+  const navigate = useNavigate();
+  const { actividadId } = useParams<{ actividadId: string }>();
+  const parsedRouteId = actividadId ? Number(actividadId) : NaN;
+  const routeActId = Number.isFinite(parsedRouteId) ? parsedRouteId : null;
+  const { setSelectedCourse } = useCourseStore();
 
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [actividades, setActividades] = useState<Actividad[]>([]);
-  const [aspectos, setAspectos] = useState<Aspecto[]>([]);
-  const [selectedCursoId, setSelectedCursoId] = useState<number | null>(selectedCourseId);
+  const [selectedCursoId, setSelectedCursoId] = useState<number | null>(null);
   const [selectedActividadId, setSelectedActividadId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<DraftAspecto[]>([]);
+  const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [savedMsg, setSavedMsg] = useState('');
 
+  const [criterioForm, setCriterioForm] = useState<CriterioForm | null>(null);
+  const [aspectoForm, setAspectoForm] = useState<AspectoForm | null>(null);
+  const [formError, setFormError] = useState('');
+
+  const keySeq = useRef(0);
+  const newKey = (prefix: string) => `${prefix}-new-${++keySeq.current}`;
+
+  const loadCriterios = async (activityId: number | null) => {
+    if (!activityId) {
+      setDraft([]);
+      setDirty(false);
+      return;
+    }
+    const resp = await criteriosApi.get(activityId);
+    setDraft(toDraft(resp.aspectos));
+    setDirty(false);
+  };
+
+  // Carga inicial. Si la URL trae actividadId se precarga esa actividad (y su curso);
+  // si no (/rubrica), se usa el curso guardado en el store y su primera actividad.
   useEffect(() => {
-    const loadCursos = async () => {
+    // Cambio de URL provocado por los selectores: el estado ya está cargado.
+    if (routeActId !== null && routeActId === selectedActividadId) return;
+
+    let cancelled = false;
+    const init = async () => {
       setLoading(true);
+      setError('');
+      setSavedMsg('');
       try {
-        const data = await cursosApi.list();
-        setCursos(data);
+        const cursosData = await cursosApi.list();
 
-        const courseId = selectedCourseId ?? data[0]?.id ?? null;
-        if (!courseId) {
-          setSelectedCursoId(null);
-          setSelectedActividadId(null);
-          setActividades([]);
-          setAspectos([]);
-          return;
-        }
-
-        setSelectedCursoId(courseId);
-        setSelectedCourse(courseId);
-
-        const actividadesData = await actividadesApi.list(courseId);
-        setActividades(actividadesData);
-
-        const activityId = actividadesData[0]?.id ?? null;
-        setSelectedActividadId(activityId);
-
-        if (activityId) {
-          const criterioResp = await criteriosApi.get(activityId);
-          setAspectos(criterioResp.aspectos);
-          if (criterioResp.aspectos.length > 0) {
-            setForm((prev) => ({ ...prev, aspectoId: criterioResp.aspectos[0].id }));
-          }
+        let courseId: number | null;
+        if (routeActId !== null) {
+          const actividad = await actividadesApi.get(routeActId);
+          courseId = actividad.curso_id;
         } else {
-          setAspectos([]);
+          courseId = useCourseStore.getState().selectedCourseId ?? cursosData[0]?.id ?? null;
         }
+
+        const actividadesData = courseId ? await actividadesApi.list(courseId) : [];
+        const activityId = routeActId ?? actividadesData[0]?.id ?? null;
+        const resp = activityId ? await criteriosApi.get(activityId) : null;
+        if (cancelled) return;
+
+        setCursos(cursosData);
+        setSelectedCursoId(courseId);
+        if (courseId) setSelectedCourse(courseId);
+        setActividades(actividadesData);
+        setSelectedActividadId(activityId);
+        setDraft(resp ? toDraft(resp.aspectos) : []);
+        setDirty(false);
       } catch (err) {
         console.error('Error cargando rúbrica:', err);
-        setError('No se pudo cargar la rúbrica desde el backend.');
+        if (!cancelled) setError(apiErrorMessage(err, 'No se pudo cargar la rúbrica desde el backend.'));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    loadCursos();
-  }, [selectedCourseId, setSelectedCourse]);
+    void init();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeActId]);
 
   const totalPeso = useMemo(
-    () => aspectos.reduce((sum, aspecto) => sum + aspecto.criterios.reduce((acc, criterio) => acc + Number(criterio.peso_porcentaje), 0), 0),
-    [aspectos]
+    () => round2(draft.reduce((sum, a) => sum + a.criterios.reduce((acc, c) => acc + c.peso, 0), 0)),
+    [draft]
   );
+  const totalCriterios = draft.reduce((sum, a) => sum + a.criterios.length, 0);
+  const aspectosVacios = draft.filter((a) => a.criterios.length === 0);
+  const canSave =
+    !!selectedActividadId && dirty && !saving && totalPeso === 100 && aspectosVacios.length === 0;
 
   const selectedActividad = actividades.find((item) => item.id === selectedActividadId) ?? null;
+  const selectedCurso = cursos.find((item) => item.id === selectedCursoId) ?? null;
 
-  const saveAspectos = async (nextAspectos: Aspecto[]) => {
-    if (!selectedActividadId) {
-      setError('Debe seleccionar una actividad para guardar la rúbrica.');
+  const confirmDiscard = () =>
+    !dirty || window.confirm('Hay cambios sin guardar en la rúbrica. ¿Descartarlos?');
+
+  const selectActividad = async (activityId: number | null) => {
+    setError('');
+    setSavedMsg('');
+    setSelectedActividadId(activityId);
+    try {
+      await loadCriterios(activityId);
+    } catch (err) {
+      setError(apiErrorMessage(err, 'No se pudo cargar la rúbrica de la actividad.'));
+    }
+    navigate(activityId ? `/actividades/${activityId}` : '/rubrica', { replace: true });
+  };
+
+  const selectCurso = async (courseId: number) => {
+    setSelectedCursoId(courseId);
+    setSelectedCourse(courseId);
+    try {
+      const actividadesData = await actividadesApi.list(courseId);
+      setActividades(actividadesData);
+      await selectActividad(actividadesData[0]?.id ?? null);
+    } catch (err) {
+      setError(apiErrorMessage(err, 'No se pudieron cargar las actividades.'));
+    }
+  };
+
+  const updateDraft = (next: DraftAspecto[]) => {
+    setDraft(next);
+    setDirty(true);
+    setSavedMsg('');
+  };
+
+  // ── Aspectos ────────────────────────────────────────────────────────────
+  const openAspectoModal = (aspecto?: DraftAspecto) => {
+    setFormError('');
+    setAspectoForm({ aspectoKey: aspecto?.key ?? null, nombre: aspecto?.nombre ?? '' });
+  };
+
+  const submitAspecto = () => {
+    if (!aspectoForm) return;
+    const nombre = aspectoForm.nombre.trim();
+    if (!nombre) {
+      setFormError('El nombre del aspecto es obligatorio.');
+      return;
+    }
+    if (aspectoForm.aspectoKey === null) {
+      updateDraft([...draft, { key: newKey('a'), nombre, criterios: [] }]);
+    } else {
+      updateDraft(draft.map((a) => (a.key === aspectoForm.aspectoKey ? { ...a, nombre } : a)));
+    }
+    setAspectoForm(null);
+  };
+
+  const deleteAspecto = (aspecto: DraftAspecto) => {
+    if (
+      aspecto.criterios.length > 0 &&
+      !window.confirm(`¿Eliminar el aspecto "${aspecto.nombre}" y sus ${aspecto.criterios.length} criterios?`)
+    ) {
+      return;
+    }
+    updateDraft(draft.filter((a) => a.key !== aspecto.key));
+  };
+
+  // ── Criterios ───────────────────────────────────────────────────────────
+  const openCriterioModal = (aspecto: DraftAspecto, criterio?: DraftCriterio) => {
+    setFormError('');
+    const restante = round2(100 - totalPeso);
+    setCriterioForm({
+      aspectoKey: aspecto.key,
+      criterioKey: criterio?.key ?? null,
+      texto: criterio?.texto ?? '',
+      peso: criterio ? String(criterio.peso) : String(restante > 0 ? restante : ''),
+    });
+  };
+
+  const submitCriterio = () => {
+    if (!criterioForm) return;
+    const texto = criterioForm.texto.trim();
+    const peso = round2(Number(criterioForm.peso));
+
+    if (!texto) {
+      setFormError('La descripción del criterio es obligatoria.');
+      return;
+    }
+    if (Number.isNaN(peso) || peso <= 0 || peso > 100) {
+      setFormError('El peso debe ser mayor que 0 y como máximo 100.');
       return;
     }
 
+    const next = draft.map((a) => {
+      if (a.key !== criterioForm.aspectoKey) return a;
+      const criterios =
+        criterioForm.criterioKey === null
+          ? [...a.criterios, { key: newKey('c'), texto, peso }]
+          : a.criterios.map((c) => (c.key === criterioForm.criterioKey ? { ...c, texto, peso } : c));
+      return { ...a, criterios };
+    });
+    updateDraft(next);
+    setCriterioForm(null);
+  };
+
+  const deleteCriterio = (aspectoKey: string, criterioKey: string) => {
+    updateDraft(
+      draft.map((a) =>
+        a.key === aspectoKey ? { ...a, criterios: a.criterios.filter((c) => c.key !== criterioKey) } : a
+      )
+    );
+  };
+
+  // ── Guardar ─────────────────────────────────────────────────────────────
+  const saveRubrica = async () => {
+    if (!selectedActividadId || !canSave) return;
     setSaving(true);
     setError('');
-
+    setSavedMsg('');
     try {
-      const payload = nextAspectos.map((aspecto, aspectoIndex) => ({
+      const payload = draft.map((aspecto, aspectoIndex) => ({
         nombre: aspecto.nombre,
-        orden: aspecto.orden ?? aspectoIndex,
+        orden: aspectoIndex,
         criterios: aspecto.criterios.map((criterio, criterioIndex) => ({
           texto: criterio.texto,
-          peso_porcentaje: Number(criterio.peso_porcentaje),
-          orden: criterio.orden ?? criterioIndex,
+          peso_porcentaje: criterio.peso,
+          orden: criterioIndex,
         })),
       }));
-
       const response = await criteriosApi.save(selectedActividadId, payload);
-      setAspectos(response.aspectos);
-      setForm((prev) => ({ ...prev, texto: '', peso_porcentaje: '20' }));
-      setModalOpen(false);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail || 'No se pudo guardar el criterio.';
-      setError(detail);
+      setDraft(toDraft(response.aspectos));
+      setDirty(false);
+      setSavedMsg('Rúbrica guardada.');
+    } catch (err) {
+      setError(apiErrorMessage(err, 'No se pudo guardar la rúbrica.'));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleCreateCriterion = async () => {
-    if (!selectedActividadId) {
-      setError('No hay una actividad activa para guardar criterios.');
-      return;
+  const estadoGuardado = (() => {
+    if (!selectedActividad) return null;
+    if (aspectosVacios.length > 0) {
+      return `Agrega al menos un criterio a: ${aspectosVacios.map((a) => a.nombre).join(', ')}.`;
     }
-
-    const texto = form.texto.trim();
-    const peso = Number(form.peso_porcentaje);
-
-    if (!texto) {
-      setError('La descripción del criterio es obligatoria.');
-      return;
-    }
-
-    if (Number.isNaN(peso) || peso <= 0) {
-      setError('El porcentaje debe ser mayor a 0.');
-      return;
-    }
-
-    const aspectoIndex = aspectos.findIndex((aspecto) => aspecto.id === form.aspectoId);
-    if (aspectoIndex === -1) {
-      setError('Debe seleccionar un aspecto válido.');
-      return;
-    }
-
-    const nextAspectos = aspectos.map((aspecto, index) => ({
-      ...aspecto,
-      orden: aspecto.orden ?? index,
-      criterios: [...aspecto.criterios],
-    }));
-
-    const nextPesoTotal = nextAspectos.reduce((sum, aspecto) => sum + aspecto.criterios.reduce((acc, criterio) => acc + Number(criterio.peso_porcentaje), 0), 0) + peso;
-    if (nextPesoTotal > 100) {
-      setError(`La suma total supera el 100%. Actualmente va en ${nextPesoTotal}%.`);
-      return;
-    }
-
-    const targetAspecto = nextAspectos[aspectoIndex];
-    targetAspecto.criterios.push({
-      id: Date.now(),
-      texto,
-      peso_porcentaje: peso,
-      aspecto_id: targetAspecto.id,
-      orden: targetAspecto.criterios.length,
-    });
-
-    await saveAspectos(nextAspectos);
-  };
-
-  const handleDeleteCriterion = async (criterioId: number) => {
-    const nextAspectos = aspectos.map((aspecto) => ({
-      ...aspecto,
-      criterios: aspecto.criterios.filter((criterio) => criterio.id !== criterioId),
-    }));
-
-    await saveAspectos(nextAspectos);
-  };
+    if (totalPeso < 100) return `Faltan ${round2(100 - totalPeso)}% para completar el 100%.`;
+    if (totalPeso > 100) return `La suma excede el 100% por ${round2(totalPeso - 100)}%.`;
+    if (dirty) return 'Cambios sin guardar.';
+    return null;
+  })();
 
   if (loading) {
     return (
@@ -201,32 +324,50 @@ export default function RubricaPage() {
     <AppLayout>
       <div className="min-h-screen bg-[#f3f3f3] p-6">
         <div className="mx-auto max-w-[1280px]">
-          <div className="mb-5 flex items-center justify-between gap-4">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Rúbricas y Criterios ABET</h1>
               <p className="mt-1 text-sm text-gray-500">
-                {selectedActividad ? `Actividad: ${selectedActividad.nombre}` : 'Sin actividad activa'}
+                {selectedActividad
+                  ? `${selectedCurso ? `${selectedCurso.nombre} · ` : ''}Actividad: ${selectedActividad.nombre}`
+                  : 'Sin actividad activa'}
               </p>
             </div>
 
-            <Button
-              variant="primary"
-              size="md"
-              icon={<Plus size={16} />}
-              className="rounded-xl bg-[#9E0B0F] hover:bg-[#82090d]"
-              onClick={() => {
-                setError('');
-                setForm({
-                  aspectoId: aspectos[0]?.id ?? null,
-                  texto: '',
-                  peso_porcentaje: '20',
-                });
-                setModalOpen(true);
-              }}
-              disabled={!selectedActividad}
-            >
-              Nuevo criterio
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedCursoId && (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => {
+                    if (confirmDiscard()) navigate(`/cursos/${selectedCursoId}`);
+                  }}
+                >
+                  ← Volver al curso
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="md"
+                icon={<Plus size={16} />}
+                onClick={() => openAspectoModal()}
+                disabled={!selectedActividad}
+              >
+                Agregar aspecto
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                icon={<Save size={16} />}
+                className="rounded-xl bg-[#9E0B0F] hover:bg-[#82090d]"
+                onClick={saveRubrica}
+                loading={saving}
+                disabled={!canSave}
+                title={canSave ? undefined : 'La rúbrica debe sumar exactamente 100% y tener cambios sin guardar'}
+              >
+                Guardar rúbrica
+              </Button>
+            </div>
           </div>
 
           <div className="mb-5 grid gap-4 md:grid-cols-2">
@@ -234,25 +375,11 @@ export default function RubricaPage() {
               <span className="mb-2 block">Asignatura</span>
               <select
                 value={selectedCursoId ?? ''}
-                onChange={async (event) => {
+                onChange={(event) => {
                   const courseId = Number(event.target.value);
-                  setSelectedCursoId(courseId);
-                  setSelectedCourse(courseId);
-                  const actividadesData = await actividadesApi.list(courseId);
-                  setActividades(actividadesData);
-                  const nextActivityId = actividadesData[0]?.id ?? null;
-                  setSelectedActividadId(nextActivityId);
-                  if (nextActivityId) {
-                    const resp = await criteriosApi.get(nextActivityId);
-                    setAspectos(resp.aspectos);
-                    if (resp.aspectos[0]) {
-                      setForm((prev) => ({ ...prev, aspectoId: resp.aspectos[0].id }));
-                    }
-                  } else {
-                    setAspectos([]);
-                  }
+                  if (courseId && confirmDiscard()) void selectCurso(courseId);
                 }}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+                className={SELECT_CLASS}
               >
                 <option value="">Selecciona una asignatura</option>
                 {cursos.map((curso) => (
@@ -267,20 +394,11 @@ export default function RubricaPage() {
               <span className="mb-2 block">Actividad</span>
               <select
                 value={selectedActividadId ?? ''}
-                onChange={async (event) => {
+                onChange={(event) => {
                   const activityId = Number(event.target.value);
-                  setSelectedActividadId(activityId);
-                  if (!activityId) {
-                    setAspectos([]);
-                    return;
-                  }
-                  const resp = await criteriosApi.get(activityId);
-                  setAspectos(resp.aspectos);
-                  if (resp.aspectos[0]) {
-                    setForm((prev) => ({ ...prev, aspectoId: resp.aspectos[0].id }));
-                  }
+                  if (activityId && confirmDiscard()) void selectActividad(activityId);
                 }}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+                className={SELECT_CLASS}
               >
                 <option value="">Selecciona una actividad</option>
                 {actividades.map((actividad) => (
@@ -297,19 +415,22 @@ export default function RubricaPage() {
               {error}
             </div>
           )}
+          {savedMsg && (
+            <div className="mb-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              {savedMsg}
+            </div>
+          )}
 
           <div className="mb-5 overflow-hidden rounded-[20px] bg-[#9E0B0F] p-5 text-white shadow-sm">
             <div className="mb-2 text-sm uppercase tracking-[0.14em] text-red-100">Resumen</div>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-xl bg-white/10 p-3">
                 <div className="text-xs uppercase tracking-[0.08em] text-red-100">Aspectos</div>
-                <div className="mt-2 text-3xl font-bold">{aspectos.length}</div>
+                <div className="mt-2 text-3xl font-bold">{draft.length}</div>
               </div>
               <div className="rounded-xl bg-white/10 p-3">
                 <div className="text-xs uppercase tracking-[0.08em] text-red-100">Criterios</div>
-                <div className="mt-2 text-3xl font-bold">
-                  {aspectos.reduce((sum, aspect) => sum + aspect.criterios.length, 0)}
-                </div>
+                <div className="mt-2 text-3xl font-bold">{totalCriterios}</div>
               </div>
               <div className="rounded-xl bg-white/10 p-3">
                 <div className="text-xs uppercase tracking-[0.08em] text-red-100">Peso total</div>
@@ -319,135 +440,187 @@ export default function RubricaPage() {
           </div>
 
           <div className="overflow-hidden rounded-[18px] border border-[#e5e7eb] bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-[#e5e7eb] bg-[#fafafa] px-4 py-3">
-              <h2 className="text-lg font-semibold text-gray-800">Criterios guardados</h2>
-              <Badge variant={totalPeso === 100 ? 'success' : 'warning'}>
-                {totalPeso === 100 ? '100% completo' : `${totalPeso}%`}
-              </Badge>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e5e7eb] bg-[#fafafa] px-4 py-3">
+              <h2 className="text-lg font-semibold text-gray-800">Rúbrica</h2>
+              <div className="flex items-center gap-3">
+                {estadoGuardado && <span className="text-xs text-gray-500">{estadoGuardado}</span>}
+                <Badge variant={totalPeso === 100 ? 'success' : 'warning'}>
+                  {totalPeso === 100 ? '100% completo' : `${totalPeso}%`}
+                </Badge>
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-left text-sm">
-                <thead className="bg-[#f5f5f5] text-[#9E0B0F]">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Aspecto</th>
-                    <th className="px-4 py-3 font-semibold">Código</th>
-                    <th className="px-4 py-3 font-semibold">Descripción</th>
-                    <th className="px-4 py-3 font-semibold text-right">Peso</th>
-                    <th className="px-4 py-3 font-semibold text-right">Acciones</th>
-                  </tr>
-                </thead>
+            {!selectedActividad ? (
+              <p className="px-4 py-10 text-center text-sm text-gray-500">
+                Selecciona una actividad para editar su rúbrica.
+              </p>
+            ) : draft.length === 0 ? (
+              <div className="px-4 py-10 text-center">
+                <p className="mb-4 text-sm text-gray-500">
+                  Esta actividad aún no tiene rúbrica. Empieza agregando un aspecto.
+                </p>
+                <Button variant="outline" size="sm" icon={<Plus size={14} />} onClick={() => openAspectoModal()}>
+                  Agregar aspecto
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#e5e7eb]">
+                {draft.map((aspecto, aspectoIndex) => {
+                  const subtotal = round2(aspecto.criterios.reduce((acc, c) => acc + c.peso, 0));
+                  return (
+                    <section key={aspecto.key}>
+                      <div className="flex flex-wrap items-center justify-between gap-3 bg-[#f5f5f5] px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="rounded-md bg-[#9E0B0F]/10 px-2 py-1 text-xs font-semibold text-[#9E0B0F]">
+                            {String.fromCharCode(65 + aspectoIndex)}
+                          </span>
+                          <span className="font-semibold text-gray-800">{aspecto.nombre}</span>
+                          <Badge variant="neutral">{subtotal}%</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={<Plus size={14} />}
+                            onClick={() => openCriterioModal(aspecto)}
+                          >
+                            Criterio
+                          </Button>
+                          <button
+                            type="button"
+                            aria-label={`Renombrar ${aspecto.nombre}`}
+                            onClick={() => openAspectoModal(aspecto)}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-[#9E0B0F]/40 hover:text-[#9E0B0F]"
+                          >
+                            <PencilLine size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Eliminar ${aspecto.nombre}`}
+                            onClick={() => deleteAspecto(aspecto)}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-red-300 hover:text-red-600"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
 
-                <tbody>
-                  {aspectos.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-10 text-center text-gray-500">
-                        No hay criterios creados para esta actividad.
-                      </td>
-                    </tr>
-                  ) : (
-                    aspectos.flatMap((aspecto, aspectoIndex) =>
-                      aspecto.criterios.length === 0 ? (
-                        <tr key={`empty-${aspecto.id}`}>
-                          <td className="px-4 py-3 font-medium text-gray-700">{aspecto.nombre}</td>
-                          <td className="px-4 py-3 text-gray-500" colSpan={4}>Sin criterios</td>
-                        </tr>
+                      {aspecto.criterios.length === 0 ? (
+                        <p className="px-4 py-4 text-sm text-gray-500">Sin criterios.</p>
                       ) : (
-                        aspecto.criterios.map((criterio, criterioIndex) => (
-                          <tr key={criterio.id} className="border-t border-[#e5e7eb] hover:bg-[#9E0B0F]/[0.02]">
-                            <td className="px-4 py-3 font-medium text-gray-700">{aspecto.nombre}</td>
-                            <td className="px-4 py-3 font-semibold text-[#9E0B0F]">
-                              {buildCodeName(aspectoIndex, criterioIndex)}
-                            </td>
-                            <td className="px-4 py-3 text-gray-700">{criterio.texto}</td>
-                            <td className="px-4 py-3 text-right font-semibold text-gray-700">
-                              {criterio.peso_porcentaje}%
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex justify-end gap-2">
-                                <button
-                                  type="button"
-                                  aria-label={`Editar ${criterio.texto}`}
-                                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-[#9E0B0F]/40 hover:text-[#9E0B0F]"
-                                >
-                                  <PencilLine size={15} />
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={`Eliminar ${criterio.texto}`}
-                                  onClick={() => handleDeleteCriterion(criterio.id)}
-                                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-red-300 hover:text-red-600"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full border-collapse text-left text-sm">
+                            <tbody>
+                              {aspecto.criterios.map((criterio, criterioIndex) => (
+                                <tr key={criterio.key} className="border-t border-[#e5e7eb] hover:bg-[#9E0B0F]/[0.02]">
+                                  <td className="w-20 px-4 py-3 font-semibold text-[#9E0B0F]">
+                                    {buildCodeName(aspectoIndex, criterioIndex)}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-700">{criterio.texto}</td>
+                                  <td className="w-24 px-4 py-3 text-right font-semibold text-gray-700">
+                                    {criterio.peso}%
+                                  </td>
+                                  <td className="w-28 px-4 py-3">
+                                    <div className="flex justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        aria-label={`Editar ${criterio.texto}`}
+                                        onClick={() => openCriterioModal(aspecto, criterio)}
+                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-[#9E0B0F]/40 hover:text-[#9E0B0F]"
+                                      >
+                                        <PencilLine size={15} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        aria-label={`Eliminar ${criterio.texto}`}
+                                        onClick={() => deleteCriterio(aspecto.key, criterio.key)}
+                                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-red-300 hover:text-red-600"
+                                      >
+                                        <Trash2 size={15} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="Crear criterio"
+        open={aspectoForm !== null}
+        onClose={() => setAspectoForm(null)}
+        title={aspectoForm?.aspectoKey ? 'Renombrar aspecto' : 'Agregar aspecto'}
         maxWidth="max-w-xl"
       >
         <div className="space-y-4">
-          <label className="block text-sm font-medium text-gray-700">
-            <span className="mb-2 block">Aspecto</span>
-            <select
-              value={form.aspectoId ?? ''}
-              onChange={(event) => setForm((prev) => ({ ...prev, aspectoId: Number(event.target.value) || null }))}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-            >
-              {aspectos.length === 0 ? (
-                <option value="">No hay aspectos disponibles</option>
-              ) : (
-                aspectos.map((aspecto) => (
-                  <option key={aspecto.id} value={aspecto.id}>
-                    {aspecto.nombre}
-                  </option>
-                ))
-              )}
-            </select>
-          </label>
+          <Input
+            label="Nombre del aspecto"
+            value={aspectoForm?.nombre ?? ''}
+            onChange={(event) => setAspectoForm((prev) => (prev ? { ...prev, nombre: event.target.value } : prev))}
+            placeholder="Ej: Identificación del problema"
+            autoFocus
+          />
+          {formError && <p className="text-sm text-red-600">{formError}</p>}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setAspectoForm(null)}>
+              Cancelar
+            </Button>
+            <Button variant="primary" onClick={submitAspecto} className="bg-[#9E0B0F] hover:bg-[#82090d]">
+              {aspectoForm?.aspectoKey ? 'Aplicar' : 'Agregar'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={criterioForm !== null}
+        onClose={() => setCriterioForm(null)}
+        title={criterioForm?.criterioKey ? 'Editar criterio' : 'Agregar criterio'}
+        maxWidth="max-w-xl"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Aspecto: <span className="font-medium text-gray-700">
+              {draft.find((a) => a.key === criterioForm?.aspectoKey)?.nombre}
+            </span>
+          </p>
 
           <Input
             label="Descripción del criterio"
-            value={form.texto}
-            onChange={(event) => setForm((prev) => ({ ...prev, texto: event.target.value }))}
+            value={criterioForm?.texto ?? ''}
+            onChange={(event) => setCriterioForm((prev) => (prev ? { ...prev, texto: event.target.value } : prev))}
             placeholder="Ej: Identifica y formula claramente el problema de ingeniería..."
+            autoFocus
           />
 
           <Input
             label="Peso (%)"
             type="number"
-            min={1}
+            min={0.01}
             max={100}
-            value={form.peso_porcentaje}
-            onChange={(event) => setForm((prev) => ({ ...prev, peso_porcentaje: event.target.value }))}
+            step="0.01"
+            value={criterioForm?.peso ?? ''}
+            onChange={(event) => setCriterioForm((prev) => (prev ? { ...prev, peso: event.target.value } : prev))}
             placeholder="20"
           />
 
+          {formError && <p className="text-sm text-red-600">{formError}</p>}
+
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setCriterioForm(null)}>
               Cancelar
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleCreateCriterion}
-              loading={saving}
-              className="bg-[#9E0B0F] hover:bg-[#82090d]"
-            >
-              Guardar criterio
+            <Button variant="primary" onClick={submitCriterio} className="bg-[#9E0B0F] hover:bg-[#82090d]">
+              {criterioForm?.criterioKey ? 'Aplicar' : 'Agregar'}
             </Button>
           </div>
         </div>

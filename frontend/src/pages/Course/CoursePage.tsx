@@ -11,7 +11,7 @@ import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
 import { actividadesApi, ActividadCreate } from '../../api/actividades';
 import { estudiantesApi } from '../../api/estudiantes';
-import { Curso, Seccion, Actividad } from '../../types';
+import { Curso, Seccion, Actividad, rubricaCompleta } from '../../types';
 
 function estadoActividad(a: Actividad): { label: string; variant: 'neutral' | 'warning' | 'info' | 'success' } {
   return { label: a.tipo === 'grupal' ? 'Grupal' : 'Individual', variant: 'info' };
@@ -312,6 +312,7 @@ export function CoursePage() {
               )}
               {actividades.map((a) => {
                 const { label, variant } = estadoActividad(a);
+                const tieneRubrica = rubricaCompleta(a);
                 return (
                   <div
                     key={a.id}
@@ -326,18 +327,23 @@ export function CoursePage() {
                       <p className="text-xs text-gray-500">Peso: {Number(a.peso_nota_final)}%</p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {!tieneRubrica && <Badge variant="warning">Sin rúbrica</Badge>}
                       <Badge variant={variant}>{label}</Badge>
                       {selectedSeccion && (
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/actividades/${a.id}/calificar/${selectedSeccion}`);
-                          }}
+                        // El span evita que un clic sobre el botón deshabilitado abra la actividad
+                        <span
+                          onClick={(e) => e.stopPropagation()}
+                          title={tieneRubrica ? undefined : 'Define la rúbrica (100%) antes de calificar'}
                         >
-                          Calificar
-                        </Button>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={!tieneRubrica}
+                            onClick={() => navigate(`/actividades/${a.id}/calificar/${selectedSeccion}`)}
+                          >
+                            Calificar
+                          </Button>
+                        </span>
                       )}
                     </div>
                   </div>

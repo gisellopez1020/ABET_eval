@@ -37,6 +37,12 @@ export interface Actividad {
   peso_nota_final: number;
   curso_id: number;
   created_at: string;
+  /** Suma de pesos de la rúbrica. El backend lo envía como Decimal serializado ("100.00"). */
+  total_peso_criterios: number | string;
+}
+
+export function rubricaCompleta(a: Actividad): boolean {
+  return Number(a.total_peso_criterios) === 100;
 }
 
 export interface Criterio {

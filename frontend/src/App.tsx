@@ -30,6 +30,7 @@ export default function App() {
         <Route path="/cursos/:cursoId" element={<CoursePage />} />
         <Route path="/cursos/:cursoId/secciones/:seccionId" element={<SectionPage />} />
        
+        <Route path="/actividades/:actividadId" element={<RubricaPage />} />
         <Route
           path="/actividades/:actividadId/calificar/:seccionId"
           element={<GradingSelectionPage />}

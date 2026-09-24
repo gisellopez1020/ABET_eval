@@ -9,6 +9,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
 import { estudiantesApi } from '../../api/estudiantes';
+import { apiErrorMessage } from '../../api/errors';
 import { Curso, Seccion, Estudiante } from '../../types';
 
 export function SectionPage() {
@@ -115,14 +116,7 @@ export function SectionPage() {
       setCsvFile(null);
       setCsvPreview([]);
     } catch (e: any) {
-      const detail = e?.response?.data?.detail;
-      setCsvError(
-        Array.isArray(detail)
-          ? detail.map((d: any) => d?.msg ?? String(d)).join(' · ')
-          : typeof detail === 'string'
-            ? detail
-            : 'Error al importar CSV'
-      );
+      setCsvError(apiErrorMessage(e, 'Error al importar CSV'));
     } finally {
       setCsvLoading(false);
     }
