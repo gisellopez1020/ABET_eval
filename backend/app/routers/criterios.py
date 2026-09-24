@@ -6,6 +6,7 @@ from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models import Curso, Actividad, Aspecto, Criterio
 from app.schemas.criterio import CriteriosPayload, CriteriosResponse, AspectoOut
+from app.routers.actividades import _tiene_calificaciones
 
 router = APIRouter(tags=["Criterios"])
 
@@ -56,8 +57,17 @@ def reemplazar_criterios(
     Reemplaza completamente los aspectos y criterios de la actividad.
     Valida que la suma de todos los pesos sea exactamente 100%.
     Retorna 422 si no suman 100%.
+    Retorna 409 si la actividad ya tiene calificaciones (reemplazar los
+    criterios las eliminaría en cascada).
     """
     actividad = _verificar_actividad(actividad_id, usuario["email"], db)
+
+    if _tiene_calificaciones(actividad_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"No se puede modificar la rúbrica de '{actividad.nombre}' porque ya "
+                   "tiene calificaciones registradas.",
+        )
 
     # Validar suma de pesos antes de persistir
     total_peso = sum(

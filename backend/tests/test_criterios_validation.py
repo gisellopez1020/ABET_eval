@@ -66,3 +66,26 @@ class TestValidacionSumaCriterios:
         from app.schemas.criterio import CriterioIn
         with pytest.raises(Exception):
             CriterioIn(texto="test", peso_porcentaje=Decimal("101"))
+
+
+class TestBloqueoConCalificaciones:
+    def test_put_criterios_con_calificaciones_devuelve_409(self):
+        """No se puede reemplazar la rúbrica si ya hay calificaciones (se borrarían en cascada)."""
+        from app.database import get_db
+        from app.auth.dependencies import get_current_user
+
+        db = MagicMock()
+        actividad = MagicMock(nombre="Lab 1")
+        app.dependency_overrides[get_db] = lambda: db
+        app.dependency_overrides[get_current_user] = lambda: MOCK_USER
+        try:
+            with patch("app.routers.criterios._verificar_actividad", return_value=actividad), \
+                 patch("app.routers.criterios._tiene_calificaciones", return_value=True):
+                resp = client.put("/actividades/1/criterios", json=_payload_criterios([100]))
+        finally:
+            app.dependency_overrides.clear()
+
+        assert resp.status_code == 409
+        assert "calificaciones" in resp.json()["detail"]
+        db.delete.assert_not_called()
+        db.commit.assert_not_called()

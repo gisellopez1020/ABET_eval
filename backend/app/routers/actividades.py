@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import exists
+from sqlalchemy import exists, func
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
@@ -31,6 +31,21 @@ def _tiene_calificaciones(actividad_id: int, db: Session) -> bool:
     ).scalar()
 
 
+def _total_peso_criterios(actividad_id: int, db: Session):
+    return (
+        db.query(func.coalesce(func.sum(Criterio.peso_porcentaje), 0))
+        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
+        .filter(Aspecto.actividad_id == actividad_id)
+        .scalar()
+    )
+
+
+def _actividad_out(actividad: Actividad, total_peso) -> ActividadOut:
+    return ActividadOut.model_validate(actividad).model_copy(
+        update={"total_peso_criterios": total_peso}
+    )
+
+
 @router.get(
     "/cursos/{curso_id}/actividades",
     response_model=List[ActividadOut],
@@ -41,14 +56,21 @@ def listar_actividades(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Devuelve todas las actividades del curso ordenadas por fecha de creación."""
+    """
+    Devuelve todas las actividades del curso ordenadas por fecha de creación,
+    con la suma de pesos de sus criterios calculada en una sola consulta.
+    """
     _verificar_curso(curso_id, usuario["email"], db)
-    return (
-        db.query(Actividad)
+    filas = (
+        db.query(Actividad, func.coalesce(func.sum(Criterio.peso_porcentaje), 0))
+        .outerjoin(Aspecto, Aspecto.actividad_id == Actividad.id)
+        .outerjoin(Criterio, Criterio.aspecto_id == Aspecto.id)
         .filter(Actividad.curso_id == curso_id)
+        .group_by(Actividad.id)
         .order_by(Actividad.created_at)
         .all()
     )
+    return [_actividad_out(actividad, total) for actividad, total in filas]
 
 
 @router.post(
@@ -89,7 +111,7 @@ def obtener_actividad(
     if not curso or curso.docente_email != usuario["email"]:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
 
-    out = ActividadOut.model_validate(actividad)
+    out = _actividad_out(actividad, _total_peso_criterios(actividad_id, db))
     aspectos_out = [AspectoOut.model_validate(a) for a in actividad.aspectos]
     return {**out.model_dump(), "aspectos": [a.model_dump() for a in aspectos_out]}
 
@@ -121,7 +143,7 @@ def editar_actividad(
 
     db.commit()
     db.refresh(actividad)
-    return actividad
+    return _actividad_out(actividad, _total_peso_criterios(actividad_id, db))
 
 
 @router.delete(

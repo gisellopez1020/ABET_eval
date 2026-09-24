@@ -39,3 +39,5 @@ class ActividadOut(BaseModel):
     peso_nota_final: Decimal
     curso_id: int
     created_at: datetime
+    # Suma de pesos de los criterios de la rúbrica (0 si no hay criterios)
+    total_peso_criterios: Decimal = Decimal("0")
