@@ -20,6 +20,7 @@ export interface Seccion {
   curso_id: number;
   activo: boolean;
   num_estudiantes?: number;
+  total_estudiantes?: number;
 }
 
 export interface Estudiante {
@@ -112,4 +113,13 @@ export interface ReporteRA {
     '4.0-5.0': number;
   };
   total: number;
+}
+
+export interface ReporteABETResponse {
+  curso_id: number;
+  curso_nombre: string;
+  curso_codigo: string;
+  periodo: string;
+  docente_email: string;
+  resultados: ReporteRA[];
 }

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24
     frontend_url: str = "http://localhost:5173"
     google_drive_folder_name: str = "ABET_Eval"
-    skip_auth: bool = True
+    skip_auth: bool = False
 
     model_config = {"env_file": ".env", "case_sensitive": False}
 

@@ -6,7 +6,6 @@ import {
   FolderKanban,
   ClipboardCheck,
   ChartNoAxesCombined,
-  UserCheck,
   CircleHelp,
   LogOut,
   ChevronLeft,
@@ -32,7 +31,7 @@ const navItems = [
     icon: BookOpen,
   },
   {
-    to: '/estudiantes',
+    to: '/students',
     label: 'Estudiantes',
     icon: Users,
   },
@@ -42,19 +41,19 @@ const navItems = [
     icon: FolderKanban,
   },
   {
-    to: '/evaluacion-grupal',
-    label: 'Evaluación grupal',
+    to: '/rubrica',
+    label: 'Rúbrica ABET',
+    icon: ClipboardCheck,
+  },
+  {
+    to: '/evaluaciones',
+    label: 'Evaluación',
     icon: ClipboardCheck,
   },
   {
     to: '/estadisticas',
     label: 'Estadísticas ABET',
     icon: ChartNoAxesCombined,
-  },
-  {
-    to: '/evaluacion-individual',
-    label: 'Evaluación individual',
-    icon: UserCheck,
   },
 ];
 

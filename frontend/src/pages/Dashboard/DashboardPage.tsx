@@ -7,7 +7,11 @@ import { StudentOutcomeChart } from './StudentOutcomeChart.tsx';
 import { RecentActivity } from '../Dashboard/RecentActivity';
 
 import { cursosApi } from '../../api/cursos';
+import { actividadesApi } from '../../api/actividades';
+import { seccionesApi } from '../../api/secciones';
+import { reportesApi } from '../../api/reportes';
 import { Curso } from '../../types';
+import { useCourseStore } from '../../store/courseStore';
 
 interface DashboardData {
   asignaturas: number;
@@ -25,20 +29,20 @@ const EMPTY_DATA: DashboardData = {
 
 export function DashboardPage() {
   const [cursos, setCursos] = useState<Curso[]>([]);
-  const [selectedCursoId, setSelectedCursoId] = useState('');
   const [loadingCursos, setLoadingCursos] = useState(true);
-
-  const [dashboardData, setDashboardData] =
-    useState<DashboardData>(EMPTY_DATA);
+  const [dashboardData, setDashboardData] = useState<DashboardData>(EMPTY_DATA);
+  const { selectedCourseId, setSelectedCourse, clearSelectedCourse } = useCourseStore();
 
   useEffect(() => {
     const loadCursos = async () => {
       try {
         setLoadingCursos(true);
-
         const data = await cursosApi.list();
-
         setCursos(data);
+
+        if (data.length > 0 && !selectedCourseId) {
+          setSelectedCourse(data[0].id);
+        }
       } catch (error) {
         console.error('Error cargando cursos:', error);
       } finally {
@@ -47,34 +51,88 @@ export function DashboardPage() {
     };
 
     loadCursos();
-  }, []);
+  }, [selectedCourseId, setSelectedCourse]);
+
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      if (!selectedCourseId) {
+        setDashboardData({
+          asignaturas: cursos.length,
+          estudiantes: 0,
+          evaluaciones: 0,
+          cumplimiento: 0,
+        });
+        return;
+      }
+
+      try {
+        const [secciones, actividades, reporte] = await Promise.all([
+          seccionesApi.list(selectedCourseId),
+          actividadesApi.list(selectedCourseId),
+          reportesApi.abet(selectedCourseId),
+        ]);
+
+        const estudiantes = secciones.reduce(
+          (total, seccion) => total + (seccion.total_estudiantes ?? 0),
+          0
+        );
+
+        const totalRangos = reporte.reduce((total, item) => {
+          const rangos = Object.values(item.rangos ?? {});
+          return total + rangos.reduce((sum, value) => sum + value, 0);
+        }, 0);
+
+        const cumplimientoRango = reporte.reduce(
+          (total, item) =>
+            total +
+            ((item.rangos['3.0-3.9'] ?? 0) + (item.rangos['4.0-5.0'] ?? 0)),
+          0
+        );
+
+        setDashboardData({
+          asignaturas: cursos.length,
+          estudiantes,
+          evaluaciones: actividades.length,
+          cumplimiento: totalRangos > 0 ? Math.round((cumplimientoRango / totalRangos) * 100) : 0,
+        });
+      } catch (error) {
+        console.error('Error cargando datos del dashboard:', error);
+        setDashboardData({
+          asignaturas: cursos.length,
+          estudiantes: 0,
+          evaluaciones: 0,
+          cumplimiento: 0,
+        });
+      }
+    };
+
+    if (!loadingCursos) {
+      loadDashboardData();
+    }
+  }, [cursos.length, loadingCursos, selectedCourseId]);
 
   const handleCursoChange = (cursoId: string) => {
-    setSelectedCursoId(cursoId);
-
     if (!cursoId) {
-      setDashboardData(EMPTY_DATA);
+      clearSelectedCourse();
+      setDashboardData({
+        asignaturas: cursos.length,
+        estudiantes: 0,
+        evaluaciones: 0,
+        cumplimiento: 0,
+      });
       return;
     }
 
-    // Temporal.
-    // Posteriormente estos datos vendrán del backend.
-    setDashboardData({
-      asignaturas: 1,
-      estudiantes: 35,
-      evaluaciones: 28,
-      cumplimiento: 82,
-    });
+    setSelectedCourse(Number(cursoId));
   };
 
-  const hasSelectedCurso = Boolean(selectedCursoId);
+  const selectedCursoId = selectedCourseId ? String(selectedCourseId) : '';
+  const hasSelectedCurso = Boolean(selectedCourseId);
 
   return (
     <AppLayout>
       <div className="px-5 py-3">
-        {/* Encabezado */}
         <div className="mb-4">
-
           <h1 className="mt-1 text-2xl font-semibold text-gray-900">
             Panel general
           </h1>
@@ -84,7 +142,6 @@ export function DashboardPage() {
           </p>
         </div>
 
-        {/* Materia actual */}
         <CourseSelector
           cursos={cursos}
           selectedCursoId={selectedCursoId}
@@ -92,31 +149,13 @@ export function DashboardPage() {
           onChange={handleCursoChange}
         />
 
-        {/* Estadísticas */}
         <DashboardStats
-          asignaturas={
-            hasSelectedCurso
-              ? String(dashboardData.asignaturas)
-              : '0'
-          }
-          estudiantes={
-            hasSelectedCurso
-              ? String(dashboardData.estudiantes)
-              : '0'
-          }
-          evaluaciones={
-            hasSelectedCurso
-              ? String(dashboardData.evaluaciones)
-              : '0'
-          }
-          cumplimiento={
-            hasSelectedCurso
-              ? String(dashboardData.cumplimiento)
-              : '0'
-          }
+          asignaturas={String(dashboardData.asignaturas)}
+          estudiantes={String(dashboardData.estudiantes)}
+          evaluaciones={String(dashboardData.evaluaciones)}
+          cumplimiento={`${dashboardData.cumplimiento}%`}
         />
 
-        {/* Gráfico y actividad */}
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.3fr_1fr]">
           <StudentOutcomeChart
             hasSelectedCurso={hasSelectedCurso}

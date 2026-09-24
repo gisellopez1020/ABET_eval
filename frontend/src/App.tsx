@@ -5,9 +5,13 @@ import { DashboardPage } from './pages/Dashboard/DashboardPage';
 import { CoursePage } from './pages/Course/CoursePage';
 import { CoursesPage } from './pages/Course/CoursesPage';
 import { SectionPage } from './pages/Section/SectionPage';
+import StudentsPage from './pages/students/studentsPage';
 import { GradingSelectionPage } from './pages/Grading/Selection/GradingSelectionPage';
 import { GradingTemplatePage } from './pages/Grading/Template/GradingTemplatePage';
 import { ReportsPage } from './pages/Reports/ReportsPage';
+import { ProjectsPage } from './pages/Proyects/ProjectsPage';
+import EvaluacionesPage from './pages/evaluaciones/EvaluacionesPage';
+import RubricaPage from './pages/rubrica/RubricaPage';
 
 export default function App() {
   return (
@@ -16,8 +20,13 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-         <Route  path="/cursos" element={<CoursesPage />}/>
-         <Route path="/cursos/nueva" element={<CoursePage />}/>
+        <Route path="/cursos" element={<CoursesPage />} />
+        <Route path="/students" element={<StudentsPage />} />
+        <Route path="/proyectos" element={<ProjectsPage />} />
+        <Route path="/rubrica" element={<RubricaPage />} />
+        <Route path="/evaluaciones" element={<EvaluacionesPage />} />
+        <Route path="/evaluaciones" element={<EvaluacionesPage />} />
+        <Route path="/cursos/nueva" element={<CoursePage />} />
         <Route path="/cursos/:cursoId" element={<CoursePage />} />
         <Route path="/cursos/:cursoId/secciones/:seccionId" element={<SectionPage />} />
        

@@ -1,23 +1,23 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 
 import { useAuthStore } from '../../store/authStore';
+import { useLayoutStore } from '../../store/layoutStore';
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { isAuthenticated } = useAuthStore();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { isAuthenticated, user } = useAuthStore();
+  const { sidebarCollapsed, toggleSidebar } = useLayoutStore();
 
-  if (
-    !isAuthenticated() &&
-    import.meta.env.VITE_SKIP_AUTH !== 'true'
-  ) {
+  const skipAuth = import.meta.env.VITE_SKIP_AUTH === 'true';
+
+  if (!skipAuth && !isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
 
@@ -26,11 +26,14 @@ export function AppLayout({ children }: AppLayoutProps) {
       {/* SIDEBAR */}
       <Sidebar
         collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed((prev) => !prev)}
+        onToggle={toggleSidebar}
       />
 
       {/* HEADER */}
-      <Header sidebarCollapsed={sidebarCollapsed} />
+      <Header
+        sidebarCollapsed={sidebarCollapsed}
+        userName={user?.nombre || 'Usuario'}
+      />
 
       {/* CONTENIDO */}
       <main
