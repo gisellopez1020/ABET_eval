@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { PencilLine, Plus, Save, Trash2, Upload } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link2, Lock, PencilLine, Plus, Save, Trash2, Upload } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Badge } from '../../components/ui/Badge';
@@ -9,16 +9,19 @@ import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 
 import { actividadesApi } from '../../api/actividades';
+import { catalogoRaAbetApi } from '../../api/catalogo';
 import { criteriosApi } from '../../api/criterios';
 import { cursosApi } from '../../api/cursos';
 import { apiErrorMessage } from '../../api/errors';
 import { useCourseStore } from '../../store/courseStore';
-import { Actividad, Aspecto, Curso } from '../../types';
+import { Actividad, Aspecto, Curso, RaAbet } from '../../types';
 import { decodeCsvBytes, parseRubricaCsv, RubricaCsvAspecto } from './rubricaCsv';
 
 // La rúbrica se edita como borrador local y se guarda completa de una sola vez:
 // el backend (PUT /actividades/{id}/criterios) reemplaza todo y exige que los
-// pesos sumen exactamente 100%.
+// pesos sumen exactamente 100%. Cada aspecto puede vincularse a un Criterio ABET
+// del catálogo (codigo_abet). Si la actividad ya tiene calificaciones la rúbrica
+// queda bloqueada y solo se cambian esos vínculos, al instante, con PATCH.
 interface DraftCriterio {
   key: string;
   texto: string;
@@ -27,8 +30,11 @@ interface DraftCriterio {
 
 interface DraftAspecto {
   key: string;
+  /** id en el backend (null si aún no se ha guardado); lo usa el PATCH del vínculo ABET */
+  id: number | null;
   nombre: string;
   criterios: DraftCriterio[];
+  codigo_abet: string | null;
 }
 
 interface CriterioForm {
@@ -41,6 +47,10 @@ interface CriterioForm {
 interface AspectoForm {
   aspectoKey: string | null; // null = crear, string = renombrar
   nombre: string;
+  /** Paso 1 del vínculo: Resultado de Aprendizaje elegido ('' = sin vincular) */
+  raPadre: string;
+  /** Paso 2: Criterio de ese RA (el valor que se guarda en codigo_abet) */
+  codigoAbet: string | null;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -48,7 +58,9 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 function toDraft(aspectos: Aspecto[]): DraftAspecto[] {
   return aspectos.map((aspecto) => ({
     key: `a${aspecto.id}`,
+    id: aspecto.id,
     nombre: aspecto.nombre,
+    codigo_abet: aspecto.codigo_abet ?? null,
     criterios: aspecto.criterios.map((criterio) => ({
       key: `c${criterio.id}`,
       texto: criterio.texto,
@@ -56,6 +68,8 @@ function toDraft(aspectos: Aspecto[]): DraftAspecto[] {
     })),
   }));
 }
+
+const truncar = (texto: string, max: number) => (texto.length > max ? `${texto.slice(0, max - 1)}…` : texto);
 
 function buildCodeName(aspectoIndex: number, criterioIndex: number) {
   return `${String.fromCharCode(65 + aspectoIndex)}.${criterioIndex + 1}`;
@@ -81,6 +95,13 @@ export default function RubricaPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
+  // Con calificaciones: la rúbrica no se puede reemplazar, solo cambiar vínculos ABET
+  const [bloqueada, setBloqueada] = useState(false);
+  const [vinculando, setVinculando] = useState(false);
+
+  // Catálogo ABET completo (RA y Criterios), no solo los RA del curso: el RA se agrega
+  // al curso automáticamente al guardar el vínculo
+  const [catalogo, setCatalogo] = useState<RaAbet[]>([]);
 
   const [criterioForm, setCriterioForm] = useState<CriterioForm | null>(null);
   const [aspectoForm, setAspectoForm] = useState<AspectoForm | null>(null);
@@ -99,12 +120,25 @@ export default function RubricaPage() {
     if (!activityId) {
       setDraft([]);
       setDirty(false);
+      setBloqueada(false);
       return;
     }
     const resp = await criteriosApi.get(activityId);
     setDraft(toDraft(resp.aspectos));
+    setBloqueada(resp.tiene_calificaciones);
     setDirty(false);
   };
+
+  useEffect(() => {
+    catalogoRaAbetApi
+      .list()
+      .then(setCatalogo)
+      .catch((err) => console.error('Error cargando el catálogo ABET:', err));
+  }, []);
+
+  const porCodigoAbet = useMemo(() => new Map(catalogo.map((ra) => [ra.codigo, ra])), [catalogo]);
+  const raicesAbet = useMemo(() => catalogo.filter((ra) => ra.codigo_padre === null), [catalogo]);
+  const descripcionAbet = (codigo: string | null) => (codigo ? porCodigoAbet.get(codigo)?.descripcion : undefined);
 
   // Carga inicial. Si la URL trae actividadId se precarga esa actividad (y su curso);
   // si no (/rubrica), se usa el curso guardado en el store y su primera actividad.
@@ -139,6 +173,7 @@ export default function RubricaPage() {
         setActividades(actividadesData);
         setSelectedActividadId(activityId);
         setDraft(resp ? toDraft(resp.aspectos) : []);
+        setBloqueada(resp?.tiene_calificaciones ?? false);
         setDirty(false);
       } catch (err) {
         console.error('Error cargando rúbrica:', err);
@@ -162,7 +197,12 @@ export default function RubricaPage() {
   const totalCriterios = draft.reduce((sum, a) => sum + a.criterios.length, 0);
   const aspectosVacios = draft.filter((a) => a.criterios.length === 0);
   const canSave =
-    !!selectedActividadId && dirty && !saving && totalPeso === 100 && aspectosVacios.length === 0;
+    !!selectedActividadId &&
+    !bloqueada &&
+    dirty &&
+    !saving &&
+    totalPeso === 100 &&
+    aspectosVacios.length === 0;
 
   const selectedActividad = actividades.find((item) => item.id === selectedActividadId) ?? null;
   const selectedCurso = cursos.find((item) => item.id === selectedCursoId) ?? null;
@@ -203,20 +243,60 @@ export default function RubricaPage() {
   // ── Aspectos ────────────────────────────────────────────────────────────
   const openAspectoModal = (aspecto?: DraftAspecto) => {
     setFormError('');
-    setAspectoForm({ aspectoKey: aspecto?.key ?? null, nombre: aspecto?.nombre ?? '' });
+    const codigoAbet = aspecto?.codigo_abet ?? null;
+    setAspectoForm({
+      aspectoKey: aspecto?.key ?? null,
+      nombre: aspecto?.nombre ?? '',
+      // Al editar un aspecto ya vinculado, el paso 1 arranca en el RA padre de su código
+      raPadre: (codigoAbet && porCodigoAbet.get(codigoAbet)?.codigo_padre) || '',
+      codigoAbet,
+    });
   };
 
-  const submitAspecto = () => {
+  const submitAspecto = async () => {
     if (!aspectoForm) return;
     const nombre = aspectoForm.nombre.trim();
     if (!nombre) {
       setFormError('El nombre del aspecto es obligatorio.');
       return;
     }
+    if (aspectoForm.raPadre && !aspectoForm.codigoAbet) {
+      setFormError('Elige el Criterio del Resultado de Aprendizaje, o deja "Sin vincular".');
+      return;
+    }
+    const codigoAbet = aspectoForm.raPadre ? aspectoForm.codigoAbet : null;
+
+    if (bloqueada) {
+      // Rúbrica con calificaciones: solo el vínculo, guardado al instante (sin reconstruir la rúbrica)
+      const aspecto = draft.find((a) => a.key === aspectoForm.aspectoKey);
+      if (!aspecto?.id || !selectedActividadId) return;
+      setVinculando(true);
+      setFormError('');
+      try {
+        const actualizado = await criteriosApi.vincularAbet(selectedActividadId, aspecto.id, codigoAbet);
+        setDraft((prev) =>
+          prev.map((a) => (a.key === aspecto.key ? { ...a, codigo_abet: actualizado.codigo_abet } : a))
+        );
+        setSavedMsg(
+          actualizado.codigo_abet
+            ? `"${aspecto.nombre}" vinculado a ${actualizado.codigo_abet}.`
+            : `"${aspecto.nombre}" desvinculado.`
+        );
+        setAspectoForm(null);
+      } catch (err) {
+        setFormError(apiErrorMessage(err, 'No se pudo guardar el vínculo ABET.'));
+      } finally {
+        setVinculando(false);
+      }
+      return;
+    }
+
     if (aspectoForm.aspectoKey === null) {
-      updateDraft([...draft, { key: newKey('a'), nombre, criterios: [] }]);
+      updateDraft([...draft, { key: newKey('a'), id: null, nombre, criterios: [], codigo_abet: codigoAbet }]);
     } else {
-      updateDraft(draft.map((a) => (a.key === aspectoForm.aspectoKey ? { ...a, nombre } : a)));
+      updateDraft(
+        draft.map((a) => (a.key === aspectoForm.aspectoKey ? { ...a, nombre, codigo_abet: codigoAbet } : a))
+      );
     }
     setAspectoForm(null);
   };
@@ -292,7 +372,8 @@ export default function RubricaPage() {
     setCsvError('');
     const reader = new FileReader();
     reader.onload = (e) => {
-      const result = parseRubricaCsv(decodeCsvBytes(e.target?.result as ArrayBuffer));
+      // Con el catálogo se validan en el cliente los códigos ABET (el backend vuelve a validar)
+      const result = parseRubricaCsv(decodeCsvBytes(e.target?.result as ArrayBuffer), catalogo);
       if (result.ok) {
         setCsvPreview(result.aspectos);
       } else {
@@ -308,7 +389,9 @@ export default function RubricaPage() {
     updateDraft(
       csvPreview.map((aspecto) => ({
         key: newKey('a'),
+        id: null,
         nombre: aspecto.nombre,
+        codigo_abet: aspecto.codigo_abet,
         criterios: aspecto.criterios.map((c) => ({ key: newKey('c'), texto: c.texto, peso: c.peso })),
       }))
     );
@@ -330,6 +413,7 @@ export default function RubricaPage() {
       const payload = draft.map((aspecto, aspectoIndex) => ({
         nombre: aspecto.nombre,
         orden: aspectoIndex,
+        codigo_abet: aspecto.codigo_abet,
         criterios: aspecto.criterios.map((criterio, criterioIndex) => ({
           texto: criterio.texto,
           peso_porcentaje: criterio.peso,
@@ -339,7 +423,12 @@ export default function RubricaPage() {
       const response = await criteriosApi.save(selectedActividadId, payload);
       setDraft(toDraft(response.aspectos));
       setDirty(false);
-      setSavedMsg('Rúbrica guardada.');
+      const vinculados = response.aspectos.filter((a) => a.codigo_abet).length;
+      setSavedMsg(
+        vinculados > 0
+          ? `Rúbrica guardada. ${vinculados} aspecto(s) vinculado(s) a ABET; sus RA se agregaron a la asignatura si faltaban.`
+          : 'Rúbrica guardada.'
+      );
     } catch (err) {
       setError(apiErrorMessage(err, 'No se pudo guardar la rúbrica.'));
     } finally {
@@ -348,7 +437,7 @@ export default function RubricaPage() {
   };
 
   const estadoGuardado = (() => {
-    if (!selectedActividad) return null;
+    if (!selectedActividad || bloqueada) return null;
     if (aspectosVacios.length > 0) {
       return `Agrega al menos un criterio a: ${aspectosVacios.map((a) => a.nombre).join(', ')}.`;
     }
@@ -401,7 +490,7 @@ export default function RubricaPage() {
                 size="md"
                 icon={<Plus size={16} />}
                 onClick={() => openAspectoModal()}
-                disabled={!selectedActividad}
+                disabled={!selectedActividad || bloqueada}
               >
                 Agregar aspecto
               </Button>
@@ -410,7 +499,7 @@ export default function RubricaPage() {
                 size="md"
                 icon={<Upload size={16} />}
                 onClick={() => setCsvModal(true)}
-                disabled={!selectedActividad}
+                disabled={!selectedActividad || bloqueada}
               >
                 Importar CSV
               </Button>
@@ -422,7 +511,13 @@ export default function RubricaPage() {
                 onClick={saveRubrica}
                 loading={saving}
                 disabled={!canSave}
-                title={canSave ? undefined : 'La rúbrica debe sumar exactamente 100% y tener cambios sin guardar'}
+                title={
+                  bloqueada
+                    ? 'La actividad ya tiene calificaciones: la rúbrica no se puede reemplazar'
+                    : canSave
+                      ? undefined
+                      : 'La rúbrica debe sumar exactamente 100% y tener cambios sin guardar'
+                }
               >
                 Guardar rúbrica
               </Button>
@@ -469,6 +564,16 @@ export default function RubricaPage() {
             </label>
           </div>
 
+          {bloqueada && selectedActividad && (
+            <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <Lock size={16} className="mt-0.5 shrink-0" />
+              <span>
+                Esta actividad ya tiene calificaciones: su rúbrica no se puede modificar. Solo puedes cambiar el
+                vínculo de cada aspecto con un Student Outcome (botón <Link2 size={13} className="inline" />), y se
+                guarda al instante.
+              </span>
+            </div>
+          )}
           {error && (
             <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
@@ -549,33 +654,45 @@ export default function RubricaPage() {
                             {String.fromCharCode(65 + aspectoIndex)}
                           </span>
                           <span className="font-semibold text-gray-800">{aspecto.nombre}</span>
+                          {aspecto.codigo_abet && (
+                            <span title={descripcionAbet(aspecto.codigo_abet)}>
+                              <Badge variant="info">ABET {aspecto.codigo_abet}</Badge>
+                            </span>
+                          )}
                           <Badge variant="neutral">{subtotal}%</Badge>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={<Plus size={14} />}
-                            onClick={() => openCriterioModal(aspecto)}
-                          >
-                            Criterio
-                          </Button>
+                          {!bloqueada && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              icon={<Plus size={14} />}
+                              onClick={() => openCriterioModal(aspecto)}
+                            >
+                              Criterio
+                            </Button>
+                          )}
                           <button
                             type="button"
-                            aria-label={`Renombrar ${aspecto.nombre}`}
+                            aria-label={
+                              bloqueada ? `Vincular ${aspecto.nombre} a Student Outcome` : `Editar ${aspecto.nombre}`
+                            }
+                            title={bloqueada ? 'Vincular a Student Outcome' : 'Editar aspecto'}
                             onClick={() => openAspectoModal(aspecto)}
                             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-[#9E0B0F]/40 hover:text-[#9E0B0F]"
                           >
-                            <PencilLine size={15} />
+                            {bloqueada ? <Link2 size={15} /> : <PencilLine size={15} />}
                           </button>
-                          <button
-                            type="button"
-                            aria-label={`Eliminar ${aspecto.nombre}`}
-                            onClick={() => deleteAspecto(aspecto)}
-                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-red-300 hover:text-red-600"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {!bloqueada && (
+                            <button
+                              type="button"
+                              aria-label={`Eliminar ${aspecto.nombre}`}
+                              onClick={() => deleteAspecto(aspecto)}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 transition hover:border-red-300 hover:text-red-600"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -595,7 +712,7 @@ export default function RubricaPage() {
                                     {criterio.peso}%
                                   </td>
                                   <td className="w-28 px-4 py-3">
-                                    <div className="flex justify-end gap-2">
+                                    <div className={`flex justify-end gap-2 ${bloqueada ? 'invisible' : ''}`}>
                                       <button
                                         type="button"
                                         aria-label={`Editar ${criterio.texto}`}
@@ -632,7 +749,9 @@ export default function RubricaPage() {
       <Modal
         open={aspectoForm !== null}
         onClose={() => setAspectoForm(null)}
-        title={aspectoForm?.aspectoKey ? 'Renombrar aspecto' : 'Agregar aspecto'}
+        title={
+          bloqueada ? 'Vincular aspecto a Student Outcome' : aspectoForm?.aspectoKey ? 'Editar aspecto' : 'Agregar aspecto'
+        }
         maxWidth="max-w-xl"
       >
         <div className="space-y-4">
@@ -641,15 +760,93 @@ export default function RubricaPage() {
             value={aspectoForm?.nombre ?? ''}
             onChange={(event) => setAspectoForm((prev) => (prev ? { ...prev, nombre: event.target.value } : prev))}
             placeholder="Ej: Identificación del problema"
-            autoFocus
+            disabled={bloqueada}
+            autoFocus={!bloqueada}
           />
+
+          <div className="space-y-3 rounded-xl border border-gray-200 bg-[#fafafa] p-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Vincular a Student Outcome (opcional)</p>
+              <p className="text-xs text-gray-500">
+                Si el Resultado de Aprendizaje aún no está en la asignatura, se agrega automáticamente al guardar.
+              </p>
+            </div>
+
+            {catalogo.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                El catálogo de Student Outcomes está vacío. Créalo o impórtalo en{' '}
+                <Link to="/student-outcomes" className="font-medium text-[#9E0B0F] hover:underline">
+                  Student Outcomes
+                </Link>
+                .
+              </p>
+            ) : (
+              <>
+                <label className="block text-sm font-medium text-gray-700">
+                  <span className="mb-1 block text-xs">1. Resultado de Aprendizaje</span>
+                  <select
+                    value={aspectoForm?.raPadre ?? ''}
+                    onChange={(event) =>
+                      setAspectoForm((prev) =>
+                        prev ? { ...prev, raPadre: event.target.value, codigoAbet: null } : prev
+                      )
+                    }
+                    autoFocus={bloqueada}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="">Sin vincular</option>
+                    {raicesAbet.map((ra) => (
+                      <option key={ra.codigo} value={ra.codigo}>
+                        {ra.codigo} — {truncar(ra.descripcion, 80)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {aspectoForm?.raPadre && (
+                  <label className="block text-sm font-medium text-gray-700">
+                    <span className="mb-1 block text-xs">2. Criterio de Evaluación</span>
+                    <select
+                      value={aspectoForm.codigoAbet ?? ''}
+                      onChange={(event) =>
+                        setAspectoForm((prev) => (prev ? { ...prev, codigoAbet: event.target.value || null } : prev))
+                      }
+                      className={SELECT_CLASS}
+                    >
+                      <option value="">Elige un criterio</option>
+                      {catalogo
+                        .filter((c) => c.codigo_padre === aspectoForm.raPadre)
+                        .map((c) => (
+                          <option key={c.codigo} value={c.codigo}>
+                            {c.codigo} — {truncar(c.descripcion, 80)}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+
+                {aspectoForm?.codigoAbet && (
+                  <p className="rounded-lg bg-white px-3 py-2 text-xs text-gray-600">
+                    <span className="font-semibold text-[#9E0B0F]">{aspectoForm.codigoAbet}</span>{' '}
+                    {descripcionAbet(aspectoForm.codigoAbet)}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
           {formError && <p className="text-sm text-red-600">{formError}</p>}
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setAspectoForm(null)}>
               Cancelar
             </Button>
-            <Button variant="primary" onClick={submitAspecto} className="bg-[#9E0B0F] hover:bg-[#82090d]">
-              {aspectoForm?.aspectoKey ? 'Aplicar' : 'Agregar'}
+            <Button
+              variant="primary"
+              onClick={submitAspecto}
+              loading={vinculando}
+              className="bg-[#9E0B0F] hover:bg-[#82090d]"
+            >
+              {bloqueada ? 'Guardar vínculo' : aspectoForm?.aspectoKey ? 'Aplicar' : 'Agregar'}
             </Button>
           </div>
         </div>
@@ -716,7 +913,10 @@ export default function RubricaPage() {
             <p className="text-sm text-gray-500">
               {csvFile ? csvFile.name : 'Arrastra un CSV aquí o haz clic para seleccionar'}
             </p>
-            <p className="text-xs text-gray-400 mt-1">Formato: Aspecto,Criterio,Peso (con encabezado)</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Formato: Aspecto,Criterio,Peso[,CodigoABET] (con encabezado). CodigoABET es opcional y debe ser el
+              mismo en todas las filas de un aspecto.
+            </p>
             <input
               ref={fileRef}
               type="file"
@@ -738,9 +938,16 @@ export default function RubricaPage() {
                   return (
                     <div key={aspectoIndex} className="border-b last:border-b-0">
                       <div className="flex items-center justify-between bg-gray-50 px-3 py-2 font-semibold text-gray-800">
-                        <span>
-                          <span className="mr-2 text-[#9E0B0F]">{String.fromCharCode(65 + aspectoIndex)}</span>
-                          {aspecto.nombre}
+                        <span className="flex items-center gap-2">
+                          <span>
+                            <span className="mr-2 text-[#9E0B0F]">{String.fromCharCode(65 + aspectoIndex)}</span>
+                            {aspecto.nombre}
+                          </span>
+                          {aspecto.codigo_abet && (
+                            <span title={descripcionAbet(aspecto.codigo_abet)}>
+                              <Badge variant="info">ABET {aspecto.codigo_abet}</Badge>
+                            </span>
+                          )}
                         </span>
                         <span className="text-gray-500">{subtotal}%</span>
                       </div>
