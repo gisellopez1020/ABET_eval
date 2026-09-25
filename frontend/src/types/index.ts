@@ -82,11 +82,15 @@ export interface Aspecto {
   nombre: string;
   orden: number;
   criterios: Criterio[];
+  /** Criterio de Evaluación del catálogo ABET vinculado (ej. "2.1.1"), opcional. */
+  codigo_abet: string | null;
 }
 
 export interface CriteriosResponse {
   aspectos: Aspecto[];
   total_peso: number;
+  /** Con calificaciones la rúbrica no se puede reemplazar; solo cambiar vínculos ABET. */
+  tiene_calificaciones: boolean;
 }
 
 export interface EquipoTrabajo {
