@@ -1,0 +1,682 @@
+{
+  "curso": {
+    "codigo": "545210",
+    "nombre": "Redes De Datos",
+    "periodo": "2026-1"
+  },
+  "actividad": {
+    "nombre": "Proyecto Final I: Diseño e implementación de red",
+    "tipo": "grupal",
+    "peso_nota_final": 30.0
+  },
+  "aspectos": [
+    {
+      "nombre": "1. Diseño de redes",
+      "codigo_abet": "2.1.1",
+      "criterios": [
+        {
+          "texto": "Propone  la primer opción de diseño de la red de Internet de 6 enrutadores",
+          "peso_porcentaje": 16.67
+        },
+        {
+          "texto": "Muestra las 3 rutas posibles entre origen y destino de la primer opcion",
+          "peso_porcentaje": 16.67
+        },
+        {
+          "texto": "Propone la segunda opción de diseño de la red de Internet  de 6 enrutadores",
+          "peso_porcentaje": 16.67
+        },
+        {
+          "texto": "Muestra las 3 rutas posibles entre origen y destino de la segunda opcion",
+          "peso_porcentaje": 16.67
+        },
+        {
+          "texto": "Propone la tercera opción de diseño de la red de Internet de 6 enrutadores",
+          "peso_porcentaje": 16.67
+        },
+        {
+          "texto": "Muestra las 3 rutas posibles entre origen y destino de la tercera opcion",
+          "peso_porcentaje": 16.65
+        }
+      ]
+    },
+    {
+      "nombre": "2. Selección de diseño",
+      "codigo_abet": "2.1.2",
+      "criterios": [
+        {
+          "texto": "Establece  dos criterios adecuados para seleccionar diseños de redes de datos",
+          "peso_porcentaje": 33.33
+        },
+        {
+          "texto": "Selecciona el diseño de red más  adecuada según los dos criterios seleccionados",
+          "peso_porcentaje": 33.33
+        },
+        {
+          "texto": "Muestra las 3 rutas posibles entre origen y destino según la red seleccionada",
+          "peso_porcentaje": 33.34
+        }
+      ]
+    },
+    {
+      "nombre": "3. Implementación de redes de datos",
+      "codigo_abet": "2.1.3",
+      "criterios": [
+        {
+          "texto": "Muestra y calcula correctamente el direccionamiento de la red Casa 1",
+          "peso_porcentaje": 12.5
+        },
+        {
+          "texto": "Muestra y calcula correctamente el direccionamiento de la red Casa 2",
+          "peso_porcentaje": 12.5
+        },
+        {
+          "texto": "Muestra y calcula correctamente el direccionamiento de la red ISP",
+          "peso_porcentaje": 12.5
+        },
+        {
+          "texto": "Muestra y calcula  correctamente el direccionamiento de la red Internet",
+          "peso_porcentaje": 12.5
+        },
+        {
+          "texto": "Muestra y calcula correctamente el direccionamiento de la red Servidores 1",
+          "peso_porcentaje": 12.5
+        },
+        {
+          "texto": "Muestra y calcula correctamente el direccionamiento de la red Servidores 2",
+          "peso_porcentaje": 12.5
+        },
+        {
+          "texto": "Configura correctamente el enrutamiento dinámico",
+          "peso_porcentaje": 12.5
+        },
+        {
+          "texto": "Configura correctamente el enrutamiento estático",
+          "peso_porcentaje": 12.5
+        }
+      ]
+    },
+    {
+      "nombre": "4. FTP",
+      "codigo_abet": null,
+      "criterios": [
+        {
+          "texto": "Muestra el detalle del protocolo FTP en modo simulación",
+          "peso_porcentaje": 33.33
+        },
+        {
+          "texto": "Prueba la carga de archivos al servidor FTP",
+          "peso_porcentaje": 33.33
+        },
+        {
+          "texto": "Prueba la descarga de archivos del servidor FTP",
+          "peso_porcentaje": 33.34
+        }
+      ]
+    },
+    {
+      "nombre": "4. Mail",
+      "codigo_abet": null,
+      "criterios": [
+        {
+          "texto": "Muestra la configuración del servidor de correo con los usuarios respectivos usuarios creados",
+          "peso_porcentaje": 20.0
+        },
+        {
+          "texto": "Muestra el detalle del  protocolo SMTP en modo simulación",
+          "peso_porcentaje": 20.0
+        },
+        {
+          "texto": "Muestra el detalle del  protocolo POP3 en modo simulación",
+          "peso_porcentaje": 20.0
+        },
+        {
+          "texto": "Prueba el envió de correo electrónico",
+          "peso_porcentaje": 20.0
+        },
+        {
+          "texto": "Prueba la recepción de correo electrónico",
+          "peso_porcentaje": 20.0
+        }
+      ]
+    },
+    {
+      "nombre": "4. Web",
+      "codigo_abet": null,
+      "criterios": [
+        {
+          "texto": "Muestra la tabla de configuración del servidor DNS y sus registros",
+          "peso_porcentaje": 20.0
+        },
+        {
+          "texto": "Muestra el  protocolo HTTP en modo simulación",
+          "peso_porcentaje": 20.0
+        },
+        {
+          "texto": "Prueba la descarga de la página web de google",
+          "peso_porcentaje": 20.0
+        },
+        {
+          "texto": "Prueba la descarga de la página web de youtube",
+          "peso_porcentaje": 20.0
+        },
+        {
+          "texto": "Prueba la descarga de la página web de facebook",
+          "peso_porcentaje": 20.0
+        }
+      ]
+    },
+    {
+      "nombre": "5. NAT64",
+      "codigo_abet": null,
+      "criterios": [
+        {
+          "texto": "Muestra la tabla de conversión IPv4/IPv6",
+          "peso_porcentaje": 33.33
+        },
+        {
+          "texto": "Prueba el funcionamiento de la conversión de direcciones",
+          "peso_porcentaje": 33.33
+        },
+        {
+          "texto": "Muestra la cabecera IP y la conversión de la cabecera en modo simulación",
+          "peso_porcentaje": 33.34
+        }
+      ]
+    },
+    {
+      "nombre": "6.a. Impacto Internet",
+      "codigo_abet": "4.2.1",
+      "criterios": [
+        {
+          "texto": "El primer aspecto es claro y adecuado",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "El segundo aspecto es claro y adecuado",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "El tercer aspecto es claro y adecuado",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el primer aspecto en economia",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el primer aspecto en sociedad",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el primer aspecto en salud",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el segundo aspecto en economia",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el segundo aspecto en sociedad",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el segundo aspecto en salud",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el tercer aspecto en economia",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el tercer aspecto en sociedad",
+          "peso_porcentaje": 8.33
+        },
+        {
+          "texto": "Evalua correctamente el tercer aspecto en salud",
+          "peso_porcentaje": 8.37
+        }
+      ]
+    },
+    {
+      "nombre": "6.b. Referencias Impacto Internet",
+      "codigo_abet": "4.2.2",
+      "criterios": [
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del primer aspecto  en la economía",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del primer aspecto  en la sociedad",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del primer aspecto  en la salud",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del segundo aspecto  en la economía",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del segundo aspecto  en la sociedad",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del segundo aspecto  en la salud",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del tercer aspecto  en la economía",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del tercer aspecto  en la sociedad",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del tercer aspecto  en la salud",
+          "peso_porcentaje": 10.0
+        },
+        {
+          "texto": "Emplea adecuadamente el referenciamiento en formato apa",
+          "peso_porcentaje": 10.0
+        }
+      ]
+    }
+  ],
+  "equipos": [
+    {
+      "nombre": "Equipo 1",
+      "estudiantes": [
+        "Valentina Rojas Medina",
+        "Juan Esteban Ospina Cárdenas",
+        "Camila Andrea Rincón Silva",
+        "Santiago Moreno Vidal"
+      ],
+      "cumple": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "nombre": "Equipo 2",
+      "estudiantes": [
+        "Daniela Torres Cifuentes",
+        "Mateo Alejandro Ruiz Gómez",
+        "Isabella Castañeda Ríos",
+        "Nicolás Herrera Quintero"
+      ],
+      "cumple": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "nombre": "Equipo 3",
+      "estudiantes": [
+        "Sara Valentina Gómez Peña",
+        "Juan Pablo Escobar Duarte"
+      ],
+      "cumple": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "nombre": "Equipo 4",
+      "estudiantes": [
+        "Laura Sofía Muñoz Aguirre",
+        "David Felipe Cárdenas Ospina",
+        "María José Zapata Correa",
+        "Andrés Camilo Pardo Vélez"
+      ],
+      "cumple": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "nombre": "Equipo 5",
+      "estudiantes": [
+        "Paula Andrea Salazar Vanegas",
+        "Kevin Stiven Loaiza Ramírez",
+        "Mariana Restrepo Duque",
+        "Sebastián Naranjo Vega",
+        "Luisa Fernanda Bonilla Trejos"
+      ],
+      "cumple": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "nombre": "Equipo 6",
+      "estudiantes": [
+        "Cristian David Marulanda Ibarra"
+      ],
+      "cumple": [
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+      ]
+    }
+  ]
+}
