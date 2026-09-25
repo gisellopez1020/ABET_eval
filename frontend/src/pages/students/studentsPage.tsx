@@ -9,7 +9,6 @@ import { TableActionButton } from '../../components/ui/TableActionButton';
 import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
 import { estudiantesApi } from '../../api/estudiantes';
-import { useCourseStore } from '../../store/courseStore';
 import { Curso, Seccion } from '../../types';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -25,89 +24,111 @@ interface StudentRow {
   promedio: number;
   grupo: string;
   estado: StudentStatus;
+  cursoId: number;
+  cursoNombre: string;
+  seccionId: number;
 }
 
-export default function StudentsPage() {
-  const { selectedCourseId } = useCourseStore();
+/** Sección con el nombre de su asignatura (los nombres de sección se repiten entre cursos). */
+interface SectionOption extends Seccion {
+  cursoNombre: string;
+}
 
+const SELECT_CLASS =
+  'rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10';
+
+// Pantalla independiente de la asignatura activa del Dashboard (selectedCourseId):
+// carga los estudiantes de todas las secciones de todos los cursos del docente y
+// filtra en memoria por Asignatura/Sección, búsqueda y estado.
+export default function StudentsPage() {
+  const [courses, setCourses] = useState<Curso[]>([]);
+  const [sectionOptions, setSectionOptions] = useState<SectionOption[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'todos' | StudentStatus>('todos');
+  const [courseFilter, setCourseFilter] = useState<number | null>(null); // null = Todas
+  const [sectionFilter, setSectionFilter] = useState<number | null>(null); // null = Todas
   const [showFilter, setShowFilter] = useState(false);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentCode, setNewStudentCode] = useState('');
-  const [sectionOptions, setSectionOptions] = useState<Seccion[]>([]);
-  const [selectedSeccionId, setSelectedSeccionId] = useState<number | null>(null);
+  const [createSeccionId, setCreateSeccionId] = useState<number | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [page, setPage] = useState(1);
 
   const pageSize = 5;
 
-  const refreshStudents = async (sectionId: number | null) => {
-    if (!sectionId) {
-      setStudents([]);
-      return;
-    }
-
+  // Recorrido cursos -> secciones -> estudiantes por sección (mismo patrón que ProjectsPage),
+  // con las peticiones de cada nivel en paralelo.
+  const loadAll = async () => {
     try {
-      const estudiantes = await estudiantesApi.list(sectionId);
-      const mappedStudents: StudentRow[] = estudiantes.map((estudiante) => ({
-        id: estudiante.id,
-        nombre: estudiante.nombre_completo,
-        codigo: estudiante.codigo_estudiante,
-        email: `${estudiante.codigo_estudiante.toLowerCase()}@uao.edu.co`,
-        semestre: '—',
-        promedio: 0,
-        grupo: '—',
-        estado: 'activo',
-      }));
+      const cursos = await cursosApi.list();
+      const seccionesPorCurso = await Promise.all(
+        cursos.map(async (curso) => {
+          const secciones = await seccionesApi.list(curso.id);
+          return secciones.map((seccion): SectionOption => ({ ...seccion, cursoNombre: curso.nombre }));
+        })
+      );
+      const secciones = seccionesPorCurso.flat();
 
-      setStudents(mappedStudents);
+      const estudiantesPorSeccion = await Promise.all(
+        secciones.map(async (seccion) => {
+          const estudiantes = await estudiantesApi.list(seccion.id);
+          return estudiantes.map((estudiante): StudentRow => ({
+            id: estudiante.id,
+            nombre: estudiante.nombre_completo,
+            codigo: estudiante.codigo_estudiante,
+            email: `${estudiante.codigo_estudiante.toLowerCase()}@uao.edu.co`,
+            semestre: '—',
+            promedio: 0,
+            grupo: seccion.nombre,
+            estado: 'activo',
+            cursoId: seccion.curso_id,
+            cursoNombre: seccion.cursoNombre,
+            seccionId: seccion.id,
+          }));
+        })
+      );
+
+      setCourses(cursos);
+      setSectionOptions(secciones);
+      setStudents(estudiantesPorSeccion.flat());
     } catch (error) {
       console.error('Error cargando estudiantes:', error);
+      setCourses([]);
+      setSectionOptions([]);
       setStudents([]);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const loadSections = async () => {
-      try {
-        const courses: Curso[] = await cursosApi.list();
-        const courseIds = selectedCourseId
-          ? [selectedCourseId]
-          : courses.map((course) => course.id);
+    void loadAll();
+  }, []);
 
-        const sectionsByCourse = await Promise.all(
-          courseIds.map(async (courseId) => seccionesApi.list(courseId))
-        );
+  // Secciones que ofrece el filtro: las de la asignatura elegida, o todas
+  const filterSections = useMemo(
+    () => (courseFilter === null ? sectionOptions : sectionOptions.filter((s) => s.curso_id === courseFilter)),
+    [sectionOptions, courseFilter]
+  );
 
-        const allSections = sectionsByCourse.flat();
-        setSectionOptions(allSections);
-
-        if (allSections.length > 0 && (!selectedSeccionId || !allSections.some((section) => section.id === selectedSeccionId))) {
-          setSelectedSeccionId(allSections[0].id);
-        }
-
-        if (allSections.length === 0) {
-          setSelectedSeccionId(null);
-          setStudents([]);
-        }
-      } catch (error) {
-        console.error('Error cargando secciones:', error);
-        setSectionOptions([]);
-        setSelectedSeccionId(null);
-        setStudents([]);
-      }
-    };
-
-    loadSections();
-  }, [selectedCourseId]);
-
-  useEffect(() => {
-    refreshStudents(selectedSeccionId);
-  }, [selectedSeccionId]);
+  const handleCourseFilter = (value: string) => {
+    const courseId = value ? Number(value) : null;
+    setCourseFilter(courseId);
+    // Si la sección elegida no es de la nueva asignatura, vuelve a "Todas"
+    if (
+      sectionFilter !== null &&
+      courseId !== null &&
+      !sectionOptions.some((s) => s.id === sectionFilter && s.curso_id === courseId)
+    ) {
+      setSectionFilter(null);
+    }
+  };
 
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -119,14 +140,16 @@ export default function StudentsPage() {
         student.codigo.toLowerCase().includes(query);
 
       const matchesStatus = status === 'todos' || student.estado === status;
+      const matchesCourse = courseFilter === null || student.cursoId === courseFilter;
+      const matchesSection = sectionFilter === null || student.seccionId === sectionFilter;
 
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesCourse && matchesSection;
     });
-  }, [students, search, status]);
+  }, [students, search, status, courseFilter, sectionFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, status]);
+  }, [search, status, courseFilter, sectionFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -134,6 +157,13 @@ export default function StudentsPage() {
     (safePage - 1) * pageSize,
     safePage * pageSize
   );
+
+  const openCreateModal = () => {
+    // Por defecto, la sección del filtro si hay una elegida
+    setCreateSeccionId(sectionFilter);
+    setCreateError('');
+    setShowCreateModal(true);
+  };
 
   const handleCreateStudent = async () => {
     if (!newStudentName.trim()) {
@@ -146,7 +176,7 @@ export default function StudentsPage() {
       return;
     }
 
-    if (!selectedSeccionId) {
+    if (!createSeccionId) {
       setCreateError('Debes seleccionar una sección');
       return;
     }
@@ -155,12 +185,12 @@ export default function StudentsPage() {
     setCreateError('');
 
     try {
-      await estudiantesApi.create(selectedSeccionId, {
+      await estudiantesApi.create(createSeccionId, {
         nombre_completo: newStudentName.trim().toUpperCase(),
         codigo_estudiante: newStudentCode.trim(),
       });
 
-      await refreshStudents(selectedSeccionId);
+      await loadAll();
       setNewStudentName('');
       setNewStudentCode('');
       setShowCreateModal(false);
@@ -188,7 +218,12 @@ export default function StudentsPage() {
       align: 'center',
       render: (student) => <span>{student.promedio.toFixed(1)}</span>,
     },
-    { key: 'grupo', label: 'Grupo', align: 'center' },
+    {
+      key: 'grupo',
+      label: 'Grupo',
+      align: 'center',
+      render: (student) => <span title={student.cursoNombre}>{student.grupo}</span>,
+    },
     {
       key: 'estado',
       label: 'Estado',
@@ -232,10 +267,11 @@ export default function StudentsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Estudiantes</h1>
             <p className="mt-1 text-sm text-gray-500">
-              {filteredStudents.length}{' '}
-              {filteredStudents.length === 1
-                ? 'estudiante registrado'
-                : 'estudiantes registrados'}
+              {loading
+                ? 'Cargando…'
+                : `${filteredStudents.length} ${
+                    filteredStudents.length === 1 ? 'estudiante registrado' : 'estudiantes registrados'
+                  }`}
             </p>
           </div>
         </div>
@@ -255,6 +291,34 @@ export default function StudentsPage() {
             />
           </div>
 
+          <select
+            value={courseFilter ?? ''}
+            onChange={(event) => handleCourseFilter(event.target.value)}
+            aria-label="Filtrar por asignatura"
+            className={`${SELECT_CLASS} md:w-56`}
+          >
+            <option value="">Asignatura: Todas</option>
+            {courses.map((course) => (
+              <option key={course.id} value={course.id}>
+                {course.nombre}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={sectionFilter ?? ''}
+            onChange={(event) => setSectionFilter(event.target.value ? Number(event.target.value) : null)}
+            aria-label="Filtrar por sección"
+            className={`${SELECT_CLASS} md:w-56`}
+          >
+            <option value="">Sección: Todas</option>
+            {filterSections.map((section) => (
+              <option key={section.id} value={section.id}>
+                {courseFilter === null ? `${section.cursoNombre} · ${section.nombre}` : section.nombre}
+              </option>
+            ))}
+          </select>
+
           <Button
               variant="outline"
               icon={<Filter size={17} />}
@@ -265,7 +329,7 @@ export default function StudentsPage() {
 
           <Button
           icon={<Plus size={18} />}
-          onClick={() => setShowCreateModal(true)}
+          onClick={openCreateModal}
         >
           Nuevo estudiante
         </Button>
@@ -309,7 +373,7 @@ export default function StudentsPage() {
           columns={columns}
           data={paginatedStudents}
           getRowKey={(student) => student.id}
-          empty="No se encontraron estudiantes."
+          empty={loading ? 'Cargando estudiantes…' : 'No se encontraron estudiantes.'}
         />
 
         {showCreateModal && (
@@ -356,14 +420,14 @@ export default function StudentsPage() {
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700">Sección</label>
                   <select
-                    value={selectedSeccionId ?? ''}
-                    onChange={(event) => setSelectedSeccionId(Number(event.target.value))}
+                    value={createSeccionId ?? ''}
+                    onChange={(event) => setCreateSeccionId(event.target.value ? Number(event.target.value) : null)}
                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
                   >
                     <option value="">Selecciona una sección</option>
                     {sectionOptions.map((section) => (
                       <option key={section.id} value={section.id}>
-                        {section.nombre}
+                        {section.cursoNombre} · {section.nombre}
                       </option>
                     ))}
                   </select>
