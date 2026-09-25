@@ -19,18 +19,30 @@ def _verificar_propietario(curso: Curso, email: str) -> None:
 
 
 def _validar_ra_abet(codigos: List[str], db: Session) -> None:
-    """Cada código de ra_abet debe existir en ra_abet_catalogo (no se puede validar en el schema: requiere BD)."""
+    """
+    Cada código de ra_abet debe existir en ra_abet_catalogo y ser un Resultado de
+    Aprendizaje (nivel superior): un curso no selecciona Criterios individuales.
+    No se puede validar en el schema: requiere BD.
+    """
     if not codigos:
         return
-    existentes = {
-        codigo
-        for (codigo,) in db.query(RaAbetCatalogo.codigo).filter(RaAbetCatalogo.codigo.in_(codigos))
-    }
-    desconocidos = [c for c in codigos if c not in existentes]
+    padres = dict(
+        db.query(RaAbetCatalogo.codigo, RaAbetCatalogo.codigo_padre)
+        .filter(RaAbetCatalogo.codigo.in_(codigos))
+        .all()
+    )
+    desconocidos = [c for c in codigos if c not in padres]
     if desconocidos:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Códigos RA ABET que no existen en el catálogo: {', '.join(desconocidos)}",
+        )
+    criterios = [c for c in codigos if padres[c] is not None]
+    if criterios:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Un curso solo puede tener Resultados de Aprendizaje, no Criterios: "
+                   f"{', '.join(criterios)}",
         )
 
 
