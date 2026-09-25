@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
 } from 'recharts';
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Header } from '../../components/Layout/Header';
 import { Button } from '../../components/ui/Button';
@@ -39,17 +40,16 @@ function detalle(fila: Fila): string {
   return fila.codigo_padre ? `RA ${fila.codigo_padre} · peso ${fila.peso}` : '';
 }
 
-function DistribucionNivel({
-  filas,
-  rangos,
-  columna,
-}: {
-  filas: Fila[];
-  rangos: RangoCalificacion[];
-  columna: string;
-}) {
+interface Serie {
+  nombre: string;
+  color: string;
+  valor: (f: Fila) => number;
+}
+
+/** Una serie por rango del curso (más "Sin clasificar" si alguna fila lo tiene). */
+function seriesDe(filas: Fila[], rangos: RangoCalificacion[]): Serie[] {
   const conSinClasificar = filas.some((f) => f.sin_clasificar > 0);
-  const series = [
+  return [
     ...rangos.map((r, i) => ({
       nombre: r.etiqueta,
       color: colorRango(i, rangos.length),
@@ -59,29 +59,66 @@ function DistribucionNivel({
       ? [{ nombre: SIN_CLASIFICAR, color: COLOR_SIN_CLASIFICAR, valor: (f: Fila) => f.sin_clasificar }]
       : []),
   ];
+}
+
+/** Gráfica de barras apiladas; la usan la pantalla y la copia oculta que se exporta al PDF. */
+function GraficaDistribucion({
+  filas,
+  series,
+  ancho = '100%',
+  animar = true,
+}: {
+  filas: Fila[];
+  series: Serie[];
+  ancho?: number | `${number}%`;
+  animar?: boolean;
+}) {
   const descripcionDe = (codigo: string) => filas.find((f) => f.codigo === codigo)?.descripcion ?? '';
+
+  return (
+    <ResponsiveContainer width={ancho} height={Math.max(200, filas.length * 40 + 80)}>
+      <BarChart data={filas} layout="vertical" margin={{ left: 20, right: 20 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+        <XAxis type="number" allowDecimals={false} />
+        <YAxis type="category" dataKey="codigo" width={60} tick={{ fontSize: 12 }} />
+        <Tooltip
+          labelFormatter={(codigo: string) => `${codigo} · ${descripcionDe(codigo)}`}
+          contentStyle={{ maxWidth: 360, whiteSpace: 'normal' }}
+        />
+        <Legend />
+        {/* dataKey como función: las etiquetas con puntos ("0.0-2.9") se tomarían como rutas */}
+        {series.map((s) => (
+          <Bar
+            key={s.nombre}
+            name={s.nombre}
+            dataKey={s.valor}
+            stackId="rangos"
+            fill={s.color}
+            isAnimationActive={animar}
+          />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function DistribucionNivel({
+  filas,
+  rangos,
+  columna,
+}: {
+  filas: Fila[];
+  rangos: RangoCalificacion[];
+  columna: string;
+}) {
+  const series = seriesDe(filas, rangos);
 
   return (
     <>
       {/* Gráfica */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <h3 className="font-semibold text-uao-dark mb-4">Distribución de estudiantes por rango</h3>
-        <ResponsiveContainer width="100%" height={Math.max(200, filas.length * 40 + 80)}>
-          <BarChart data={filas} layout="vertical" margin={{ left: 20, right: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-            <XAxis type="number" allowDecimals={false} />
-            <YAxis type="category" dataKey="codigo" width={60} tick={{ fontSize: 12 }} />
-            <Tooltip
-              labelFormatter={(codigo: string) => `${codigo} · ${descripcionDe(codigo)}`}
-              contentStyle={{ maxWidth: 360, whiteSpace: 'normal' }}
-            />
-            <Legend />
-            {/* dataKey como función: las etiquetas con puntos ("0.0-2.9") se tomarían como rutas */}
-            {series.map((s) => (
-              <Bar key={s.nombre} name={s.nombre} dataKey={s.valor} stackId="rangos" fill={s.color} />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
+        <GraficaDistribucion filas={filas} series={series} />
       </div>
 
       {/* Tabla */}
@@ -131,8 +168,44 @@ function DistribucionNivel({
   );
 }
 
-/** Dibuja la tabla de un nivel en el PDF y devuelve la nueva posición vertical. */
-function tablaPDF(doc: jsPDF, titulo: string, filas: Fila[], rangos: RangoCalificacion[], y: number): number {
+// Página A4 vertical (mm): márgenes del contenido
+const PDF_X = 14;
+const PDF_ANCHO = 182;
+const PDF_Y_INICIO = 20;
+const PDF_Y_FIN = 285;
+// Ancho fijo de la gráfica que se captura: el PDF sale igual sin importar la ventana
+const ANCHO_GRAFICA_PDF = 900;
+
+/**
+ * Dibuja el título de la sección y la gráfica capturada, a todo el ancho y con su
+ * proporción. Pasa a otra página si no cabe; si es más alta que una página, la reduce.
+ * Devuelve la nueva posición vertical.
+ */
+function imagenPDF(doc: jsPDF, titulo: string, canvas: HTMLCanvasElement, y: number): number {
+  const altoTitulo = 6;
+  const altoMax = PDF_Y_FIN - PDF_Y_INICIO - altoTitulo;
+  let ancho = PDF_ANCHO;
+  let alto = (canvas.height / canvas.width) * ancho;
+  if (alto > altoMax) {
+    ancho *= altoMax / alto;
+    alto = altoMax;
+  }
+  if (y + altoTitulo + alto > PDF_Y_FIN) { doc.addPage(); y = PDF_Y_INICIO; }
+
+  doc.setFontSize(12);
+  doc.setTextColor(31, 56, 100);
+  doc.text(titulo, PDF_X, y);
+  y += altoTitulo;
+
+  doc.addImage(canvas, 'PNG', PDF_X + (PDF_ANCHO - ancho) / 2, y, ancho, alto);
+  return y + alto + 4;
+}
+
+/**
+ * Dibuja la tabla de un nivel en el PDF y devuelve la nueva posición vertical.
+ * Sin título cuando ya lo dibujó imagenPDF encima de la gráfica.
+ */
+function tablaPDF(doc: jsPDF, titulo: string | null, filas: Fila[], rangos: RangoCalificacion[], y: number): number {
   const conSinClasificar = filas.some((f) => f.sin_clasificar > 0);
   const columnas = [
     ...rangos.map((r) => ({ nombre: r.etiqueta, valor: (f: Fila) => f.rangos[r.etiqueta] ?? 0 })),
@@ -144,10 +217,12 @@ function tablaPDF(doc: jsPDF, titulo: string, filas: Fila[], rangos: RangoCalifi
   const recortar = (texto: string, max: number) => doc.splitTextToSize(texto, max)[0] as string;
 
   if (y > 250) { doc.addPage(); y = 20; }
-  doc.setFontSize(12);
-  doc.setTextColor(31, 56, 100);
-  doc.text(titulo, 14, y);
-  y += 6;
+  if (titulo) {
+    doc.setFontSize(12);
+    doc.setTextColor(31, 56, 100);
+    doc.text(titulo, 14, y);
+    y += 6;
+  }
 
   doc.setFontSize(8);
   doc.setTextColor(0, 0, 0);
@@ -186,6 +261,8 @@ export function ReportsPage() {
   const [nivel, setNivel] = useState<Nivel>('criterios');
   const [loading, setLoading] = useState(true);
   const [loadingReport, setLoadingReport] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const graficasPDF = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     Promise.all([
@@ -208,28 +285,57 @@ export function ReportsPage() {
     }
   };
 
-  const handleExportPDF = () => {
+  const capturarGrafica = (nivelGrafica: Nivel) => {
+    const nodo = graficasPDF.current?.querySelector<HTMLElement>(`[data-grafica="${nivelGrafica}"]`);
+    if (!nodo) throw new Error(`No se encontró la gráfica "${nivelGrafica}" para exportar`);
+    return html2canvas(nodo, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      logging: false,
+      // En el documento clonado se trae el contenedor oculto a la vista para que se dibuje
+      onclone: (docClonado) => {
+        const contenedor = docClonado.querySelector<HTMLElement>('[data-graficas-pdf]');
+        if (contenedor) contenedor.style.left = '0';
+      },
+    });
+  };
+
+  const handleExportPDF = async () => {
     if (!curso || !reporte) return;
-    const doc = new jsPDF();
-    const fecha = new Date().toLocaleDateString('es-CO');
-    const seccion = secciones.find((s) => s.id === seccionId);
+    setExporting(true);
+    try {
+      const [canvasCriterios, canvasResultados] = await Promise.all([
+        capturarGrafica('criterios'),
+        capturarGrafica('resultados'),
+      ]);
 
-    doc.setFontSize(16);
-    doc.setTextColor(31, 56, 100);
-    doc.text('Reporte ABET', 14, 20);
+      const doc = new jsPDF();
+      const fecha = new Date().toLocaleDateString('es-CO');
+      const seccion = secciones.find((s) => s.id === seccionId);
 
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`Curso: ${curso.nombre} (${curso.codigo})`, 14, 30);
-    doc.text(`Período: ${curso.periodo}`, 14, 36);
-    doc.text(`Docente: ${curso.docente_email}`, 14, 42);
-    doc.text(`Sección: ${seccion?.nombre ?? 'Todas'} · Generado: ${fecha}`, 14, 48);
+      doc.setFontSize(16);
+      doc.setTextColor(31, 56, 100);
+      doc.text('Reporte ABET', 14, 20);
 
-    let y = 60;
-    y = tablaPDF(doc, 'Distribución por Criterio ABET', reporte.criterios, reporte.rangos, y);
-    tablaPDF(doc, 'Distribución por Resultado de Aprendizaje', reporte.resultados, reporte.rangos, y);
+      doc.setFontSize(10);
+      doc.setTextColor(80, 80, 80);
+      doc.text(`Curso: ${curso.nombre} (${curso.codigo})`, 14, 30);
+      doc.text(`Período: ${curso.periodo}`, 14, 36);
+      doc.text(`Docente: ${curso.docente_email}`, 14, 42);
+      doc.text(`Sección: ${seccion?.nombre ?? 'Todas'} · Generado: ${fecha}`, 14, 48);
 
-    doc.save(`ABET_${curso.codigo}_${curso.periodo}.pdf`);
+      let y = 60;
+      y = imagenPDF(doc, 'Distribución por Criterio ABET', canvasCriterios, y);
+      y = tablaPDF(doc, null, reporte.criterios, reporte.rangos, y);
+      y = imagenPDF(doc, 'Distribución por Resultado de Aprendizaje', canvasResultados, y);
+      tablaPDF(doc, null, reporte.resultados, reporte.rangos, y);
+
+      doc.save(`ABET_${curso.codigo}_${curso.periodo}.pdf`);
+    } catch (error) {
+      console.error('Error exportando el PDF del reporte ABET:', error);
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) {
@@ -267,7 +373,7 @@ export function ReportsPage() {
             <Button variant="secondary" onClick={() => navigate(`/cursos/${cid}`)}>
               ← Volver
             </Button>
-            <Button onClick={handleExportPDF} disabled={sinVinculos}>
+            <Button onClick={handleExportPDF} loading={exporting} disabled={sinVinculos || exporting}>
               Exportar PDF
             </Button>
           </div>
@@ -328,6 +434,28 @@ export function ReportsPage() {
             </p>
 
             <DistribucionNivel filas={filas} rangos={reporte.rangos} columna={nivelActual.columna} />
+
+            {/* Copia de las dos gráficas solo para exportar: siempre montada, fuera de la vista
+                (no display:none, Recharts mediría 0), ancho fijo y sin animación. */}
+            <div
+              ref={graficasPDF}
+              data-graficas-pdf
+              aria-hidden
+              {...{ inert: '' }}
+              className="fixed top-0 bg-white"
+              style={{ left: -10000, width: ANCHO_GRAFICA_PDF }}
+            >
+              {NIVELES.map((n) => (
+                <div key={n.id} data-grafica={n.id} className="bg-white">
+                  <GraficaDistribucion
+                    filas={reporte[n.id]}
+                    series={seriesDe(reporte[n.id], reporte.rangos)}
+                    ancho={ANCHO_GRAFICA_PDF}
+                    animar={false}
+                  />
+                </div>
+              ))}
+            </div>
           </>
         )}
       </div>
