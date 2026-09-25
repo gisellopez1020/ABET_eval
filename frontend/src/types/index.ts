@@ -139,14 +139,26 @@ export interface CalificacionOut {
   updated_at: string;
 }
 
-export interface ReporteRA {
-  ra: string;
-  rangos: {
-    '0.0-2.9': number;
-    '3.0-3.9': number;
-    '4.0-5.0': number;
-  };
+/** Distribución de estudiantes por rango del curso ({etiqueta: cantidad}). */
+interface ReporteDistribucion {
+  codigo: string;
+  descripcion: string;
+  rangos: Record<string, number>;
+  /** Notas que caen en un hueco entre rangos */
+  sin_clasificar: number;
   total: number;
+}
+
+/** Nivel Criterio ABET (ej. "2.1.1"). */
+export interface ReporteCriterio extends ReporteDistribucion {
+  codigo_padre: string | null;
+  peso: number | null;
+}
+
+/** Nivel Resultado de Aprendizaje (ej. "2.1"). */
+export interface ReporteRA extends ReporteDistribucion {
+  criterios_con_evidencia: string[];
+  criterios_sin_evidencia: string[];
 }
 
 export interface ReporteABETResponse {
@@ -155,5 +167,8 @@ export interface ReporteABETResponse {
   curso_codigo: string;
   periodo: string;
   docente_email: string;
+  /** Rangos del curso, ordenados por mínimo */
+  rangos: RangoCalificacion[];
+  criterios: ReporteCriterio[];
   resultados: ReporteRA[];
 }
