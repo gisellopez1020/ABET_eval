@@ -77,15 +77,17 @@ export function DashboardPage() {
           0
         );
 
-        const totalRangos = reporte.reduce((total, item) => {
-          const rangos = Object.values(item.rangos ?? {});
-          return total + rangos.reduce((sum, value) => sum + value, 0);
-        }, 0);
+        // Cumplimiento a nivel de Resultado de Aprendizaje: estudiantes en rangos
+        // con mínimo >= 3.0 sobre el total (incluye los sin clasificar)
+        const etiquetasCumplen = reporte.rangos
+          .filter((r) => r.minimo >= 3)
+          .map((r) => r.etiqueta);
 
-        const cumplimientoRango = reporte.reduce(
+        const totalRangos = reporte.resultados.reduce((total, item) => total + item.total, 0);
+
+        const cumplimientoRango = reporte.resultados.reduce(
           (total, item) =>
-            total +
-            ((item.rangos['3.0-3.9'] ?? 0) + (item.rangos['4.0-5.0'] ?? 0)),
+            total + etiquetasCumplen.reduce((sum, etiqueta) => sum + (item.rangos[etiqueta] ?? 0), 0),
           0
         );
 
