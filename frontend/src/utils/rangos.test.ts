@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RANGOS_CALIFICACION_DEFAULT, rangoToForm, validarRangos } from './rangos';
+import { RANGOS_CALIFICACION_DEFAULT, colorRango, rangoToForm, validarRangos } from './rangos';
 
 const f = (etiqueta: string, minimo: string, maximo: string) => ({ etiqueta, minimo, maximo });
 
@@ -47,5 +47,22 @@ describe('validarRangos', () => {
   it('rechaza etiquetas repetidas sin distinguir mayúsculas', () => {
     const r = validarRangos([f('Bajo', '0', '2'), f('bajo', '3', '5')]);
     expect(!r.ok && r.error).toMatch(/repetirse/);
+  });
+});
+
+describe('colorRango', () => {
+  it('con 3 rangos usa rojo, ámbar y verde', () => {
+    expect([0, 1, 2].map((i) => colorRango(i, 3))).toEqual(['#C8102E', '#FFB300', '#2E7D32']);
+  });
+
+  it('con más rangos interpola y conserva los extremos', () => {
+    const colores = Array.from({ length: 6 }, (_, i) => colorRango(i, 6));
+    expect(colores[0]).toBe('#C8102E');
+    expect(colores[5]).toBe('#2E7D32');
+    expect(new Set(colores).size).toBe(6);
+  });
+
+  it('con un solo rango usa verde', () => {
+    expect(colorRango(0, 1)).toBe('#2E7D32');
   });
 });

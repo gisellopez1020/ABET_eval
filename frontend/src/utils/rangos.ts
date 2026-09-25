@@ -78,3 +78,18 @@ export function validarRangos(filas: RangoForm[]): RangosResult {
   }
   return { ok: true, rangos: ordenados };
 }
+
+// Escala del reporte ABET: rojo (rango más bajo) -> ámbar -> verde (más alto)
+const ESCALA_RANGOS = ['#C8102E', '#FFB300', '#2E7D32'];
+
+const hexToRgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+/** Color del rango en la posición `indice` (0 = el más bajo) de `total` rangos ordenados por mínimo. */
+export function colorRango(indice: number, total: number): string {
+  if (total <= 1) return ESCALA_RANGOS[ESCALA_RANGOS.length - 1];
+  const t = (indice / (total - 1)) * (ESCALA_RANGOS.length - 1);
+  const tramo = Math.min(Math.floor(t), ESCALA_RANGOS.length - 2);
+  const f = t - tramo;
+  const [a, b] = [hexToRgb(ESCALA_RANGOS[tramo]), hexToRgb(ESCALA_RANGOS[tramo + 1])];
+  return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * f).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
