@@ -10,13 +10,19 @@ export interface RangoCalificacion {
   maximo: number;
 }
 
-/** Entrada del catálogo global de Student Outcomes / RA ABET. */
+/**
+ * Entrada del catálogo global de Student Outcomes / RA ABET. Dos niveles:
+ * - Resultado de Aprendizaje (P.I., ej. "2.1"): codigo_padre y peso en null.
+ * - Criterio de Evaluación (ej. "2.1.1"): codigo_padre = su RA, 0 < peso <= 1.
+ */
 export interface RaAbet {
   codigo: string;
   so: string | null;
   competencia: string;
   descripcion: string;
   programa: string;
+  codigo_padre: string | null;
+  peso: number | null;
 }
 
 export interface Curso {
