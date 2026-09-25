@@ -77,9 +77,13 @@ def color_rango(indice: int, total: int) -> str:
     return "".join(f"{c:02X}" for c in canales)
 
 
-def nombre_archivo(curso, actividad, sufijo: str) -> str:
-    """ABET_{codigo}_{actividad}_{periodo}_{sufijo}.xlsx sin caracteres inválidos para archivos."""
-    base = f"ABET_{curso.codigo}_{actividad.nombre}_{curso.periodo}_{sufijo}"
+def nombre_archivo(curso, actividad, sufijo: str, seccion=None) -> str:
+    """
+    ABET_{codigo}_{actividad}[_{seccion}]_{periodo}_{sufijo}.xlsx sin caracteres inválidos
+    para archivos. La sección solo aparece cuando el reporte se filtró por una.
+    """
+    partes = [curso.codigo, actividad.nombre, *([seccion.nombre] if seccion else []), curso.periodo, sufijo]
+    base = "_".join(["ABET", *partes])
     base = re.sub(r'[<>:"/\\|?*\x00-\x1f\s]+', "_", base)
     return re.sub(r"_+", "_", base).strip("_") + ".xlsx"
 

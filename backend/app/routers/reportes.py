@@ -101,16 +101,18 @@ def _verificar_curso(curso_id: int, usuario: dict, db: Session) -> Curso:
 
 def _verificar_actividad(
     curso_id: int, actividad_id: int, seccion_id: Optional[int], usuario: dict, db: Session
-) -> tuple[Curso, Actividad]:
+) -> tuple[Curso, Actividad, Optional[Seccion]]:
+    """Valida curso, actividad y sección (si se filtró). La sección es None sin filtro."""
     curso = _verificar_curso(curso_id, usuario, db)
     actividad = db.get(Actividad, actividad_id)
     if not actividad or actividad.curso_id != curso_id:
         raise HTTPException(status_code=404, detail="Actividad no encontrada en este curso")
+    seccion = None
     if seccion_id:
         seccion = db.get(Seccion, seccion_id)
         if not seccion or seccion.curso_id != curso_id:
             raise HTTPException(status_code=404, detail="Sección no encontrada en este curso")
-    return curso, actividad
+    return curso, actividad, seccion
 
 
 def _calcular_niveles(
@@ -379,7 +381,7 @@ def reporte_abet_actividad(
     de una sola actividad. En el nivel RA, `criterios_sin_evidencia` son los
     Criterios que no se vincularon en esta actividad.
     """
-    curso, actividad = _verificar_actividad(curso_id, actividad_id, seccion_id, usuario, db)
+    curso, actividad, _ = _verificar_actividad(curso_id, actividad_id, seccion_id, usuario, db)
     rangos, criterios, resultados = _calcular_niveles(curso, db, seccion_id, actividad_id)
     return ReporteActividadResponse(
         curso_id=curso.id,
@@ -409,9 +411,9 @@ def resumen_xlsx(
     usuario: dict = Depends(get_current_user),
 ):
     """Libro con la hoja "Conteo": una fila por Criterio ABET y una torta por fila. No toca Drive."""
-    curso, actividad = _verificar_actividad(curso_id, actividad_id, seccion_id, usuario, db)
+    curso, actividad, seccion = _verificar_actividad(curso_id, actividad_id, seccion_id, usuario, db)
     rangos, criterios, _ = _calcular_niveles(curso, db, seccion_id, actividad_id)
-    nombre = nombre_archivo(curso, actividad, "resumen")
+    nombre = nombre_archivo(curso, actividad, "resumen", seccion)
     return Response(
         content=libro_resumen(rangos, criterios),
         media_type=MIME_XLSX,
@@ -437,10 +439,10 @@ def detalle_xlsx(
     base64); `drive.estado` indica si la sincronización fue real, simulada
     (SKIP_AUTH) o falló.
     """
-    curso, actividad = _verificar_actividad(curso_id, actividad_id, body.seccion_id, usuario, db)
+    curso, actividad, seccion = _verificar_actividad(curso_id, actividad_id, body.seccion_id, usuario, db)
     rangos, criterios, _ = _calcular_niveles(curso, db, body.seccion_id, actividad_id)
     contenido = libro_detalle(rangos, criterios, _hojas_detalle(actividad, body.seccion_id, db))
-    nombre = nombre_archivo(curso, actividad, "detalle")
+    nombre = nombre_archivo(curso, actividad, "detalle", seccion)
     drive = subir_archivo(usuario["email"], nombre, contenido, MIME_XLSX)
     return DetalleXlsxResponse(
         nombre_archivo=nombre,
