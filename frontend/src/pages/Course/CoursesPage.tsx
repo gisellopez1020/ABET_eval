@@ -136,16 +136,12 @@ export function CoursesPage() {
     setCourseToView(course);
   };
 
+  // Editar/cerrar no dependen ni cambian la asignatura activa del Dashboard (selectedCourseId)
   const handleEdit = (course: Curso) => {
-    setSelectedCourse(course.id);
     navigate(`/cursos/${course.id}`);
   };
 
   const handleArchive = async (course: Curso) => {
-    if (selectedCourseId !== course.id) {
-      return;
-    }
-
     const confirmed = window.confirm(
       `¿Deseas cerrar la asignatura "${course.nombre}"?`
     );
@@ -203,8 +199,12 @@ export function CoursesPage() {
       render: (course) => (
         <div>
           <p className="font-medium text-gray-900">{course.nombre}</p>
+          {/* Solo informativo: no habilita ni deshabilita acciones */}
           {selectedCourseId === course.id && (
-            <span className="mt-1 inline-flex text-xs font-medium text-[#9E0B0F]">
+            <span
+              className="mt-1 inline-flex text-xs font-medium text-[#9E0B0F]"
+              title="Asignatura activa en el Dashboard"
+            >
               Seleccionada
             </span>
           )}
@@ -248,41 +248,33 @@ export function CoursesPage() {
       key: 'acciones',
       label: 'Acciones',
       align: 'center',
-      render: (course) => {
-        const isSelected = selectedCourseId === course.id;
+      render: (course) => (
+        <div className="flex items-center justify-center gap-2">
+          <TableActionButton
+            title="Ver información"
+            onClick={() => handleView(course)}
+            icon={<Eye size={12} />}
+          >
+            Ver
+          </TableActionButton>
 
-        return (
-          <div className="flex items-center justify-center gap-2">
-            <TableActionButton
-              title={isSelected ? 'Ver información completa' : 'Ver información básica'}
-              onClick={() => handleView(course)}
-              icon={<Eye size={12} />}
-            >
-              Ver
-            </TableActionButton>
+          <TableActionButton
+            title="Editar asignatura"
+            onClick={() => handleEdit(course)}
+            icon={<Pencil size={12} />}
+          >
+            Editar
+          </TableActionButton>
 
-            <TableActionButton
-              title={isSelected ? 'Editar asignatura' : 'Selecciona esta asignatura en el Dashboard para editarla'}
-              onClick={() => handleEdit(course)}
-              className={!isSelected ? 'cursor-not-allowed opacity-50' : ''}
-              disabled={!isSelected}
-              icon={<Pencil size={12} />}
-            >
-              Editar
-            </TableActionButton>
-
-            <TableActionButton
-              title={isSelected ? 'Cerrar asignatura' : 'Selecciona esta asignatura en el Dashboard para cerrarla'}
-              onClick={() => handleArchive(course)}
-              className={!isSelected ? 'cursor-not-allowed opacity-50' : ''}
-              disabled={!isSelected}
-              icon={<Trash2 size={12} />}
-            >
-              Eliminar
-            </TableActionButton>
-          </div>
-        );
-      },
+          <TableActionButton
+            title="Cerrar asignatura"
+            onClick={() => handleArchive(course)}
+            icon={<Trash2 size={12} />}
+          >
+            Eliminar
+          </TableActionButton>
+        </div>
+      ),
     },
   ];
 
@@ -368,17 +360,6 @@ export function CoursesPage() {
             >
               Cerrados
             </button>
-          </div>
-        )}
-
-        {selectedCourseId !== null && (
-          <div className="mb-5 flex items-center gap-3 rounded-lg border border-[#9E0B0F]/20 bg-[#9E0B0F]/5 px-4 py-3">
-            <BookOpen size={18} className="shrink-0 text-[#9E0B0F]" />
-            <p className="text-sm text-gray-700">
-              La asignatura seleccionada para trabajar es{' '}
-              <strong>{courses.find((course) => course.id === selectedCourseId)?.nombre ?? '—'}</strong>.
-              Solo esta asignatura puede editarse o cerrarse.
-            </p>
           </div>
         )}
 
