@@ -66,6 +66,29 @@ export function parseCsvRows(texto: string, delimiter: string): string[][] {
   return rows;
 }
 
+export interface DecimalParseado {
+  valor: number;
+  /** El texto terminaba en "%" (el llamador decide si divide entre 100). */
+  porcentaje: boolean;
+  /** Cantidad de decimales escritos. */
+  decimales: number;
+}
+
+/**
+ * Número no negativo con coma o punto decimal y "%" opcional al final:
+ * "0,4", "0.4", "40%", "87,5 %". Devuelve null si no es un número válido.
+ */
+export function parseDecimal(raw: string): DecimalParseado | null {
+  const match = /^(\d+(?:[.,]\d+)?|[.,]\d+)\s*(%)?$/.exec(raw.trim());
+  if (!match) return null;
+  const numero = match[1].replace(',', '.');
+  return {
+    valor: Number(numero),
+    porcentaje: match[2] === '%',
+    decimales: numero.includes('.') ? numero.split('.')[1].length : 0,
+  };
+}
+
 /** Quita el BOM, detecta el separador y devuelve las filas (la primera es el encabezado). */
 export function readCsv(input: string): string[][] {
   const texto = input.replace(/^﻿/, '');

@@ -1,6 +1,6 @@
 // Parseo client-side del CSV de rúbrica (Aspecto,Criterio,Peso).
 // Solo rellena el borrador local de RubricaPage; no llama al backend.
-import { normalizeHeader, readCsv } from '../../utils/csv';
+import { normalizeHeader, parseDecimal, readCsv } from '../../utils/csv';
 
 // Re-export: RubricaPage importa decodeCsvBytes desde aquí.
 export { decodeCsvBytes } from '../../utils/csv';
@@ -21,11 +21,11 @@ export type RubricaCsvResult =
 
 const normalizeAspectoKey = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
+/** Peso de rúbrica en escala 0-100: el "%" es opcional y no cambia el valor ("40" = "40%"). */
 function parsePeso(raw: string): number | null {
-  const limpio = raw.trim().replace(/\s*%$/, '');
-  if (!/^\d+([.,]\d{1,2})?$/.test(limpio)) return null;
-  const peso = Number(limpio.replace(',', '.'));
-  return peso > 0 && peso <= 100 ? peso : null;
+  const d = parseDecimal(raw);
+  if (!d || d.decimales > 2) return null;
+  return d.valor > 0 && d.valor <= 100 ? d.valor : null;
 }
 
 export function parseRubricaCsv(input: string): RubricaCsvResult {
