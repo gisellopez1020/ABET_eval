@@ -1,6 +1,16 @@
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, field_validator
+
+
+def normalizar_codigo_abet(v: Optional[str]) -> Optional[str]:
+    """Quita espacios; vacío -> None. La existencia y el nivel se validan en el router (requiere BD)."""
+    if v is None:
+        return None
+    v = v.strip()
+    if len(v) > 20:
+        raise ValueError("El código ABET admite máximo 20 caracteres")
+    return v or None
 
 
 class CriterioIn(BaseModel):
@@ -30,6 +40,13 @@ class AspectoIn(BaseModel):
     nombre: str
     orden: int = 0
     criterios: List[CriterioIn]
+    # Criterio de Evaluación del catálogo ABET (ej. "2.1.1"), opcional
+    codigo_abet: Optional[str] = None
+
+    @field_validator("codigo_abet")
+    @classmethod
+    def validar_codigo_abet(cls, v: Optional[str]) -> Optional[str]:
+        return normalizar_codigo_abet(v)
 
 
 class AspectoOut(BaseModel):
@@ -39,6 +56,7 @@ class AspectoOut(BaseModel):
     nombre: str
     orden: int
     criterios: List[CriterioOut]
+    codigo_abet: Optional[str] = None
 
 
 class CriteriosPayload(BaseModel):
@@ -49,3 +67,15 @@ class CriteriosPayload(BaseModel):
 class CriteriosResponse(BaseModel):
     aspectos: List[AspectoOut]
     total_peso: Decimal
+    # Con calificaciones la rúbrica no se puede reemplazar; solo cambiar vínculos ABET (PATCH)
+    tiene_calificaciones: bool = False
+
+
+class VinculoAbetIn(BaseModel):
+    """Cambia solo el vínculo ABET de un aspecto; null lo desvincula."""
+    codigo_abet: Optional[str] = None
+
+    @field_validator("codigo_abet")
+    @classmethod
+    def validar_codigo_abet(cls, v: Optional[str]) -> Optional[str]:
+        return normalizar_codigo_abet(v)
