@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel
 
 
@@ -42,3 +42,27 @@ class ReporteABETResponse(BaseModel):
     rangos: List[RangoReporte]
     criterios: List[ReporteCriterioItem]
     resultados: List[ReporteRAItem]
+
+
+class ReporteActividadResponse(ReporteABETResponse):
+    """Los mismos dos niveles, acotados a los aspectos vinculados de una actividad."""
+    actividad_id: int
+    actividad_nombre: str
+    actividad_tipo: str   # "individual" | "grupal"
+
+
+class DetalleXlsxRequest(BaseModel):
+    seccion_id: Optional[int] = None
+
+
+class EstadoDrive(BaseModel):
+    estado: Literal["sincronizado", "simulado", "error"]
+    detalle: Optional[str] = None   # motivo del error
+    enlace: Optional[str] = None    # webViewLink del archivo en Drive
+
+
+class DetalleXlsxResponse(BaseModel):
+    """El archivo viaja siempre, aunque falle la sincronización con Drive."""
+    nombre_archivo: str
+    archivo_base64: str
+    drive: EstadoDrive
