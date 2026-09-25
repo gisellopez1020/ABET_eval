@@ -172,3 +172,23 @@ export interface ReporteABETResponse {
   criterios: ReporteCriterio[];
   resultados: ReporteRA[];
 }
+
+/** Reporte ABET acotado a los aspectos vinculados de una actividad (Estadísticas ABET). */
+export interface ReporteActividadResponse extends ReporteABETResponse {
+  actividad_id: number;
+  actividad_nombre: string;
+  actividad_tipo: 'individual' | 'grupal';
+}
+
+export interface EstadoDrive {
+  estado: 'sincronizado' | 'simulado' | 'error';
+  detalle: string | null;
+  enlace: string | null;
+}
+
+/** El archivo llega siempre, aunque falle la sincronización con Drive. */
+export interface DetalleXlsxResponse {
+  nombre_archivo: string;
+  archivo_base64: string;
+  drive: EstadoDrive;
+}

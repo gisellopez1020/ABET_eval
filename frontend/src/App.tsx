@@ -9,6 +9,7 @@ import StudentsPage from './pages/students/studentsPage';
 import { GradingSelectionPage } from './pages/Grading/Selection/GradingSelectionPage';
 import { GradingTemplatePage } from './pages/Grading/Template/GradingTemplatePage';
 import { ReportsPage } from './pages/Reports/ReportsPage';
+import { EstadisticasPage } from './pages/Estadisticas/EstadisticasPage';
 import { ProjectsPage } from './pages/Proyects/ProjectsPage';
 import EvaluacionesPage from './pages/evaluaciones/EvaluacionesPage';
 import RubricaPage from './pages/rubrica/RubricaPage';
@@ -42,6 +43,7 @@ export default function App() {
           element={<GradingTemplatePage />}
         />
         <Route path="/cursos/:cursoId/reportes" element={<ReportsPage />} />
+        <Route path="/estadisticas" element={<EstadisticasPage />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
