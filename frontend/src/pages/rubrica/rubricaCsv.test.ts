@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeCsvBytes, parseRubricaCsv } from './rubricaCsv';
+import { CatalogoAbet, decodeCsvBytes, parseRubricaCsv } from './rubricaCsv';
 
 const EJEMPLO = `Aspecto,Criterio,Peso
 Diseño,Cumple los requisitos funcionales,40
@@ -20,6 +20,7 @@ describe('parseRubricaCsv', () => {
             { texto: 'Cumple los requisitos funcionales', peso: 40 },
             { texto: 'Interfaz clara y usable', peso: 20 },
           ],
+          codigo_abet: null,
         },
         {
           nombre: 'Implementación',
@@ -27,6 +28,7 @@ describe('parseRubricaCsv', () => {
             { texto: 'Código organizado y comentado', peso: 25 },
             { texto: 'Manejo correcto de errores', peso: 15 },
           ],
+          codigo_abet: null,
         },
       ],
     });
@@ -42,7 +44,10 @@ describe('parseRubricaCsv', () => {
 
   it('acepta encabezados en minúscula, con tilde o con sufijo, BOM y CRLF', () => {
     const r = parseRubricaCsv('﻿aspecto,críterio,Peso (%)\r\nX,Y,100\r\n');
-    expect(r).toEqual({ ok: true, aspectos: [{ nombre: 'X', criterios: [{ texto: 'Y', peso: 100 }] }] });
+    expect(r).toEqual({
+      ok: true,
+      aspectos: [{ nombre: 'X', criterios: [{ texto: 'Y', peso: 100 }], codigo_abet: null }],
+    });
   });
 
   it('respeta comas dentro de campos entre comillas', () => {
@@ -92,5 +97,63 @@ describe('decodeCsvBytes', () => {
     // "Diseño" en Windows-1252: ñ = 0xF1
     const bytes = new Uint8Array([0x44, 0x69, 0x73, 0x65, 0xf1, 0x6f]);
     expect(decodeCsvBytes(bytes.buffer)).toBe('Diseño');
+  });
+});
+
+describe('parseRubricaCsv: columna CodigoABET', () => {
+  const CATALOGO: CatalogoAbet = [
+    { codigo: '2.1', codigo_padre: null },
+    { codigo: '2.1.1', codigo_padre: '2.1' },
+    { codigo: '2.1.2', codigo_padre: '2.1' },
+  ];
+
+  it.each(['CodigoABET', 'Código ABET', 'codigo_abet', 'CODIGO-ABET'])('reconoce el encabezado %j', (h) => {
+    const r = parseRubricaCsv(`Aspecto,Criterio,Peso,${h}\nDiseño,A,60,2.1.1\nDiseño,B,40,2.1.1\n`, CATALOGO);
+    expect(r.ok && r.aspectos[0].codigo_abet).toBe('2.1.1');
+  });
+
+  it('un código por aspecto; vacío = sin vincular', () => {
+    const r = parseRubricaCsv(
+      'Aspecto;Criterio;Peso;Código ABET\nDiseño;A;30;2.1.1\nPruebas;B;20;\nDiseño;C;30;2.1.1\nPruebas;D;20;\n',
+      CATALOGO
+    );
+    expect(r.ok && r.aspectos.map((a) => [a.nombre, a.codigo_abet, a.criterios.length])).toEqual([
+      ['Diseño', '2.1.1', 2],
+      ['Pruebas', null, 2],
+    ]);
+  });
+
+  it('sin la columna funciona como antes', () => {
+    const r = parseRubricaCsv('Aspecto,Criterio,Peso\nDiseño,A,100\n', CATALOGO);
+    expect(r.ok && r.aspectos[0].codigo_abet).toBeNull();
+  });
+
+  it('código distinto en otra fila del mismo aspecto: error con ambas filas', () => {
+    const r = parseRubricaCsv('Aspecto,Criterio,Peso,CodigoABET\nDiseño,A,50,2.1.1\nOtro,X,10,\n diseño ,B,40,2.1.2\n', CATALOGO);
+    expect(!r.ok && r.error).toBe(
+      'Fila 4: el aspecto "Diseño" trae el código ABET "2.1.2", pero en la fila 2 trae "2.1.1".'
+    );
+  });
+
+  it('una fila vacía donde el aspecto tenía código: error', () => {
+    const r = parseRubricaCsv('Aspecto,Criterio,Peso,CodigoABET\nDiseño,A,50,2.1.1\nDiseño,B,50,\n', CATALOGO);
+    expect(!r.ok && r.error).toBe('Fila 3: el aspecto "Diseño" trae el código ABET vacío, pero en la fila 2 trae "2.1.1".');
+  });
+
+  it('código inexistente en el catálogo: error de fila', () => {
+    const r = parseRubricaCsv('Aspecto,Criterio,Peso,CodigoABET\nDiseño,A,100,9.9.9\n', CATALOGO);
+    expect(!r.ok && r.error).toBe('Fila 2: el código ABET "9.9.9" no existe en el catálogo de Student Outcomes.');
+  });
+
+  it('código de un Resultado de Aprendizaje: error explícito', () => {
+    const r = parseRubricaCsv('Aspecto,Criterio,Peso,CodigoABET\nDiseño,A,100,2.1\n', CATALOGO);
+    expect(!r.ok && r.error).toBe(
+      'Fila 2: "2.1" es un Resultado de Aprendizaje, no un Criterio — usa un código como 2.1.1.'
+    );
+  });
+
+  it('sin catálogo no valida existencia (lo hará el backend)', () => {
+    const r = parseRubricaCsv('Aspecto,Criterio,Peso,CodigoABET\nDiseño,A,100,9.9.9\n');
+    expect(r.ok && r.aspectos[0].codigo_abet).toBe('9.9.9');
   });
 });
