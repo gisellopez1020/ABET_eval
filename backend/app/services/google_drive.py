@@ -97,6 +97,55 @@ async def sincronizar_calificacion(calificacion_id: int, email: Optional[str] = 
         return {"status": "error", "detalle": str(exc)}
 
 
+def _escapar_q(valor: str) -> str:
+    """Escapa un literal para la sintaxis de búsqueda `q` de Drive (comillas simples y barras)."""
+    return valor.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _subir_archivo(access_token: str, email: str, nombre: str, contenido: bytes, mimetype: str) -> dict:
+    service = _build_drive_service(access_token)
+    carpeta_id = _obtener_o_crear_carpeta(service, email)
+
+    query = f"name = '{_escapar_q(nombre)}' and '{carpeta_id}' in parents and trashed = false"
+    existentes = service.files().list(q=query, fields="files(id)").execute().get("files", [])
+
+    media = MediaIoBaseUpload(io.BytesIO(contenido), mimetype=mimetype)
+    if existentes:
+        # Reemplaza el contenido: Drive conserva las versiones anteriores en su historial
+        return service.files().update(
+            fileId=existentes[0]["id"], media_body=media, fields="id, webViewLink"
+        ).execute()
+    metadata = {"name": nombre, "parents": [carpeta_id]}
+    return service.files().create(body=metadata, media_body=media, fields="id, webViewLink").execute()
+
+
+def subir_archivo(email: str, nombre: str, contenido: bytes, mimetype: str) -> dict:
+    """
+    Sube (o reemplaza) un archivo en la carpeta ABET_Eval del docente.
+    Nunca lanza: devuelve {"estado": "sincronizado"|"simulado"|"error", "detalle", "enlace"}
+    para que quien llama pueda entregar el archivo aunque Drive falle.
+    En modo SKIP_AUTH solo simula la operación.
+    """
+    if settings.skip_auth:
+        logger.info("Subiendo a Google Drive: %s [modo simulado]", nombre)
+        return {"estado": "simulado", "detalle": None, "enlace": None}
+
+    tokens = obtener_tokens_drive(email)
+    if not tokens or not tokens.get("access_token"):
+        return {
+            "estado": "error",
+            "detalle": "No hay una sesión de Google Drive activa; vuelve a iniciar sesión con Google.",
+            "enlace": None,
+        }
+
+    try:
+        archivo = _subir_archivo(tokens["access_token"], email, nombre, contenido, mimetype)
+        return {"estado": "sincronizado", "detalle": None, "enlace": archivo.get("webViewLink")}
+    except Exception as exc:  # token vencido (HttpError), sin conexión (TransportError, socket), etc.
+        logger.exception("Error subiendo %s a Google Drive", nombre)
+        return {"estado": "error", "detalle": f"No se pudo subir a Google Drive: {exc}", "enlace": None}
+
+
 def obtener_estado_global() -> dict:
     """Devuelve un resumen del estado de sincronización de todas las calificaciones."""
     total = len(_sync_status)
