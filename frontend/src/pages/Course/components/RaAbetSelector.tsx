@@ -20,8 +20,9 @@ export function RaAbetSelector({ value, onChange }: RaAbetSelectorProps) {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Un curso selecciona Resultados de Aprendizaje, no Criterios individuales
     catalogoRaAbetApi
-      .list()
+      .list({ soloRaiz: true })
       .then(setCatalogo)
       .catch((err) => setError(apiErrorMessage(err, 'No se pudo cargar el catálogo de Student Outcomes.')))
       .finally(() => setLoading(false));
