@@ -1,13 +1,13 @@
 """
-CRUD del catálogo RA ABET, protección 409 al borrar un código en uso y
-validación de ra_abet en /cursos.
+CRUD del catálogo RA ABET (Resultados de Aprendizaje y Criterios), protección 409
+al borrar un código en uso o con Criterios hijos, y validación de ra_abet en /cursos.
 
 Usa SQLite en memoria (solo las tablas cursos y ra_abet_catalogo) para no
 tocar la base de desarrollo.
 """
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -24,6 +24,12 @@ def db_session():
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+
+    # SQLite no aplica las FK por defecto; activarlas para comportarse como Postgres
+    @event.listens_for(engine, "connect")
+    def _fk_on(dbapi_conn, _):
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
     Curso.metadata.create_all(engine, tables=[Curso.__table__, RaAbetCatalogo.__table__])
     Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     session = Session()
@@ -70,6 +76,8 @@ class TestCrudCatalogo:
             "competencia": "Diseño",
             "descripcion": "Descripción 2.1",
             "programa": "Ingeniería Informática",
+            "codigo_padre": None,
+            "peso": None,
         }
 
     def test_crear_respeta_so_explicito(self, client):
