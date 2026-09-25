@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Curso, RaAbetCatalogo
+from app.models import Aspecto, Curso, RaAbetCatalogo
 from app.schemas import (
     RaAbetCreate, RaAbetUpdate, RaAbetOut, RaAbetImportPayload, RaAbetImportResultado,
 )
@@ -22,6 +22,11 @@ def _cursos_que_usan(codigo: str, db: Session) -> int:
     el volumen de cursos es pequeño.
     """
     return sum(1 for (ra_abet,) in db.query(Curso.ra_abet).all() if codigo in (ra_abet or []))
+
+
+def _aspectos_que_usan(codigo: str, db: Session) -> int:
+    """Aspectos de rúbrica (de cualquier docente) vinculados al código."""
+    return db.query(Aspecto).filter(Aspecto.codigo_abet == codigo).count()
 
 
 def _contar_hijos(codigo: str, db: Session) -> int:
@@ -217,7 +222,10 @@ def eliminar_ra_abet(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Elimina el código solo si no tiene Criterios hijos y ningún curso lo tiene en su ra_abet."""
+    """
+    Elimina el código solo si no tiene Criterios hijos, ningún curso lo tiene en su
+    ra_abet y ningún aspecto de rúbrica está vinculado a él.
+    """
     ra = _obtener(codigo, db)
     hijos = _contar_hijos(codigo, db)
     if hijos:
@@ -232,6 +240,14 @@ def eliminar_ra_abet(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"No se puede eliminar '{codigo}' porque está en uso por "
                    f"{en_uso} curso{'s' if en_uso != 1 else ''}.",
+        )
+    # Desvincular en silencio haría desaparecer sus calificaciones del reporte ABET
+    aspectos = _aspectos_que_usan(codigo, db)
+    if aspectos:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"No se puede eliminar '{codigo}' porque está vinculado a {aspectos} "
+                   f"aspecto{'s' if aspectos != 1 else ''} de rúbrica.",
         )
     db.delete(ra)
     db.commit()
