@@ -2,7 +2,7 @@
 CRUD del catálogo RA ABET (Resultados de Aprendizaje y Criterios), protección 409
 al borrar un código en uso o con Criterios hijos, y validación de ra_abet en /cursos.
 
-Usa SQLite en memoria (solo las tablas cursos y ra_abet_catalogo) para no
+Usa SQLite en memoria (esquema completo, con FK activadas) para no
 tocar la base de desarrollo.
 """
 import pytest
@@ -30,7 +30,7 @@ def db_session():
     def _fk_on(dbapi_conn, _):
         dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
-    Curso.metadata.create_all(engine, tables=[Curso.__table__, RaAbetCatalogo.__table__])
+    Curso.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     session = Session()
     try:
