@@ -200,6 +200,21 @@ class TestDetalleXlsx:
         assert ws["G3"].value == 1
 
 
+class TestNombreConSeccion:
+    def test_resumen_con_y_sin_seccion(self, client, db_session, curso, grupal):
+        s1 = _seccion(db_session, curso, "S1")
+        sin = client.get(_url(curso, grupal, "/resumen-xlsx")).headers["content-disposition"]
+        con = client.get(_url(curso, grupal, "/resumen-xlsx"), params={"seccion_id": s1.id}).headers["content-disposition"]
+        assert "filename*=UTF-8''ABET_R-1_Act_2026-2_resumen.xlsx" in sin
+        assert "filename*=UTF-8''ABET_R-1_Act_S1_2026-2_resumen.xlsx" in con
+
+    def test_detalle_con_y_sin_seccion(self, client, db_session, curso, grupal):
+        s1 = _seccion(db_session, curso, "S1")
+        assert _detalle(client, curso, grupal)[0]["nombre_archivo"] == "ABET_R-1_Act_2026-2_detalle.xlsx"
+        con, _ = _detalle(client, curso, grupal, seccion_id=s1.id)
+        assert con["nombre_archivo"] == "ABET_R-1_Act_S1_2026-2_detalle.xlsx"
+
+
 class TestSincronizacionDrive:
     def test_simulada_con_skip_auth(self, client, db_session, curso, grupal, monkeypatch):
         monkeypatch.setattr(settings, "skip_auth", True)
@@ -281,6 +296,13 @@ class TestUtilidades:
         curso = SimpleNamespace(codigo="R-1", periodo="2026-2")
         actividad = SimpleNamespace(nombre='Proyecto: fase 1/2 "final"')
         assert nombre_archivo(curso, actividad, "detalle") == "ABET_R-1_Proyecto_fase_1_2_final_2026-2_detalle.xlsx"
+
+    def test_nombre_archivo_incluye_la_seccion(self):
+        curso = SimpleNamespace(codigo="R-1", periodo="2026-2")
+        actividad = SimpleNamespace(nombre="Proyecto final")
+        seccion = SimpleNamespace(nombre="Grupo 1")
+        assert nombre_archivo(curso, actividad, "resumen", seccion) == "ABET_R-1_Proyecto_final_Grupo_1_2026-2_resumen.xlsx"
+        assert nombre_archivo(curso, actividad, "resumen", None) == "ABET_R-1_Proyecto_final_2026-2_resumen.xlsx"
 
     def test_color_rango_igual_al_frontend(self):
         assert [color_rango(i, 3) for i in range(3)] == ["C8102E", "FFB300", "2E7D32"]
