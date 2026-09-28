@@ -192,3 +192,13 @@ export interface DetalleXlsxResponse {
   archivo_base64: string;
   drive: EstadoDrive;
 }
+
+/** Último guardado de calificaciones de un equipo o estudiante (Dashboard). */
+export interface ActividadReciente {
+  actividad_id: number;
+  actividad_nombre: string;
+  tipo: 'equipo' | 'estudiante';
+  nombre: string;
+  /** ISO 8601 */
+  updated_at: string;
+}

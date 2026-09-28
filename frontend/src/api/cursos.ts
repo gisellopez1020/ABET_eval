@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { Curso, RangoCalificacion } from '../types';
+import { ActividadReciente, Curso, RangoCalificacion } from '../types';
 
 export interface CursoCreate {
   nombre: string;
@@ -19,4 +19,8 @@ export const cursosApi = {
     apiClient.put<Curso>(`/cursos/${id}`, data).then((r) => r.data),
   archivar: (id: number) =>
     apiClient.patch(`/cursos/${id}/archivar`).then((r) => r.data),
+  actividadReciente: (id: number, limit = 10) =>
+    apiClient
+      .get<ActividadReciente[]>(`/cursos/${id}/actividad-reciente`, { params: { limit } })
+      .then((r) => r.data),
 };
