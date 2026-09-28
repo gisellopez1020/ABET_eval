@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Target,
+  SquarePen,
 } from 'lucide-react';
 
 import { useAuthStore } from '../../store/authStore';
@@ -54,7 +55,7 @@ const navItems = [
   {
     to: '/evaluaciones',
     label: 'Evaluación',
-    icon: ClipboardCheck,
+    icon: SquarePen,
   },
   {
     to: '/estadisticas',

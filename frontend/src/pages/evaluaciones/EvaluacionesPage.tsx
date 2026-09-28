@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCheck, PencilLine, Save } from 'lucide-react';
+import { CheckCheck, CircleCheck, CircleDashed, PencilLine, Save } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { actividadesApi } from '../../api/actividades';
+import { calificacionesApi } from '../../api/calificaciones';
 import { cursosApi } from '../../api/cursos';
 import { criteriosApi } from '../../api/criterios';
 import { equiposApi } from '../../api/equipos';
@@ -27,6 +28,14 @@ interface ProjectOption {
   notaTotal: number | null;
 }
 
+// Mismo patrón que RubricaPage: letra del aspecto + posición del criterio dentro de él (A.1, A.2, B.1)
+const letraAspecto = (aspectoIndex: number) => String.fromCharCode(65 + aspectoIndex);
+const codigoCriterio = (aspectoIndex: number, criterioIndex: number) =>
+  `${letraAspecto(aspectoIndex)}.${criterioIndex + 1}`;
+
+const RADIO_ANILLO = 46;
+const CIRCUNFERENCIA = 2 * Math.PI * RADIO_ANILLO;
+
 export default function EvaluacionesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -37,7 +46,8 @@ export default function EvaluacionesPage() {
   const [curso, setCurso] = useState<Curso | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [aspectos, setAspectos] = useState<Aspecto[]>([]);
-  const [activeTab, setActiveTab] = useState<'grupal' | 'individual'>('grupal');
+  // {criterio_id: valor} de las calificaciones guardadas del equipo; sin clave = sin calificar
+  const [valores, setValores] = useState<Record<number, 0 | 1>>({});
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -100,22 +110,34 @@ export default function EvaluacionesPage() {
 
   useEffect(() => {
     const selectedProject = projects.find((project) => project.id === selectedProjectId);
+    setAspectos([]);
+    setValores({});
     if (!selectedProject) {
-      setAspectos([]);
       return;
     }
 
+    // Si se cambia de proyecto antes de que responda, la respuesta anterior se descarta
+    let cancelado = false;
+
     const loadCriterios = async () => {
       try {
-        const resp = await criteriosApi.get(selectedProject.actividadId);
+        const [resp, calificaciones] = await Promise.all([
+          criteriosApi.get(selectedProject.actividadId),
+          calificacionesApi.equipo(selectedProject.actividadId, selectedProject.id),
+        ]);
+        if (cancelado) return;
         setAspectos(resp.aspectos);
+        setValores(Object.fromEntries(calificaciones.map((c) => [c.criterio_id, c.valor])));
       } catch (error) {
         console.error('Error cargando rubrica del proyecto:', error);
-        setAspectos([]);
       }
     };
 
     void loadCriterios();
+
+    return () => {
+      cancelado = true;
+    };
   }, [projects, selectedProjectId]);
 
   const selectedProject = useMemo(
@@ -124,6 +146,11 @@ export default function EvaluacionesPage() {
   );
 
   const totalCriterios = aspectos.reduce((total, aspecto) => total + aspecto.criterios.length, 0);
+  const criteriosCalificados = aspectos.reduce(
+    (total, aspecto) => total + aspecto.criterios.filter((criterio) => criterio.id in valores).length,
+    0
+  );
+  const progreso = totalCriterios > 0 ? Math.round((criteriosCalificados / totalCriterios) * 100) : 0;
 
   return (
     <AppLayout>
@@ -171,28 +198,24 @@ export default function EvaluacionesPage() {
                 <div className="mb-5 inline-flex rounded-lg border border-[#e5e7eb] bg-white p-1 shadow-sm">
                   <button
                     type="button"
-                    onClick={() => setActiveTab('grupal')}
-                    className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition ${
-                      activeTab === 'grupal'
-                        ? 'bg-[#9E0B0F] text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                    className="flex items-center gap-2 rounded-md bg-[#9E0B0F] px-4 py-2 text-sm font-medium text-white shadow-sm"
                   >
                     <CheckCheck size={15} />
                     Evaluación Grupal
                   </button>
 
+                  {/* Pendiente de construir: hoy esta pantalla solo carga actividades grupales */}
                   <button
                     type="button"
-                    onClick={() => setActiveTab('individual')}
-                    className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition ${
-                      activeTab === 'individual'
-                        ? 'bg-[#9E0B0F] text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                    disabled
+                    title="Próximamente. Las actividades individuales se califican desde “Ir a calificar” de cada actividad."
+                    className="flex cursor-not-allowed items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-gray-400"
                   >
                     <PencilLine size={15} />
                     Evaluación Individual
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                      Próximamente
+                    </span>
                   </button>
                 </div>
 
@@ -208,7 +231,7 @@ export default function EvaluacionesPage() {
                           <div className="flex items-center justify-between border-b border-[#e5e7eb] bg-[#fafafa] px-4 py-3">
                             <div className="flex items-center gap-3">
                               <div className="rounded-md bg-[#9E0B0F]/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9E0B0F]">
-                                {index + 1}
+                                {letraAspecto(index)}
                               </div>
                               <span className="text-[15px] font-semibold text-gray-800">{aspecto.nombre}</span>
                             </div>
@@ -217,21 +240,38 @@ export default function EvaluacionesPage() {
                           </div>
 
                           <div className="divide-y divide-[#e5e7eb]">
-                            {aspecto.criterios.map((criterio) => (
-                              <div key={criterio.id} className="flex items-center gap-4 px-4 py-3">
-                                <div className="flex min-w-[110px] items-center justify-between gap-2 text-sm font-medium text-gray-800">
-                                  <span>{criterio.orden}</span>
-                                </div>
+                            {aspecto.criterios.map((criterio, criterioIndex) => {
+                              const valor = valores[criterio.id];
+                              const calificado = valor !== undefined;
+                              return (
+                                <div
+                                  key={criterio.id}
+                                  className={`flex items-center gap-4 px-4 py-3 ${calificado ? '' : 'bg-gray-50/60'}`}
+                                >
+                                  <div className="flex min-w-[60px] items-center gap-2 text-sm font-medium text-gray-800">
+                                    <span>{codigoCriterio(index, criterioIndex)}</span>
+                                  </div>
 
-                                <div className="flex-1 text-sm text-gray-800">{criterio.texto}</div>
+                                  <div className="flex-1 text-sm text-gray-800">{criterio.texto}</div>
 
-                                <div className="flex items-center gap-3">
-                                  <div className="w-[110px] text-right text-xs font-medium text-gray-600">
-                                    {criterio.peso_porcentaje}%
+                                  <div
+                                    className={`flex w-[110px] items-center gap-1.5 text-xs font-medium ${
+                                      calificado ? 'text-green-700' : 'text-gray-400'
+                                    }`}
+                                  >
+                                    {calificado ? <CircleCheck size={15} /> : <CircleDashed size={15} />}
+                                    {!calificado ? 'Sin calificar' : valor === 1 ? 'Cumple' : 'No cumple'}
+                                  </div>
+
+                                  <div
+                                    className="w-[60px] text-right text-xs font-medium text-gray-600"
+                                    title={`${Number(criterio.peso_porcentaje)}%`}
+                                  >
+                                    {Number(criterio.peso_porcentaje).toFixed(1)}%
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </section>
                       ))
@@ -244,17 +284,36 @@ export default function EvaluacionesPage() {
                         <span className="text-sm font-semibold text-gray-700">Resumen del proyecto</span>
                       </div>
 
-                      <div className="mb-5 flex items-center justify-center">
-                        <div className="relative flex h-28 w-28 items-center justify-center rounded-full border-[9px] border-[#f6d4d4] bg-[#fff]">
-                          <div className="absolute inset-[9px] rounded-full border-[7px] border-transparent border-t-[#f6d4d4] border-r-[#f6d4d4]" />
-                          <span className="text-[2rem] font-bold text-[#9E0B0F]">{selectedProject.calificado ? '100%' : '0%'}</span>
+                      <div className="mb-5 flex flex-col items-center justify-center">
+                        {/* % de criterios de la rúbrica con calificación guardada para este equipo */}
+                        <div className="relative h-28 w-28">
+                          <svg viewBox="0 0 112 112" className="h-full w-full -rotate-90">
+                            <circle cx="56" cy="56" r={RADIO_ANILLO} fill="none" stroke="#f6d4d4" strokeWidth="10" />
+                            <circle
+                              cx="56"
+                              cy="56"
+                              r={RADIO_ANILLO}
+                              fill="none"
+                              stroke="#9E0B0F"
+                              strokeWidth="10"
+                              strokeLinecap={progreso > 0 ? 'round' : 'butt'}
+                              strokeDasharray={CIRCUNFERENCIA}
+                              strokeDashoffset={CIRCUNFERENCIA * (1 - progreso / 100)}
+                            />
+                          </svg>
+                          <span className="absolute inset-0 flex items-center justify-center text-[1.75rem] font-bold text-[#9E0B0F]">
+                            {progreso}%
+                          </span>
                         </div>
+                        <span className="mt-2 text-[11px] text-gray-500">
+                          {criteriosCalificados} de {totalCriterios} criterios calificados
+                        </span>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
                         <div className="rounded-lg bg-green-50 p-3 text-center">
-                          <div className="text-2xl font-bold text-green-700">{selectedProject.calificado ? 1 : 0}</div>
-                          <div className="text-[11px] font-medium text-green-700">Calificado</div>
+                          <div className="text-2xl font-bold text-green-700">{selectedProject.calificado ? 'Sí' : 'No'}</div>
+                          <div className="text-[11px] font-medium text-green-700">Este equipo</div>
                         </div>
                         <div className="rounded-lg bg-red-50 p-3 text-center">
                           <div className="text-2xl font-bold text-red-700">{totalCriterios}</div>
