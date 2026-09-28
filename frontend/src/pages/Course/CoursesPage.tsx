@@ -9,6 +9,7 @@ import {
   Eye,
   Pencil,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 
 
@@ -141,9 +142,11 @@ export function CoursesPage() {
     navigate(`/cursos/${course.id}`);
   };
 
-  const handleArchive = async (course: Curso) => {
+  // Activa: cierra (archivar). Cerrada: la reactiva.
+  const handleToggleActivo = async (course: Curso) => {
+    const accion = course.activo ? 'cerrar' : 'reactivar';
     const confirmed = window.confirm(
-      `¿Deseas cerrar la asignatura "${course.nombre}"?`
+      `¿Deseas ${accion} la asignatura "${course.nombre}"?`
     );
 
     if (!confirmed) {
@@ -151,12 +154,16 @@ export function CoursesPage() {
     }
 
     try {
-      await cursosApi.archivar(course.id);
+      if (course.activo) {
+        await cursosApi.archivar(course.id);
+      } else {
+        await cursosApi.activar(course.id);
+      }
 
       await loadCourses();
     } catch (error) {
-      console.error('Error cerrando asignatura:', error);
-      window.alert('No fue posible cerrar la asignatura.');
+      console.error(`Error al ${accion} la asignatura:`, error);
+      window.alert(`No fue posible ${accion} la asignatura.`);
     }
   };
 
@@ -211,8 +218,7 @@ export function CoursesPage() {
         </div>
       ),
     },
-    { key: 'creditos', label: 'Crédito(s)', align: 'center', render: () => '—' },
-    { key: 'semestre', label: 'Semestre', align: 'center', render: () => '—' },
+    { key: 'periodo', label: 'Periodo', align: 'center', render: (course) => course.periodo },
     {
       key: 'grupos',
       label: 'Grupo',
@@ -267,11 +273,11 @@ export function CoursesPage() {
           </TableActionButton>
 
           <TableActionButton
-            title="Cerrar asignatura"
-            onClick={() => handleArchive(course)}
-            icon={<Trash2 size={12} />}
+            title={course.activo ? 'Cerrar asignatura' : 'Reactivar asignatura'}
+            onClick={() => handleToggleActivo(course)}
+            icon={course.activo ? <Trash2 size={12} /> : <RotateCcw size={12} />}
           >
-            Eliminar
+            {course.activo ? 'Eliminar' : 'Activar'}
           </TableActionButton>
         </div>
       ),
