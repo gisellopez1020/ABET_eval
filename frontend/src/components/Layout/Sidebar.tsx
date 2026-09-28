@@ -142,19 +142,25 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Acciones inferiores */}
       <div className="space-y-1 border-t border-white/10 px-3 py-4">
-        <button
-          type="button"
+        <NavLink
+          to="/ayuda"
           title={collapsed ? 'Ayuda' : undefined}
-          className={`flex w-full items-center rounded-lg py-2.5 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white ${
-            collapsed
-              ? 'justify-center px-2'
-              : 'gap-2.5 px-2.5'
-          }`}
+          className={({ isActive }) =>
+            `flex w-full items-center rounded-lg py-2.5 text-sm transition-colors ${
+              collapsed
+                ? 'justify-center px-2'
+                : 'gap-2.5 px-2.5'
+            } ${
+              isActive
+                ? 'bg-white/15 text-white'
+                : 'text-white/80 hover:bg-white/10 hover:text-white'
+            }`
+          }
         >
           <CircleHelp size={18} strokeWidth={1.8} />
 
           {!collapsed && <span>Ayuda</span>}
-        </button>
+        </NavLink>
 
         <button
           type="button"
