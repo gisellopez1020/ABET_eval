@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 
 import { Button } from '../../../components/ui/Button';
@@ -12,6 +12,8 @@ interface CreateProjectModalProps {
   activities: Actividad[];
   /** Actividad a preseleccionar (p. ej. desde /proyectos?actividadId=…) en vez de la primera. */
   initialActividadId?: number;
+  /** Sección a preseleccionar (la del filtro de la pantalla) en vez de la primera. */
+  initialSeccionId?: number;
   onClose: () => void;
   onCreate: (payload: {
     nombre: string;
@@ -26,6 +28,7 @@ export function CreateProjectModal({
   sections,
   activities,
   initialActividadId,
+  initialSeccionId,
   onClose,
   onCreate,
 }: CreateProjectModalProps) {
@@ -37,20 +40,27 @@ export function CreateProjectModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // El modal no se desmonta al cerrarse y las listas cambian con la asignatura: al abrir se
+  // prefiere la preselección; si no, se conserva la elegida mientras siga en la lista, o la primera.
+  const wasOpen = useRef(false);
+
   useEffect(() => {
+    const justOpened = open && !wasOpen.current;
+    wasOpen.current = open;
+
     if (!open) {
       return;
     }
 
-    if (sections.length > 0 && !seccionId) {
-      setSeccionId(sections[0].id);
-    }
+    const pick = <T extends { id: number }>(items: T[], current: number | '', initial?: number) => {
+      if (justOpened && initial && items.some((item) => item.id === initial)) return initial;
+      if (current && items.some((item) => item.id === current)) return current;
+      return items[0]?.id ?? '';
+    };
 
-    if (activities.length > 0 && !actividadId) {
-      const preseleccionada = activities.find((activity) => activity.id === initialActividadId);
-      setActividadId(preseleccionada?.id ?? activities[0].id);
-    }
-  }, [open, sections, activities, seccionId, actividadId, initialActividadId]);
+    setSeccionId((current) => pick(sections, current, initialSeccionId));
+    setActividadId((current) => pick(activities, current, initialActividadId));
+  }, [open, sections, activities, initialSeccionId, initialActividadId]);
 
   useEffect(() => {
     const loadStudents = async () => {
