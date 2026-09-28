@@ -187,3 +187,21 @@ def archivar_curso(
     db.commit()
     db.refresh(curso)
     return curso
+
+
+@router.patch("/{curso_id}/activar", response_model=CursoOut, summary="Reactivar curso")
+def activar_curso(
+    curso_id: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(get_current_user),
+):
+    """Marca el curso como activo nuevamente (revierte el archivado)."""
+    curso = db.get(Curso, curso_id)
+    if not curso:
+        raise HTTPException(status_code=404, detail="Curso no encontrado")
+    _verificar_propietario(curso, usuario["email"])
+
+    curso.activo = True
+    db.commit()
+    db.refresh(curso)
+    return curso
