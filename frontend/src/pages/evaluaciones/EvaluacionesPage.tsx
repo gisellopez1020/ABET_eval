@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCheck, CircleCheck, CircleDashed, CircleX, PencilLine, Save } from 'lucide-react';
 
@@ -12,7 +12,7 @@ import { criteriosApi } from '../../api/criterios';
 import { equiposApi } from '../../api/equipos';
 import { seccionesApi } from '../../api/secciones';
 import { useCourseStore } from '../../store/courseStore';
-import { Aspecto, Curso } from '../../types';
+import { Actividad, Aspecto, Curso, Seccion } from '../../types';
 
 interface ProjectOption {
   id: number;
@@ -33,6 +33,9 @@ const letraAspecto = (aspectoIndex: number) => String.fromCharCode(65 + aspectoI
 const codigoCriterio = (aspectoIndex: number, criterioIndex: number) =>
   `${letraAspecto(aspectoIndex)}.${criterioIndex + 1}`;
 
+const SELECT_CLASS =
+  'w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-10 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50';
+
 const RADIO_ANILLO = 46;
 const CIRCUNFERENCIA = 2 * Math.PI * RADIO_ANILLO;
 
@@ -41,72 +44,176 @@ export default function EvaluacionesPage() {
   const [searchParams] = useSearchParams();
   const { selectedCourseId } = useCourseStore();
 
-  const [loading, setLoading] = useState(true);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  // Selección propia de esta pantalla: no escribe en el store del Dashboard
+  const [courses, setCourses] = useState<Curso[]>([]);
   const [curso, setCurso] = useState<Curso | null>(null);
+  const [sections, setSections] = useState<Seccion[]>([]);
+  const [activities, setActivities] = useState<Actividad[]>([]); // solo grupales
+  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null);
+  const [projects, setProjects] = useState<ProjectOption[]>([]); // equipos de la actividad elegida
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [loadingCourses, setLoadingCourses] = useState(true);
+  const [loadingCourse, setLoadingCourse] = useState(false);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const loading = loadingCourses || loadingCourse || loadingProjects;
+
+  // Solo la última carga de cada nivel escribe el estado: si se cambia de asignatura o
+  // de actividad mientras otra carga sigue en curso, su respuesta se descarta.
+  const courseRequest = useRef(0);
+  const activityRequest = useRef(0);
   const [aspectos, setAspectos] = useState<Aspecto[]>([]);
   // {criterio_id: valor} de las calificaciones guardadas del equipo; sin clave = sin calificar
   const [valores, setValores] = useState<Record<number, 0 | 1>>({});
 
+  // Equipos de una actividad (todas las secciones en paralelo). preferProjectId: el de la URL, si aplica.
+  const selectActivity = async (
+    cursoActual: Curso,
+    actividad: Actividad | null,
+    secciones: Seccion[],
+    preferProjectId?: number
+  ) => {
+    const request = ++activityRequest.current;
+    const isStale = () => request !== activityRequest.current;
+
+    setSelectedActivityId(actividad?.id ?? null);
+    setProjects([]);
+    setSelectedProjectId(null);
+    if (!actividad) {
+      setLoadingProjects(false);
+      return;
+    }
+
+    setLoadingProjects(true);
+    try {
+      const porSeccion = await Promise.all(
+        secciones.map(async (seccion) => {
+          const equipos = await equiposApi.list(actividad.id, seccion.id);
+          return equipos.map((equipo): ProjectOption => ({
+            id: equipo.id,
+            nombre: equipo.nombre,
+            cursoId: cursoActual.id,
+            cursoNombre: cursoActual.nombre,
+            actividadId: actividad.id,
+            actividadNombre: actividad.nombre,
+            seccionId: seccion.id,
+            seccionNombre: seccion.nombre,
+            miembros: equipo.miembros.map((m) => m.nombre_completo),
+            calificado: equipo.calificado,
+            notaTotal: equipo.nota_total,
+          }));
+        })
+      );
+      if (isStale()) return;
+
+      const resultados = porSeccion.flat();
+      setProjects(resultados);
+      const inicial = resultados.find((project) => project.id === preferProjectId) ?? resultados[0] ?? null;
+      setSelectedProjectId(inicial?.id ?? null);
+    } catch (error) {
+      if (isStale()) return;
+      console.error('Error cargando equipos de la actividad:', error);
+      setLoadError('No se pudieron cargar los equipos de esta actividad.');
+    } finally {
+      if (!isStale()) setLoadingProjects(false);
+    }
+  };
+
+  // Secciones y actividades grupales de una asignatura; luego los equipos de la actividad inicial.
+  const selectCourse = async (
+    cursoActual: Curso | null,
+    prefer: { actividadId?: number; projectId?: number } = {}
+  ) => {
+    const request = ++courseRequest.current;
+    const isStale = () => request !== courseRequest.current;
+    activityRequest.current++; // invalida la carga de equipos de la asignatura anterior
+
+    setCurso(cursoActual);
+    setLoadError('');
+    setSections([]);
+    setActivities([]);
+    setSelectedActivityId(null);
+    setProjects([]);
+    setSelectedProjectId(null);
+    setLoadingProjects(false);
+    if (!cursoActual) {
+      setLoadingCourse(false);
+      return;
+    }
+
+    setLoadingCourse(true);
+    try {
+      const [secciones, actividades] = await Promise.all([
+        seccionesApi.list(cursoActual.id),
+        actividadesApi.list(cursoActual.id),
+      ]);
+      if (isStale()) return;
+
+      const grupales = actividades.filter((actividad) => actividad.tipo === 'grupal');
+      setSections(secciones);
+      setActivities(grupales);
+      setLoadingCourse(false);
+
+      const inicial = grupales.find((actividad) => actividad.id === prefer.actividadId) ?? grupales[0] ?? null;
+      void selectActivity(cursoActual, inicial, secciones, prefer.projectId);
+    } catch (error) {
+      if (isStale()) return;
+      console.error('Error cargando la asignatura:', error);
+      setLoadError('No se pudieron cargar las actividades de esta asignatura.');
+      setLoadingCourse(false);
+    }
+  };
+
+  // Carga inicial: ?cursoId, si no la asignatura activa del Dashboard, si no la primera.
+  // ?actividadId y ?projectId (desde "Evaluar Proyecto" en ProjectsPage) solo aplican aquí.
   useEffect(() => {
-    const loadProjects = async () => {
+    let cancelado = false;
+
+    const loadCourses = async () => {
+      setLoadingCourses(true);
       try {
-        const cursoIdParam = Number(searchParams.get('cursoId') ?? selectedCourseId ?? 0);
-        if (!cursoIdParam) {
-          setProjects([]);
-          setLoading(false);
-          return;
-        }
+        const lista = await cursosApi.list();
+        if (cancelado) return;
+        setCourses(lista);
 
-        const [cursoActual, secciones, actividades] = await Promise.all([
-          cursosApi.get(cursoIdParam),
-          seccionesApi.list(cursoIdParam),
-          actividadesApi.list(cursoIdParam),
-        ]);
+        const cursoParam = Number(searchParams.get('cursoId')) || null;
+        const inicial =
+          lista.find((c) => c.id === cursoParam) ??
+          lista.find((c) => c.id === selectedCourseId) ??
+          lista[0] ??
+          null;
 
-        setCurso(cursoActual);
-
-        const actividadesGrupales = actividades.filter((actividad) => actividad.tipo === 'grupal');
-        const resultados: ProjectOption[] = [];
-
-        for (const actividad of actividadesGrupales) {
-          for (const seccion of secciones) {
-            const equipos = await equiposApi.list(actividad.id, seccion.id);
-
-            for (const equipo of equipos) {
-              resultados.push({
-                id: equipo.id,
-                nombre: equipo.nombre,
-                cursoId: cursoIdParam,
-                cursoNombre: cursoActual.nombre,
-                actividadId: actividad.id,
-                actividadNombre: actividad.nombre,
-                seccionId: seccion.id,
-                seccionNombre: seccion.nombre,
-                miembros: equipo.miembros.map((m) => m.nombre_completo),
-                calificado: equipo.calificado,
-                notaTotal: equipo.nota_total,
-              });
-            }
-          }
-        }
-
-        setProjects(resultados);
-
-        const projectId = Number(searchParams.get('projectId') ?? resultados[0]?.id ?? 0);
-        const currentProject = resultados.find((project) => project.id === projectId) ?? resultados[0] ?? null;
-        setSelectedProjectId(currentProject?.id ?? null);
+        void selectCourse(inicial, {
+          actividadId: Number(searchParams.get('actividadId')) || undefined,
+          projectId: Number(searchParams.get('projectId')) || undefined,
+        });
       } catch (error) {
-        console.error('Error cargando datos de evaluación:', error);
-        setProjects([]);
+        if (cancelado) return;
+        console.error('Error cargando asignaturas:', error);
+        setLoadError('No se pudieron cargar las asignaturas.');
       } finally {
-        setLoading(false);
+        if (!cancelado) setLoadingCourses(false);
       }
     };
 
-    void loadProjects();
+    void loadCourses();
+
+    return () => {
+      cancelado = true;
+    };
   }, [searchParams, selectedCourseId]);
+
+  const handleCourseChange = (value: string) => {
+    const nuevo = courses.find((c) => c.id === Number(value)) ?? null;
+    void selectCourse(nuevo);
+  };
+
+  const handleActivityChange = (value: string) => {
+    if (!curso) return;
+    const actividad = activities.find((a) => a.id === Number(value)) ?? null;
+    setLoadError('');
+    void selectActivity(curso, actividad, sections);
+  };
 
   useEffect(() => {
     const selectedProject = projects.find((project) => project.id === selectedProjectId);
@@ -161,7 +268,11 @@ export default function EvaluacionesPage() {
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900">Módulo de Evaluación</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {curso ? `Evaluación bajo los criterios ABET del curso ${curso.nombre}` : 'Cargando proyectos...'}
+                  {curso
+                    ? `Evaluación bajo los criterios ABET del curso ${curso.nombre}`
+                    : loadingCourses
+                      ? 'Cargando proyectos...'
+                      : 'Selecciona una asignatura para evaluar sus proyectos.'}
                 </p>
               </div>
               <Button variant="secondary" size="sm" onClick={() => navigate('/proyectos')}>
@@ -169,27 +280,71 @@ export default function EvaluacionesPage() {
               </Button>
             </div>
 
-            <div className="mb-5 flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            <div className="mb-5 grid gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm md:grid-cols-3">
+              <label className="w-full text-sm text-gray-700">
+                <span className="mb-1 block text-gray-800">Asignatura</span>
+                <select
+                  value={curso?.id ?? ''}
+                  onChange={(event) => handleCourseChange(event.target.value)}
+                  className={SELECT_CLASS}
+                  disabled={loadingCourses || courses.length === 0}
+                >
+                  {loadingCourses ? (
+                    <option value="">Cargando…</option>
+                  ) : courses.length === 0 ? (
+                    <option value="">Sin asignaturas</option>
+                  ) : (
+                    courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.nombre}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+
+              <label className="w-full text-sm text-gray-700">
+                <span className="mb-1 block text-gray-800">Actividad</span>
+                <select
+                  value={selectedActivityId ?? ''}
+                  onChange={(event) => handleActivityChange(event.target.value)}
+                  className={SELECT_CLASS}
+                  disabled={loadingCourses || loadingCourse || activities.length === 0}
+                >
+                  {loadingCourses || loadingCourse ? (
+                    <option value="">Cargando…</option>
+                  ) : activities.length === 0 ? (
+                    <option value="">Sin actividades grupales</option>
+                  ) : (
+                    activities.map((actividad) => (
+                      <option key={actividad.id} value={actividad.id}>
+                        {actividad.nombre}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+
               <label className="w-full text-sm text-gray-700">
                 <span className="mb-1 block text-gray-800">Proyecto a evaluar</span>
-                <div className="relative">
-                  <select
-                    value={selectedProjectId ?? ''}
-                    onChange={(event) => setSelectedProjectId(Number(event.target.value) || null)}
-                    className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-10 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-                    disabled={loading || projects.length === 0}
-                  >
-                    {!projects.length ? (
-                      <option value="">No hay proyectos disponibles</option>
-                    ) : (
-                      projects.map((project) => (
-                        <option key={project.id} value={project.id}>
-                          {project.nombre} · {project.seccionNombre}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
+                <select
+                  value={selectedProjectId ?? ''}
+                  onChange={(event) => setSelectedProjectId(Number(event.target.value) || null)}
+                  className={SELECT_CLASS}
+                  disabled={loading || projects.length === 0}
+                >
+                  {loading ? (
+                    <option value="">Cargando…</option>
+                  ) : projects.length === 0 ? (
+                    <option value="">Sin equipos</option>
+                  ) : (
+                    projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.nombre} · {project.seccionNombre}
+                      </option>
+                    ))
+                  )}
+                </select>
               </label>
             </div>
 
@@ -364,7 +519,27 @@ export default function EvaluacionesPage() {
 
             {!loading && !selectedProject && (
               <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-                No hay proyectos reales para evaluar en este curso.
+                {loadError ? (
+                  <p className="text-red-700">{loadError}</p>
+                ) : courses.length === 0 ? (
+                  <p>No tienes asignaturas registradas.</p>
+                ) : activities.length === 0 ? (
+                  <p>
+                    Esta asignatura no tiene actividades grupales. La evaluación por equipos solo aplica a
+                    actividades grupales.
+                  </p>
+                ) : (
+                  <div className="flex flex-col items-center gap-3">
+                    <p>Esta actividad no tiene equipos todavía.</p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => navigate(`/proyectos?actividadId=${selectedActivityId}`)}
+                    >
+                      Crear equipos
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
