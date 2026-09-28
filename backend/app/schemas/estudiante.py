@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -14,6 +14,11 @@ class EstudianteOut(BaseModel):
     nombre_completo: str
     codigo_estudiante: str
     seccion_id: int
+
+
+class EstudianteListadoOut(EstudianteOut):
+    """Listado de una sección: incluye el promedio ponderado (None si no hay actividades calificadas)."""
+    promedio: Optional[float] = None
 
 
 class ImportacionCSVResultado(BaseModel):
