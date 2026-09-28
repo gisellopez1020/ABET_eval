@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models import Seccion, Estudiante, Curso
-from app.schemas import EstudianteCreate, EstudianteOut, ImportacionCSVResultado
+from app.schemas import EstudianteCreate, EstudianteListadoOut, EstudianteOut, ImportacionCSVResultado
+from app.services.notas import promedios_estudiantes
 
 router = APIRouter(tags=["Estudiantes"])
 
@@ -24,7 +25,7 @@ def _verificar_seccion(seccion_id: int, email: str, db: Session) -> Seccion:
 
 @router.get(
     "/secciones/{seccion_id}/estudiantes",
-    response_model=List[EstudianteOut],
+    response_model=List[EstudianteListadoOut],
     summary="Listar estudiantes de una sección",
 )
 def listar_estudiantes(
@@ -32,14 +33,25 @@ def listar_estudiantes(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Devuelve todos los estudiantes matriculados en la sección."""
-    _verificar_seccion(seccion_id, usuario["email"], db)
-    return (
+    """
+    Devuelve todos los estudiantes matriculados en la sección, con su promedio
+    ponderado sobre las actividades calificadas del curso (ver services/notas.py).
+    """
+    seccion = _verificar_seccion(seccion_id, usuario["email"], db)
+    estudiantes = (
         db.query(Estudiante)
         .filter(Estudiante.seccion_id == seccion_id)
         .order_by(Estudiante.nombre_completo)
         .all()
     )
+    promedios = promedios_estudiantes(db, seccion.curso_id, [e.id for e in estudiantes])
+    return [
+        EstudianteListadoOut(
+            **EstudianteOut.model_validate(e).model_dump(),
+            promedio=float(promedios[e.id]) if promedios[e.id] is not None else None,
+        )
+        for e in estudiantes
+    ]
 
 
 @router.post(

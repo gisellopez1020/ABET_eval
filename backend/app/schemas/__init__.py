@@ -3,7 +3,7 @@ from .ra_abet import (
     RaAbetCreate, RaAbetUpdate, RaAbetOut, RaAbetImportPayload, RaAbetImportResultado,
 )
 from .seccion import SeccionCreate, SeccionUpdate, SeccionOut
-from .estudiante import EstudianteCreate, EstudianteOut, ImportacionCSVResultado
+from .estudiante import EstudianteCreate, EstudianteListadoOut, EstudianteOut, ImportacionCSVResultado
 from .actividad import ActividadCreate, ActividadUpdate, ActividadOut
 from .criterio import (
     CriterioIn, CriterioOut, AspectoIn, AspectoOut,
@@ -23,7 +23,7 @@ __all__ = [
     "ActividadRecienteItem", "CursoCreate", "CursoUpdate", "CursoOut", "RangoCalificacion",
     "RaAbetCreate", "RaAbetUpdate", "RaAbetOut", "RaAbetImportPayload", "RaAbetImportResultado",
     "SeccionCreate", "SeccionUpdate", "SeccionOut",
-    "EstudianteCreate", "EstudianteOut", "ImportacionCSVResultado",
+    "EstudianteCreate", "EstudianteListadoOut", "EstudianteOut", "ImportacionCSVResultado",
     "ActividadCreate", "ActividadUpdate", "ActividadOut",
     "CriterioIn", "CriterioOut", "AspectoIn", "AspectoOut",
     "CriteriosPayload", "CriteriosResponse",
