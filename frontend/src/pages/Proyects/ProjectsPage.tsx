@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Filter,
@@ -18,6 +18,7 @@ import { equiposApi } from '../../api/equipos';
 import { useCourseStore } from '../../store/courseStore';
 import {
   Actividad,
+  Curso,
   Seccion,
 } from '../../types';
 
@@ -63,9 +64,19 @@ export function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pendiente' | 'en-evaluacion' | 'evaluado'>('all');
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  // Selección propia de esta pantalla: no escribe en el store del Dashboard
+  const [courses, setCourses] = useState<Curso[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<number | null>(null);
+  const [sectionFilter, setSectionFilter] = useState<number | null>(null); // null = Todas
+
+  // Solo la última carga escribe el estado: si se cambia de asignatura mientras otra
+  // carga sigue en curso, su respuesta (más lenta) se descarta.
+  const loadRequest = useRef(0);
 
   const loadProjects = async (courseId: number | null) => {
+    const request = ++loadRequest.current;
+    const isStale = () => request !== loadRequest.current;
+
     if (!courseId) {
       setProjects([]);
       setSections([]);
@@ -83,6 +94,8 @@ export function ProjectsPage() {
           seccionesApi.list(courseId),
           actividadesApi.list(courseId),
         ]);
+
+      if (isStale()) return;
 
       const groupedActivities = courseActivities.filter(
         (activity) => activity.tipo === 'grupal'
@@ -143,15 +156,18 @@ export function ProjectsPage() {
         }
       }
 
+      if (isStale()) return;
+
       setProjects(projectResults);
     } catch (error) {
+      if (isStale()) return;
       console.error('Error cargando proyectos:', error);
 
       setProjects([]);
       setSections([]);
       setActivities([]);
     } finally {
-      setLoading(false);
+      if (!isStale()) setLoading(false);
     }
   };
 
@@ -159,6 +175,7 @@ export function ProjectsPage() {
     const loadInitialCourse = async () => {
       try {
         const courseList = await cursosApi.list();
+        setCourses(courseList);
 
         let effectiveCourseId =
           selectedCourseId ??
@@ -175,6 +192,7 @@ export function ProjectsPage() {
         }
 
         setSelectedCourse(effectiveCourseId);
+        setSectionFilter(null);
 
         await loadProjects(effectiveCourseId);
       } catch (error) {
@@ -185,6 +203,15 @@ export function ProjectsPage() {
 
     void loadInitialCourse();
   }, [selectedCourseId, actividadIdParam]);
+
+  const handleCourseChange = (value: string) => {
+    const courseId = value ? Number(value) : null;
+    setSelectedCourse(courseId);
+    // Las secciones son de la asignatura anterior: vuelve a "Todas"
+    setSectionFilter(null);
+    void loadProjects(courseId);
+  };
+
   const filteredProjects = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
@@ -204,10 +231,11 @@ export function ProjectsPage() {
           : 'pendiente';
 
       const matchesStatus = statusFilter === 'all' || estado === statusFilter;
+      const matchesSection = sectionFilter === null || project.seccionId === sectionFilter;
 
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesSection;
     });
-  }, [projects, search, statusFilter]);
+  }, [projects, search, statusFilter, sectionFilter]);
 
   const handleCreateProject = async (
     payload: CreateProjectPayload
@@ -302,6 +330,90 @@ export function ProjectsPage() {
 
         {/* Filtros */}
         <div className="flex flex-col gap-3 sm:flex-row">
+            {/* Asignatura */}
+            <div
+            className="
+                flex h-10 min-w-[220px] items-center gap-2
+                rounded-xl border border-gray-200
+                bg-white px-3
+                text-sm text-gray-700 shadow-sm
+                transition
+                hover:border-[#9E0B0F]
+                focus-within:border-[#9E0B0F]
+                focus-within:ring-2
+                focus-within:ring-[#9E0B0F]/10
+            "
+            >
+            <label
+                htmlFor="course-select"
+                className="shrink-0 text-gray-500"
+            >
+                Asignatura
+            </label>
+
+            <select
+                id="course-select"
+                value={selectedCourse ?? ''}
+                onChange={(event) => handleCourseChange(event.target.value)}
+                className="
+                min-w-0 flex-1
+                bg-transparent
+                text-sm text-gray-700
+                outline-none
+                "
+            >
+                {courses.length === 0 && <option value="">Sin asignaturas</option>}
+                {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                    {course.nombre}
+                </option>
+                ))}
+            </select>
+            </div>
+
+            {/* Sección */}
+            <div
+            className="
+                flex h-10 min-w-[220px] items-center gap-2
+                rounded-xl border border-gray-200
+                bg-white px-3
+                text-sm text-gray-700 shadow-sm
+                transition
+                hover:border-[#9E0B0F]
+                focus-within:border-[#9E0B0F]
+                focus-within:ring-2
+                focus-within:ring-[#9E0B0F]/10
+            "
+            >
+            <label
+                htmlFor="section-select"
+                className="shrink-0 text-gray-500"
+            >
+                Sección
+            </label>
+
+            <select
+                id="section-select"
+                value={sectionFilter ?? ''}
+                onChange={(event) =>
+                setSectionFilter(event.target.value ? Number(event.target.value) : null)
+                }
+                className="
+                min-w-0 flex-1
+                bg-transparent
+                text-sm text-gray-700
+                outline-none
+                "
+            >
+                <option value="">Todas las secciones</option>
+                {sections.map((section) => (
+                <option key={section.id} value={section.id}>
+                    {section.nombre}
+                </option>
+                ))}
+            </select>
+            </div>
+
             {/* Estado */}
             <div
             className="
@@ -516,6 +628,7 @@ export function ProjectsPage() {
             ? actividadIdParam ?? undefined
             : undefined
         }
+        initialSeccionId={sectionFilter ?? undefined}
         onClose={() => setCreateModalOpen(false)}
         onCreate={handleCreateProject}
       />
