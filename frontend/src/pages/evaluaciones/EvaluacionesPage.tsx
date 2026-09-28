@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCheck, CircleCheck, CircleDashed, PencilLine, Save } from 'lucide-react';
+import { CheckCheck, CircleCheck, CircleDashed, CircleX, PencilLine, Save } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Badge } from '../../components/ui/Badge';
@@ -256,10 +256,16 @@ export default function EvaluacionesPage() {
 
                                   <div
                                     className={`flex w-[110px] items-center gap-1.5 text-xs font-medium ${
-                                      calificado ? 'text-green-700' : 'text-gray-400'
+                                      !calificado ? 'text-gray-400' : valor === 1 ? 'text-green-700' : 'text-red-600'
                                     }`}
                                   >
-                                    {calificado ? <CircleCheck size={15} /> : <CircleDashed size={15} />}
+                                    {!calificado ? (
+                                      <CircleDashed size={15} />
+                                    ) : valor === 1 ? (
+                                      <CircleCheck size={15} />
+                                    ) : (
+                                      <CircleX size={15} />
+                                    )}
                                     {!calificado ? 'Sin calificar' : valor === 1 ? 'Cumple' : 'No cumple'}
                                   </div>
 
