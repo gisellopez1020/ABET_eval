@@ -1,4 +1,4 @@
-from .curso import CursoCreate, CursoUpdate, CursoOut, RangoCalificacion
+from .curso import ActividadRecienteItem, CursoCreate, CursoUpdate, CursoOut, RangoCalificacion
 from .ra_abet import (
     RaAbetCreate, RaAbetUpdate, RaAbetOut, RaAbetImportPayload, RaAbetImportResultado,
 )
@@ -20,7 +20,7 @@ from .calificacion import (
 from .reporte import ReporteRAItem, ReporteABETResponse
 
 __all__ = [
-    "CursoCreate", "CursoUpdate", "CursoOut", "RangoCalificacion",
+    "ActividadRecienteItem", "CursoCreate", "CursoUpdate", "CursoOut", "RangoCalificacion",
     "RaAbetCreate", "RaAbetUpdate", "RaAbetOut", "RaAbetImportPayload", "RaAbetImportResultado",
     "SeccionCreate", "SeccionUpdate", "SeccionOut",
     "EstudianteCreate", "EstudianteOut", "ImportacionCSVResultado",
