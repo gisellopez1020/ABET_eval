@@ -19,6 +19,8 @@ export const cursosApi = {
     apiClient.put<Curso>(`/cursos/${id}`, data).then((r) => r.data),
   archivar: (id: number) =>
     apiClient.patch(`/cursos/${id}/archivar`).then((r) => r.data),
+  activar: (id: number) =>
+    apiClient.patch(`/cursos/${id}/activar`).then((r) => r.data),
   actividadReciente: (id: number, limit = 10) =>
     apiClient
       .get<ActividadReciente[]>(`/cursos/${id}/actividad-reciente`, { params: { limit } })
