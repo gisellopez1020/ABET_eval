@@ -538,7 +538,7 @@ export default function RubricaPage() {
                 <option value="">Selecciona una asignatura</option>
                 {cursos.map((curso) => (
                   <option key={curso.id} value={curso.id}>
-                    {curso.nombre}
+                    {curso.nombre} ({curso.codigo} · {curso.periodo})
                   </option>
                 ))}
               </select>

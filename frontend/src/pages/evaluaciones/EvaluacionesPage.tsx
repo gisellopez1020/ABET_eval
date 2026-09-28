@@ -296,7 +296,7 @@ export default function EvaluacionesPage() {
                   ) : (
                     courses.map((course) => (
                       <option key={course.id} value={course.id}>
-                        {course.nombre}
+                        {course.nombre} ({course.codigo} · {course.periodo})
                       </option>
                     ))
                   )}

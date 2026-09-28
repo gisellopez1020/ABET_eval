@@ -365,7 +365,7 @@ export function ProjectsPage() {
                 {courses.length === 0 && <option value="">Sin asignaturas</option>}
                 {courses.map((course) => (
                 <option key={course.id} value={course.id}>
-                    {course.nombre}
+                    {course.nombre} ({course.codigo} · {course.periodo})
                 </option>
                 ))}
             </select>

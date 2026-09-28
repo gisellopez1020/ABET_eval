@@ -72,7 +72,7 @@ export function CourseSelector({
           >
             <span className="truncate">
               {selectedCurso
-                ? `${selectedCurso.nombre} — ${selectedCurso.codigo}`
+                ? `${selectedCurso.nombre} (${selectedCurso.codigo} · ${selectedCurso.periodo})`
                 : loading
                   ? 'Cargando materias...'
                   : 'Selecciona la materia...'}
@@ -133,7 +133,9 @@ export function CourseSelector({
                       }`}
                     >
                       <span className="truncate">{curso.nombre}</span>
-                      <span className="ml-2 shrink-0 text-[10px] text-gray-500">{curso.codigo}</span>
+                      <span className="ml-2 shrink-0 text-[10px] text-gray-500">
+                        ({curso.codigo} · {curso.periodo})
+                      </span>
                     </button>
                   ))
                 )}
