@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { CourseSelector } from '../Dashboard/CourseSelector';
 import { DashboardStats } from '../Dashboard/DashboardStats';
-import { StudentOutcomeChart } from './StudentOutcomeChart.tsx';
+import { ReporteCurso, StudentOutcomeChart } from './StudentOutcomeChart.tsx';
 import { RecentActivity } from '../Dashboard/RecentActivity';
 
 import { cursosApi } from '../../api/cursos';
@@ -31,6 +31,7 @@ export function DashboardPage() {
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [loadingCursos, setLoadingCursos] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData>(EMPTY_DATA);
+  const [reporteCurso, setReporteCurso] = useState<ReporteCurso | null>(null);
   const { selectedCourseId, setSelectedCourse, clearSelectedCourse } = useCourseStore();
 
   useEffect(() => {
@@ -71,6 +72,7 @@ export function DashboardPage() {
           actividadesApi.list(selectedCourseId),
           reportesApi.abet(selectedCourseId),
         ]);
+        setReporteCurso({ cursoId: selectedCourseId, reporte });
 
         const estudiantes = secciones.reduce(
           (total, seccion) => total + (seccion.total_estudiantes ?? 0),
@@ -99,6 +101,7 @@ export function DashboardPage() {
         });
       } catch (error) {
         console.error('Error cargando datos del dashboard:', error);
+        setReporteCurso({ cursoId: selectedCourseId, reporte: null });
         setDashboardData({
           asignaturas: cursos.length,
           estudiantes: 0,
@@ -129,7 +132,7 @@ export function DashboardPage() {
   };
 
   const selectedCursoId = selectedCourseId ? String(selectedCourseId) : '';
-  const hasSelectedCurso = Boolean(selectedCourseId);
+  const selectedCurso = cursos.find((curso) => curso.id === selectedCourseId) ?? null;
 
   return (
     <AppLayout>
@@ -160,11 +163,12 @@ export function DashboardPage() {
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.3fr_1fr]">
           <StudentOutcomeChart
-            hasSelectedCurso={hasSelectedCurso}
+            curso={selectedCurso}
+            reporteCurso={reporteCurso}
           />
 
           <RecentActivity
-            hasSelectedCurso={hasSelectedCurso}
+            cursoId={selectedCourseId}
           />
         </div>
       </div>
