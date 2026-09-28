@@ -1,11 +1,14 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Curso, RaAbetCatalogo
-from app.schemas import CursoCreate, CursoUpdate, CursoOut
+from app.models import (
+    Actividad, Aspecto, Calificacion, Criterio, Curso, EquipoTrabajo, Estudiante, RaAbetCatalogo,
+)
+from app.schemas import ActividadRecienteItem, CursoCreate, CursoUpdate, CursoOut
 
 router = APIRouter(prefix="/cursos", tags=["Cursos"])
 
@@ -82,6 +85,67 @@ def obtener_curso(
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     _verificar_propietario(curso, usuario["email"])
     return curso
+
+
+@router.get(
+    "/{curso_id}/actividad-reciente",
+    response_model=List[ActividadRecienteItem],
+    summary="Últimas calificaciones guardadas del curso",
+)
+def actividad_reciente(
+    curso_id: int,
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(get_current_user),
+):
+    """
+    Últimos guardados o ediciones de calificaciones del curso, del más reciente
+    al más antiguo. Un guardado escribe una fila por criterio, así que se agrupa
+    por (actividad, equipo o estudiante) y se toma el updated_at más reciente.
+    """
+    curso = db.get(Curso, curso_id)
+    if not curso:
+        raise HTTPException(status_code=404, detail="Curso no encontrado")
+    _verificar_propietario(curso, usuario["email"])
+
+    ultimo = func.max(Calificacion.updated_at).label("ultimo")
+    filas = (
+        db.query(
+            Actividad.id.label("actividad_id"),
+            Actividad.nombre.label("actividad_nombre"),
+            Calificacion.equipo_id,
+            Calificacion.estudiante_id,
+            ultimo,
+        )
+        .join(Criterio, Calificacion.criterio_id == Criterio.id)
+        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
+        .join(Actividad, Aspecto.actividad_id == Actividad.id)
+        .filter(Actividad.curso_id == curso_id)
+        .group_by(Actividad.id, Actividad.nombre, Calificacion.equipo_id, Calificacion.estudiante_id)
+        .order_by(ultimo.desc(), Actividad.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    equipo_ids = {f.equipo_id for f in filas if f.equipo_id is not None}
+    estudiante_ids = {f.estudiante_id for f in filas if f.estudiante_id is not None}
+    equipos = dict(
+        db.query(EquipoTrabajo.id, EquipoTrabajo.nombre).filter(EquipoTrabajo.id.in_(equipo_ids)).all()
+    )
+    estudiantes = dict(
+        db.query(Estudiante.id, Estudiante.nombre_completo).filter(Estudiante.id.in_(estudiante_ids)).all()
+    )
+
+    return [
+        ActividadRecienteItem(
+            actividad_id=f.actividad_id,
+            actividad_nombre=f.actividad_nombre,
+            tipo="equipo" if f.equipo_id is not None else "estudiante",
+            nombre=equipos[f.equipo_id] if f.equipo_id is not None else estudiantes[f.estudiante_id],
+            updated_at=f.ultimo,
+        )
+        for f in filas
+    ]
 
 
 @router.put("/{curso_id}", response_model=CursoOut, summary="Editar curso")

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.curso import RANGOS_CALIFICACION_DEFAULT
@@ -127,3 +127,12 @@ class CursoOut(BaseModel):
     rangos_calificacion: List[RangoCalificacion] = Field(default_factory=_rangos_default)
     activo: bool
     created_at: datetime
+
+
+class ActividadRecienteItem(BaseModel):
+    """Último guardado de un equipo o estudiante en una actividad del curso."""
+    actividad_id: int
+    actividad_nombre: str
+    tipo: Literal["equipo", "estudiante"]
+    nombre: str
+    updated_at: datetime
