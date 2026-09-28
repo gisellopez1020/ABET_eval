@@ -9,6 +9,7 @@ import { actividadesApi } from '../../../api/actividades';
 import { criteriosApi } from '../../../api/criterios';
 import { calificacionesApi, ValorCriterio } from '../../../api/calificaciones';
 import { Actividad, Aspecto, ModoCalificacionItem } from '../../../types';
+import { valoresIniciales } from '../../../utils/valoresIniciales';
 
 interface LocationState {
   items: ModoCalificacionItem[];
@@ -35,10 +36,14 @@ export function GradingTemplatePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  // Si no se pudieron leer las calificaciones guardadas, no se permite guardar:
+  // los toggles en 0 sobrescribirían las notas reales.
+  const [loadError, setLoadError] = useState('');
 
   const items = state?.items ?? [];
   const currentIndex = state?.currentIndex ?? items.findIndex((i) => i.id === iid);
-  const tipo = state?.tipo ?? 'individual';
+  // La actividad es la fuente fiable; state se pierde al recargar o abrir la URL directamente
+  const tipo = actividad?.tipo ?? state?.tipo ?? 'individual';
   const currentItem = items[currentIndex] ?? null;
 
   const allCriterios = aspectos.flatMap((a) => a.criterios);
@@ -49,18 +54,54 @@ export function GradingTemplatePage() {
     return sum + v * Number(c.peso_porcentaje) / 100 * 5;
   }, 0);
 
+  // Depende también de iid: Anterior/Siguiente/Guardar navegan dentro de la misma ruta sin
+  // desmontar la página, y cada ítem debe arrancar con sus propias calificaciones guardadas.
   useEffect(() => {
-    Promise.all([
-      actividadesApi.get(actId),
-      criteriosApi.get(actId),
-    ]).then(([a, resp]) => {
-      setActividad(a);
-      setAspectos(resp.aspectos);
-      const init: Record<number, 0 | 1> = {};
-      resp.aspectos.forEach((asp) => asp.criterios.forEach((c) => { init[c.id] = 0; }));
-      setValores(init);
-    }).finally(() => setLoading(false));
-  }, [actId]);
+    let cancelado = false;
+    setLoading(true);
+    setLoadError('');
+    setSaveError('');
+
+    const load = async () => {
+      try {
+        const [a, resp] = await Promise.all([
+          actividadesApi.get(actId),
+          criteriosApi.get(actId),
+        ]);
+        if (cancelado) return;
+        setActividad(a);
+        setAspectos(resp.aspectos);
+
+        try {
+          const guardadas = a.tipo === 'grupal'
+            ? await calificacionesApi.equipo(actId, iid)
+            : await calificacionesApi.estudiante(actId, iid);
+          if (cancelado) return;
+          setValores(valoresIniciales(resp.aspectos, guardadas));
+        } catch (error) {
+          if (cancelado) return;
+          console.error('Error cargando calificaciones guardadas:', error);
+          setValores(valoresIniciales(resp.aspectos, []));
+          setLoadError(
+            'No se pudieron cargar las calificaciones guardadas. Para no sobrescribirlas, el guardado está deshabilitado; recarga la página para intentarlo de nuevo.'
+          );
+        }
+      } catch (error) {
+        if (cancelado) return;
+        console.error('Error cargando la actividad:', error);
+        setActividad(null);
+        setLoadError('No se pudo cargar la actividad.');
+      } finally {
+        if (!cancelado) setLoading(false);
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [actId, iid]);
 
   const goTo = (index: number) => {
     if (index < 0 || index >= items.length) return;
@@ -83,6 +124,7 @@ export function GradingTemplatePage() {
   };
 
   const handleSave = async () => {
+    if (loadError) return;
     setSaveError('');
     setSaving(true);
     try {
@@ -123,7 +165,18 @@ export function GradingTemplatePage() {
     );
   }
 
-  if (!actividad) return null;
+  if (!actividad) {
+    return loadError ? (
+      <AppLayout>
+        <Header crumbs={[{ label: 'Calificar' }]} />
+        <div className="p-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-uao-accent">
+            {loadError}
+          </div>
+        </div>
+      </AppLayout>
+    ) : null;
+  }
 
   return (
     <AppLayout>
@@ -189,6 +242,12 @@ export function GradingTemplatePage() {
             </div>
           )}
         </div>
+
+        {loadError && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-uao-accent">
+            {loadError}
+          </div>
+        )}
 
         {/* Tabla de criterios */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
@@ -261,7 +320,7 @@ export function GradingTemplatePage() {
           >
             ← Volver a la lista
           </Button>
-          <Button onClick={handleSave} loading={saving} size="lg">
+          <Button onClick={handleSave} loading={saving} disabled={Boolean(loadError)} size="lg">
             Guardar calificación
           </Button>
         </div>

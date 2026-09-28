@@ -23,6 +23,11 @@ export const calificacionesApi = {
     apiClient
       .get<CalificacionOut[]>(`/actividades/${actividadId}/equipos/${equipoId}/calificaciones`)
       .then((r) => r.data),
+  /** Calificaciones individuales guardadas de un estudiante (no incluye las de sus equipos). */
+  estudiante: (actividadId: number, estudianteId: number) =>
+    apiClient
+      .get<CalificacionOut[]>(`/actividades/${actividadId}/estudiantes/${estudianteId}/calificaciones`)
+      .then((r) => r.data),
   save: (data: CalificacionCreate) =>
     apiClient.post<CalificacionOut[]>('/calificaciones', data).then((r) => r.data),
   update: (id: number, valor: 0 | 1) =>
