@@ -144,6 +144,17 @@ def resumen_calificaciones(
     return resultado
 
 
+def _calificaciones_de(filtro, actividad_id: int, db: Session) -> List[Calificacion]:
+    """Calificaciones guardadas de una entidad (filtro por equipo o estudiante) en los criterios de la actividad."""
+    return (
+        db.query(Calificacion)
+        .join(Criterio, Calificacion.criterio_id == Criterio.id)
+        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
+        .filter(filtro, Aspecto.actividad_id == actividad_id)
+        .all()
+    )
+
+
 @router.get(
     "/actividades/{actividad_id}/equipos/{equipo_id}/calificaciones",
     response_model=List[CalificacionOut],
@@ -164,13 +175,31 @@ def calificaciones_equipo(
     if not equipo or equipo.actividad_id != actividad_id:
         raise HTTPException(status_code=404, detail="Equipo no encontrado en esta actividad")
 
-    return (
-        db.query(Calificacion)
-        .join(Criterio, Calificacion.criterio_id == Criterio.id)
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(Calificacion.equipo_id == equipo_id, Aspecto.actividad_id == actividad_id)
-        .all()
-    )
+    return _calificaciones_de(Calificacion.equipo_id == equipo_id, actividad_id, db)
+
+
+@router.get(
+    "/actividades/{actividad_id}/estudiantes/{estudiante_id}/calificaciones",
+    response_model=List[CalificacionOut],
+    summary="Calificaciones individuales de un estudiante en una actividad",
+)
+def calificaciones_estudiante(
+    actividad_id: int,
+    estudiante_id: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(get_current_user),
+):
+    """
+    Devuelve las calificaciones individuales guardadas de un estudiante, una por
+    criterio calificado de la actividad. No incluye las de sus equipos.
+    """
+    actividad = _verificar_actividad_docente(actividad_id, usuario["email"], db)
+    estudiante = db.get(Estudiante, estudiante_id)
+    seccion = db.get(Seccion, estudiante.seccion_id) if estudiante else None
+    if not seccion or seccion.curso_id != actividad.curso_id:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado en este curso")
+
+    return _calificaciones_de(Calificacion.estudiante_id == estudiante_id, actividad_id, db)
 
 
 @router.post(
