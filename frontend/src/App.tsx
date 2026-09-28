@@ -14,6 +14,7 @@ import { ProjectsPage } from './pages/Proyects/ProjectsPage';
 import EvaluacionesPage from './pages/evaluaciones/EvaluacionesPage';
 import RubricaPage from './pages/rubrica/RubricaPage';
 import { StudentOutcomesPage } from './pages/StudentOutcomes/StudentOutcomesPage';
+import { AyudaPage } from './pages/Ayuda/AyudaPage';
 
 export default function App() {
   return (
@@ -27,7 +28,7 @@ export default function App() {
         <Route path="/proyectos" element={<ProjectsPage />} />
         <Route path="/rubrica" element={<RubricaPage />} />
         <Route path="/evaluaciones" element={<EvaluacionesPage />} />
-        <Route path="/evaluaciones" element={<EvaluacionesPage />} />
+        <Route path="/ayuda" element={<AyudaPage />} />
         <Route path="/cursos/nueva" element={<Navigate to="/cursos?nueva=1" replace />} />
         <Route path="/student-outcomes" element={<StudentOutcomesPage />} />
         <Route path="/cursos/:cursoId" element={<CoursePage />} />
