@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Filter, Eye, Pencil, Trash2, X } from 'lucide-react';
+import { Plus, Search, Filter, Trash2, X } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
@@ -19,9 +19,8 @@ interface StudentRow {
   id: number;
   nombre: string;
   codigo: string;
-  email: string;
-  semestre: string;
-  promedio: number;
+  periodo: string;
+  promedio: number | null;
   grupo: string;
   estado: StudentStatus;
   cursoId: number;
@@ -29,9 +28,10 @@ interface StudentRow {
   seccionId: number;
 }
 
-/** Sección con el nombre de su asignatura (los nombres de sección se repiten entre cursos). */
+/** Sección con el nombre y periodo de su asignatura (los nombres de sección se repiten entre cursos). */
 interface SectionOption extends Seccion {
   cursoNombre: string;
+  cursoPeriodo: string;
 }
 
 const SELECT_CLASS =
@@ -70,7 +70,11 @@ export default function StudentsPage() {
       const seccionesPorCurso = await Promise.all(
         cursos.map(async (curso) => {
           const secciones = await seccionesApi.list(curso.id);
-          return secciones.map((seccion): SectionOption => ({ ...seccion, cursoNombre: curso.nombre }));
+          return secciones.map((seccion): SectionOption => ({
+            ...seccion,
+            cursoNombre: curso.nombre,
+            cursoPeriodo: curso.periodo,
+          }));
         })
       );
       const secciones = seccionesPorCurso.flat();
@@ -82,9 +86,8 @@ export default function StudentsPage() {
             id: estudiante.id,
             nombre: estudiante.nombre_completo,
             codigo: estudiante.codigo_estudiante,
-            email: `${estudiante.codigo_estudiante.toLowerCase()}@uao.edu.co`,
-            semestre: '—',
-            promedio: 0,
+            periodo: seccion.cursoPeriodo,
+            promedio: estudiante.promedio ?? null,
             grupo: seccion.nombre,
             estado: 'activo',
             cursoId: seccion.curso_id,
@@ -201,6 +204,26 @@ export default function StudentsPage() {
     }
   };
 
+  const handleDelete = async (student: StudentRow) => {
+    const confirmed = window.confirm(
+      `¿Deseas eliminar a "${student.nombre}"?\n\n` +
+        'También se eliminarán sus calificaciones individuales y se retirará de los equipos a los que pertenece. Esta acción no se puede deshacer.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await estudiantesApi.delete(student.id);
+
+      await loadAll();
+    } catch (error) {
+      console.error('Error eliminando estudiante:', error);
+      window.alert('No fue posible eliminar al estudiante.');
+    }
+  };
+
   const columns: DataTableColumn<StudentRow>[] = [
     {
       key: 'nombre',
@@ -210,13 +233,16 @@ export default function StudentsPage() {
       ),
     },
     { key: 'codigo', label: 'Código' },
-    { key: 'email', label: 'Email' },
-    { key: 'semestre', label: 'Semestre' },
+    { key: 'periodo', label: 'Periodo' },
     {
       key: 'promedio',
       label: 'Promedio',
       align: 'center',
-      render: (student) => <span>{student.promedio.toFixed(1)}</span>,
+      render: (student) => (
+        <span title={student.promedio === null ? 'Sin actividades calificadas' : undefined}>
+          {student.promedio === null ? '—' : student.promedio.toFixed(1)}
+        </span>
+      ),
     },
     {
       key: 'grupo',
@@ -244,15 +270,14 @@ export default function StudentsPage() {
       key: 'actions',
       label: 'Acciones',
       align: 'center',
-      render: () => (
+      render: (student) => (
         <div className="flex items-center justify-center gap-2">
-          <TableActionButton variant="default" icon={<Eye size={12} />}>
-            Ver
-          </TableActionButton>
-          <TableActionButton variant="primary" icon={<Pencil size={12} />}>
-            Editar
-          </TableActionButton>
-          <TableActionButton variant="danger" icon={<Trash2 size={12} />}>
+          <TableActionButton
+            variant="danger"
+            title="Eliminar estudiante"
+            onClick={() => handleDelete(student)}
+            icon={<Trash2 size={12} />}
+          >
             Eliminar
           </TableActionButton>
         </div>

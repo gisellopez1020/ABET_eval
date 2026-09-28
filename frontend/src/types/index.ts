@@ -52,6 +52,8 @@ export interface Estudiante {
   nombre_completo: string;
   codigo_estudiante: string;
   seccion_id: number;
+  /** Solo en el listado de sección: promedio ponderado 0-5, null si no hay actividades calificadas. */
+  promedio?: number | null;
 }
 
 export interface Actividad {
