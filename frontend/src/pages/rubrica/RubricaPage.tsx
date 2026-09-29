@@ -111,6 +111,10 @@ export default function RubricaPage() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<RubricaCsvAspecto[]>([]);
   const [csvError, setCsvError] = useState('');
+  // El modal de import sirve para CSV (parseo en el navegador) y Excel (lo lee el backend)
+  const [importFormato, setImportFormato] = useState<'csv' | 'excel'>('csv');
+  const [excelLoading, setExcelLoading] = useState(false);
+  const excelSeq = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const keySeq = useRef(0);
@@ -359,6 +363,8 @@ export default function RubricaPage() {
 
   // ── Importar CSV (solo rellena el borrador; se guarda con "Guardar rúbrica") ──
   const closeCsvModal = () => {
+    excelSeq.current++;
+    setExcelLoading(false);
     setCsvModal(false);
     setCsvFile(null);
     setCsvPreview([]);
@@ -383,6 +389,40 @@ export default function RubricaPage() {
     reader.onerror = () => setCsvError('No se pudo leer el archivo.');
     reader.readAsArrayBuffer(file);
   };
+
+  const openImportModal = (formato: 'csv' | 'excel') => {
+    setImportFormato(formato);
+    setCsvModal(true);
+  };
+
+  // Excel: el backend lo parsea (excel_parser.py) y devuelve la vista previa sin guardar
+  const handleExcelSelect = async (file: File) => {
+    if (!selectedActividadId) return;
+    const seq = ++excelSeq.current;
+    setCsvFile(file);
+    setCsvPreview([]);
+    setCsvError('');
+    setExcelLoading(true);
+    try {
+      const preview = await criteriosApi.importarExcel(selectedActividadId, file);
+      if (seq !== excelSeq.current) return;
+      setCsvPreview(
+        preview.aspectos.map((a) => ({
+          nombre: a.nombre,
+          // El formato Excel no trae CodigoABET: se vincula después en la pantalla
+          codigo_abet: null,
+          criterios: a.criterios.map((c) => ({ texto: c.texto, peso: Number(c.peso_porcentaje) })),
+        }))
+      );
+    } catch (e) {
+      if (seq === excelSeq.current) setCsvError(apiErrorMessage(e, 'No se pudo leer el archivo Excel.'));
+    } finally {
+      if (seq === excelSeq.current) setExcelLoading(false);
+    }
+  };
+
+  const handleFileSelect = (file: File) =>
+    importFormato === 'excel' ? handleExcelSelect(file) : handleCsvSelect(file);
 
   const handleCsvImport = () => {
     if (csvPreview.length === 0 || !confirmDiscard()) return;
@@ -498,10 +538,19 @@ export default function RubricaPage() {
                 variant="outline"
                 size="md"
                 icon={<Upload size={16} />}
-                onClick={() => setCsvModal(true)}
+                onClick={() => openImportModal('csv')}
                 disabled={!selectedActividad || bloqueada}
               >
                 Importar CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="md"
+                icon={<Upload size={16} />}
+                onClick={() => openImportModal('excel')}
+                disabled={!selectedActividad || bloqueada}
+              >
+                Importar Excel
               </Button>
               <Button
                 variant="primary"
@@ -637,8 +686,11 @@ export default function RubricaPage() {
                   <Button variant="outline" size="sm" icon={<Plus size={14} />} onClick={() => openAspectoModal()}>
                     Agregar aspecto
                   </Button>
-                  <Button variant="outline" size="sm" icon={<Upload size={14} />} onClick={() => setCsvModal(true)}>
+                  <Button variant="outline" size="sm" icon={<Upload size={14} />} onClick={() => openImportModal('csv')}>
                     Importar CSV
+                  </Button>
+                  <Button variant="outline" size="sm" icon={<Upload size={14} />} onClick={() => openImportModal('excel')}>
+                    Importar Excel
                   </Button>
                 </div>
               </div>
@@ -897,8 +949,13 @@ export default function RubricaPage() {
         </div>
       </Modal>
 
-      {/* Modal CSV */}
-      <Modal open={csvModal} onClose={closeCsvModal} title="Importar rúbrica desde CSV" maxWidth="max-w-xl">
+      {/* Modal CSV / Excel */}
+      <Modal
+        open={csvModal}
+        onClose={closeCsvModal}
+        title={importFormato === 'excel' ? 'Importar rúbrica desde Excel' : 'Importar rúbrica desde CSV'}
+        maxWidth="max-w-xl"
+      >
         <div className="space-y-4">
           <div
             className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-uao-mid transition-colors"
@@ -907,22 +964,31 @@ export default function RubricaPage() {
             onDrop={(e) => {
               e.preventDefault();
               const f = e.dataTransfer.files[0];
-              if (f) handleCsvSelect(f);
+              if (f) handleFileSelect(f);
             }}
           >
             <p className="text-sm text-gray-500">
-              {csvFile ? csvFile.name : 'Arrastra un CSV aquí o haz clic para seleccionar'}
+              {csvFile
+                ? csvFile.name
+                : `Arrastra un ${importFormato === 'excel' ? 'Excel (.xlsx)' : 'CSV'} aquí o haz clic para seleccionar`}
             </p>
-            <p className="text-xs text-gray-400 mt-1">
-              Formato: Aspecto,Criterio,Peso[,CodigoABET] (con encabezado). CodigoABET es opcional y debe ser el
-              mismo en todas las filas de un aspecto.
-            </p>
+            {importFormato === 'excel' ? (
+              <p className="text-xs text-gray-400 mt-1">
+                Formato: Aspecto | Criterio | %Criterio en las tres primeras columnas (con encabezado). El aspecto
+                puede ir en celdas combinadas. El vínculo a Student Outcomes se hace después, aspecto por aspecto.
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 mt-1">
+                Formato: Aspecto,Criterio,Peso[,CodigoABET] (con encabezado). CodigoABET es opcional y debe ser el
+                mismo en todas las filas de un aspecto.
+              </p>
+            )}
             <input
               ref={fileRef}
               type="file"
-              accept=".csv"
+              accept={importFormato === 'excel' ? '.xlsx' : '.csv'}
               className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvSelect(f); }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
             />
           </div>
 
@@ -984,6 +1050,7 @@ export default function RubricaPage() {
             </div>
           )}
 
+          {excelLoading && <p className="text-sm text-gray-500">Leyendo el archivo…</p>}
           {csvError && <p className="text-sm text-uao-accent">{csvError}</p>}
 
           <div className="flex justify-end gap-2">

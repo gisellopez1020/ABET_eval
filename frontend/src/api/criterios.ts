@@ -15,6 +15,12 @@ export interface AspectoIn {
   codigo_abet?: string | null;
 }
 
+/** Rúbrica leída de un .xlsx, sin guardar (Decimal llega como string en JSON). */
+export interface RubricaExcelPreview {
+  aspectos: { nombre: string; criterios: { texto: string; peso_porcentaje: number | string }[] }[];
+  total_peso: number | string;
+}
+
 export const criteriosApi = {
   get: (actividadId: number) =>
     apiClient
@@ -24,6 +30,19 @@ export const criteriosApi = {
     apiClient
       .put<CriteriosResponse>(`/actividades/${actividadId}/criterios`, { aspectos })
       .then((r) => r.data),
+  /**
+   * Lee un .xlsx (Aspecto | Criterio | %Criterio) y devuelve la rúbrica sin guardarla;
+   * se confirma con save(). 409 si la actividad ya tiene calificaciones.
+   */
+  importarExcel: (actividadId: number, file: File) => {
+    const form = new FormData();
+    form.append('archivo', file);
+    return apiClient
+      .post<RubricaExcelPreview>(`/actividades/${actividadId}/criterios/importar-excel`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data);
+  },
   /**
    * Cambia solo el vínculo ABET de un aspecto (null lo desvincula), sin reconstruir la
    * rúbrica: funciona aunque la actividad ya tenga calificaciones.
