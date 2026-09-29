@@ -16,12 +16,12 @@ const SECCIONES: SeccionAyuda[] = [
   {
     titulo: 'Estudiantes',
     texto:
-      'Se agregan por sección, ya sea uno por uno o importando un archivo CSV con las columnas Nombre y Código (o Codigo). La pantalla de Estudiantes muestra a todos los de todas tus asignaturas; usa los filtros de Asignatura y Sección para acotar la lista. Al eliminar un estudiante también se borran sus calificaciones individuales y se le retira de los equipos a los que pertenezca — esa acción no se puede deshacer.',
+      'Se agregan por sección, ya sea uno por uno o importando un archivo CSV o Excel (.xlsx) con las columnas Nombre y Código (o Codigo). La pantalla de Estudiantes muestra a todos los de todas tus asignaturas; usa los filtros de Asignatura y Sección para acotar la lista. Al eliminar un estudiante también se borran sus calificaciones individuales y se le retira de los equipos a los que pertenezca — esa acción no se puede deshacer.',
   },
   {
     titulo: 'Rúbrica ABET',
     texto:
-      'Cada actividad tiene su propia rúbrica: aspectos que agrupan criterios, y cada criterio con un peso porcentual. Los pesos de todos los criterios de una actividad deben sumar exactamente 100% antes de poder guardar. Puedes construir la rúbrica manualmente con "+ Agregar aspecto", o importarla completa desde un CSV con las columnas Aspecto, Criterio, Peso y, opcionalmente, CodigoABET. Si una actividad ya tiene calificaciones, no se puede editar su estructura (aspectos o criterios) — solo cambiar a qué Student Outcome está vinculado cada aspecto, para no arriesgar las notas ya guardadas.',
+      'Cada actividad tiene su propia rúbrica: aspectos que agrupan criterios, y cada criterio con un peso porcentual. Los pesos de todos los criterios de una actividad deben sumar exactamente 100% antes de poder guardar. Puedes construir la rúbrica manualmente con "+ Agregar aspecto", o importarla completa desde un CSV con las columnas Aspecto, Criterio, Peso y, opcionalmente, CodigoABET, o desde un Excel (.xlsx) con las columnas Aspecto, Criterio y %Criterio (el aspecto puede ir en celdas combinadas; el vínculo a Student Outcomes se hace después en la pantalla). Si una actividad ya tiene calificaciones, no se puede editar su estructura (aspectos o criterios) — solo cambiar a qué Student Outcome está vinculado cada aspecto, para no arriesgar las notas ya guardadas.',
   },
   {
     titulo: 'Student Outcomes',

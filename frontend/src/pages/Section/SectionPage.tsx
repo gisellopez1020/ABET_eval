@@ -94,11 +94,32 @@ export function SectionPage() {
     reader.readAsText(file);
   };
 
+  // Un .xlsx no se puede leer como texto: su vista previa la calcula el backend
+  const esExcel = (file: File) => file.name.toLowerCase().endsWith('.xlsx');
+  const previewSeq = useRef(0);
+
+  const previewExcel = async (file: File) => {
+    const seq = ++previewSeq.current;
+    try {
+      const { estudiantes: filas, errores } = await estudiantesApi.vistaPrevia(sid, file);
+      if (seq !== previewSeq.current) return;
+      setCsvPreview(filas);
+      if (errores.length > 0) setCsvError(errores.join(' · '));
+    } catch (e: any) {
+      if (seq === previewSeq.current) setCsvError(apiErrorMessage(e, 'No se pudo leer el archivo Excel'));
+    }
+  };
+
   const handleCsvSelect = (file: File) => {
+    previewSeq.current++;
     setCsvFile(file);
     setCsvPreview([]);
     setCsvError('');
-    parseCsv(file);
+    if (esExcel(file)) {
+      previewExcel(file);
+    } else {
+      parseCsv(file);
+    }
   };
 
   const handleCsvImport = async () => {
@@ -116,7 +137,7 @@ export function SectionPage() {
       setCsvFile(null);
       setCsvPreview([]);
     } catch (e: any) {
-      setCsvError(apiErrorMessage(e, 'Error al importar CSV'));
+      setCsvError(apiErrorMessage(e, 'Error al importar el archivo'));
     } finally {
       setCsvLoading(false);
     }
@@ -160,7 +181,7 @@ export function SectionPage() {
             </h3>
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" onClick={() => setCsvModal(true)}>
-                Importar CSV
+                Importar CSV / Excel
               </Button>
               <Button size="sm" onClick={() => setAddModal(true)}>
                 + Agregar
@@ -170,7 +191,7 @@ export function SectionPage() {
 
           {estudiantes.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-gray-400">
-              No hay estudiantes. Agrégalos manualmente o importa un CSV.
+              No hay estudiantes. Agrégalos manualmente o importa un CSV o Excel.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -232,7 +253,7 @@ export function SectionPage() {
       </Modal>
 
       {/* Modal CSV */}
-      <Modal open={csvModal} onClose={() => setCsvModal(false)} title="Importar estudiantes desde CSV">
+      <Modal open={csvModal} onClose={() => setCsvModal(false)} title="Importar estudiantes desde CSV o Excel">
         <div className="space-y-4">
           <div
             className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-uao-mid transition-colors"
@@ -245,13 +266,15 @@ export function SectionPage() {
             }}
           >
             <p className="text-sm text-gray-500">
-              {csvFile ? csvFile.name : 'Arrastra un CSV aquí o haz clic para seleccionar'}
+              {csvFile ? csvFile.name : 'Arrastra un CSV o Excel (.xlsx) aquí o haz clic para seleccionar'}
             </p>
-            <p className="text-xs text-gray-400 mt-1">Formato: Nombre,Codigo (con encabezado)</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Formato: columnas Nombre y Codigo (o Código), con encabezado. En Excel, en la primera hoja.
+            </p>
             <input
               ref={fileRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx"
               className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvSelect(f); }}
             />
