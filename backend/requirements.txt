@@ -16,3 +16,4 @@ google-auth-oauthlib==1.2.0
 google-api-python-client==2.129.0
 pytest==8.2.0
 pytest-asyncio==0.23.6
+pytest-cov==5.0.0
