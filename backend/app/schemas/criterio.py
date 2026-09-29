@@ -79,3 +79,19 @@ class VinculoAbetIn(BaseModel):
     @classmethod
     def validar_codigo_abet(cls, v: Optional[str]) -> Optional[str]:
         return normalizar_codigo_abet(v)
+
+
+class CriterioLeido(BaseModel):
+    texto: str
+    peso_porcentaje: Decimal
+
+
+class AspectoLeido(BaseModel):
+    nombre: str
+    criterios: List[CriterioLeido]
+
+
+class RubricaExcelPreview(BaseModel):
+    """Rúbrica leída de un Excel, sin guardar: se confirma después con PUT /criterios."""
+    aspectos: List[AspectoLeido]
+    total_peso: Decimal

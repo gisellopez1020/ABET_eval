@@ -1,14 +1,17 @@
 from decimal import Decimal
 from typing import Iterable, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models import Curso, Actividad, Aspecto, Criterio, RaAbetCatalogo
-from app.schemas.criterio import CriteriosPayload, CriteriosResponse, AspectoOut, VinculoAbetIn
+from app.schemas.criterio import (
+    CriteriosPayload, CriteriosResponse, AspectoOut, VinculoAbetIn, RubricaExcelPreview,
+)
 from app.schemas.curso import MAX_RA_ABET
 from app.routers.actividades import _tiene_calificaciones
+from app.utils.excel_parser import ExcelParserError, parsear_excel_criterios
 
 router = APIRouter(tags=["Criterios"])
 
@@ -181,6 +184,39 @@ def reemplazar_criterios(
 
     aspectos_out = [AspectoOut.model_validate(a) for a in nuevos_aspectos]
     return CriteriosResponse(aspectos=aspectos_out, total_peso=total_peso)
+
+
+@router.post(
+    "/actividades/{actividad_id}/criterios/importar-excel",
+    response_model=RubricaExcelPreview,
+    summary="Leer una rúbrica desde Excel (vista previa, no guarda)",
+)
+async def importar_excel_criterios(
+    actividad_id: int,
+    archivo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(get_current_user),
+):
+    """
+    Lee un .xlsx con columnas Aspecto | Criterio | %Criterio (aspecto en celdas
+    fusionadas o repetido) y devuelve la rúbrica sin guardarla: el docente la revisa
+    y la confirma con PUT /criterios, igual que el import por CSV.
+    Retorna 409 si la actividad ya tiene calificaciones y 422 si el archivo no tiene
+    el formato esperado o los pesos no suman 100%. Los aspectos llegan sin codigo_abet.
+    """
+    actividad = _verificar_actividad(actividad_id, usuario["email"], db)
+
+    if _tiene_calificaciones(actividad_id, db):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"No se puede modificar la rúbrica de '{actividad.nombre}' porque ya "
+                   "tiene calificaciones registradas.",
+        )
+
+    try:
+        return parsear_excel_criterios(await archivo.read())
+    except ExcelParserError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
 
 @router.patch(

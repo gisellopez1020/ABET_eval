@@ -22,12 +22,17 @@ class ExcelParserError(Exception):
     pass
 
 
+def _vacia(v: Any) -> bool:
+    """pandas lee las celdas vacías (y las fusionadas) como NaN, no como None."""
+    return v is None or pd.isna(v) or not str(v).strip()
+
+
 def _propagar_aspecto(valores: list[Any]) -> list[str]:
     """Rellena hacia abajo el nombre del aspecto cuando hay celdas vacías (merge)."""
     actual = None
     resultado = []
     for v in valores:
-        if v is not None and str(v).strip():
+        if not _vacia(v):
             actual = str(v).strip()
         resultado.append(actual)
     return resultado
@@ -83,7 +88,7 @@ def parsear_excel_criterios(contenido: bytes) -> dict:
     for i, (aspecto, criterio, peso) in enumerate(zip(aspectos_raw, criterios_raw, pesos_raw), start=2):
         if aspecto is None:
             continue
-        if not criterio or str(criterio).strip() == "":
+        if _vacia(criterio):
             continue
         try:
             peso_dec = Decimal(str(peso)).quantize(Decimal("0.01"))
