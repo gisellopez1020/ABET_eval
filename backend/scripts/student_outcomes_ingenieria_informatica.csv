@@ -1,0 +1,57 @@
+Codigo,CodigoPadre,Competencia,Descripcion,Peso
+1.1,,"1- Analiza problemas complejos relacionados con Ingeniería y el manejo de información, aplicando principios de informática, ciencias y matemáticas, para proponer soluciones pertinentes.",Formula un problema complejo de ingeniería.,
+1.2,,"1- Analiza problemas complejos relacionados con Ingeniería y el manejo de información, aplicando principios de informática, ciencias y matemáticas, para proponer soluciones pertinentes.","Soluciona un problema complejos aplicando principios de ingeniería, ciencia y matemática.",
+2.1,,"2. Diseñar soluciones y procesos de ingeniería para satisfacer necesidades específicas y generen valor a las partes interesadas, considerando la salud pública, la seguridad y el bienestar de las personas, así como factores globales, culturales, sociales, ambientales y económicos.",Aplica un proceso estructurado de diseño de ingeniería para producir una solución que satisfaga las necesidades de las partes interesadas considerando sus requerimientos.,
+2.2,,"2. Diseñar soluciones y procesos de ingeniería para satisfacer necesidades específicas y generen valor a las partes interesadas, considerando la salud pública, la seguridad y el bienestar de las personas, así como factores globales, culturales, sociales, ambientales y económicos.","Considera en el proceso de diseño en ingeniería aspectos tales como la salud pública, seguridad, bienestar, así como factores globales, culturales, sociales y económicos, entre otros.",
+3.1,,3- Comunica sus ideas de forma efectiva en el ámbito profesional,Produce un documento escrito con estructura y gramática apropiada para argumentar una idea principal en un contexto específico.,
+3.2,,3- Comunica sus ideas de forma efectiva en el ámbito profesional,"Realiza una presentación oral utilizando una estructura lingüística adecuada y demostrando fluidez en un contexto académico, haciendo uso de herramientas apropiadas.",
+4.1,,4- Reconoce su responsabilidad profesional en el manejo de la información y realiza su práctica basada en principios éticos y legales.,"Identifica las responsabilidades éticas y profesionales para el ejercicio de su profesión.( Teniendo en cuenta aspectos legales de su entorno (regulaciones gubernamentales, ambientales y sociales) para el ejercicio de su profesión.)",
+4.2,,4 - Reconoce su responsabilidad profesional en el manejo de la información y realiza su práctica basada en principios éticos y legales.,"Realiza un análisis crítico y reflexivo del impacto de las soluciones de ingeniería en un contexto global, económico, ambiental y social, a fin de respaldar sus ideas.",
+5.1,,5- Trabaja de forma colaborativa como miembro o líder de un equipo.,"Participa de manera efectiva en un equipo de trabajo, aportando ideas y mostrando respeto por las opiniones de los demás miembros, con el objetivo de contribuir al desarrollo de un proyecto.",
+5.2,,5- Trabaja de forma colaborativa como miembro o líder de un equipo.,"Gestiona recursos y herramientas para administrar tanto las tareas personales como las del equipo de trabajo, teniendo en cuenta las habilidades individuales de cada miembro en relación con sus respectivos roles durante el desarrollo de un proyecto.",
+6.1,,"6- Aplica principios, mecanismos, herramientas y buenas prácticas de seguridad de la información para mantener las operaciones de una organización en presencia de riesgos.","Implementa mecanismos, técnicas, herramientas y polìticas para el control de amenazas, vulnerabilidades y riesgos que mantengan la confidencialidad, integridad y disponibilidad de la informaciòn en los sistemas informáticos de las organizaciones.",
+6.2,,"6- Aplica principios, mecanismos, herramientas y buenas prácticas de seguridad de la información para mantener las operaciones de una organización en presencia de riesgos.","Examina evidencia digital, siguiendo las fases del análisis forense y cadena de custodia para prevenir posibles ataques similares y ayudar con la justicia en la identificación de los culpables.",
+6.3,,"6- Aplica principios, mecanismos, herramientas y buenas prácticas de seguridad de la información para mantener las operaciones de una organización en presencia de riesgos.","Evalúa sistemas de información de acuerdo con los requerimienos de los clientes, de las organizaciones, legales y normativos, bajo los principios de la auditorìa de sistemas, para garantizar la confidencialidad, integridad y disponibilidad de la informaciòn",
+7.1,,"7- Habilidad para adquirir y aplicar nuevo conocimiento según sea necesario, utilizando estrategias de aprendizaje apropiadas.",Determina la información necesaria para establecer una ruta estratégica que le permita ampliar su conocimiento sobre un tema de su interés.,
+7.2,,"7- Habilidad para adquirir y aplicar nuevo conocimiento según sea necesario, utilizando estrategias de aprendizaje apropiadas.",Aplica nuevos conocimientos propios de la disciplina cuando los necesita.,
+8.1,,"8. Habilidad para desarrollar y llevar a cabo experimentos, así como para analizar e interpretar datos con el fin de generar juicios propios en el campo de la ingeniería y extraer conclusiones.",Diseña y ejecuta un experimento con el propósito de evaluar una solución.,
+8.2,,"8 - Habilidad para desarrollar y conducir una experimentación adecuada, analizar e interpretar datos y usar el juicio de ingeniería para obtener conclusiones.",Analiza e interpreta datos y usa el juicio de ingeniería para obtener conclusiones sobre una solución.,
+1.1.1,1.1,,1. Determinan los requisitos y restricciones asociadas con el problema en estudio. Levanta requerimientos funcionales y no funcionales.,0.5
+1.1.2,1.1,,2. Formula adecuadamente el problema en estudio.,0.5
+1.2.1,1.2,,Aplica métodos y técnicas de ingeniería.,0.6
+2.1.1,2.1,,1.Diseña soluciones o procesos de software que aborden de manera efectiva las necesidades específicas de los usuarios,0.4
+2.1.2,2.1,,2. Estructuración del proceso de evaluación y selección de la alternativa de solución.,0.3
+2.1.3,2.1,,3. Construcción y desarrollo de modelos (prototipo).,0.3
+2.2.1,2.2,,1. Considera factores de riesgo (seguridad y salud) en el proceso de diseño en ingeniería.,0.25
+2.2.2,2.2,,2. Considera factores económicos en el proceso de diseño en ingeniería.,0.25
+2.2.3,2.2,,3. Considera factores ambientales en el proceso de diseño en ingeniería.,0.25
+2.2.4,2.2,,4. Considera factores sociales en el proceso de diseño en ingeniería.,0.25
+3.1.1,3.1,,1. Estructura adecuada de acuerdo a los requerimientos establecidos.,0.25
+3.1.2,3.1,,2. Calidad y consistencia en el desarrollo del tema abordado.,0.5
+3.1.3,3.1,,"3. Gramática, ortografía, claridad en la redacción y exposición de las ideas.",0.25
+3.2.1,3.2,,"1 Presentación personal, postura, tono de voz, manejo del auditorio",0.25
+3.2.2,3.2,,"2. Dominio del tema, coherencia en la exposición y uso de vocabulario apropiado",0.25
+3.2.3,3.2,,3. Calidad en el uso de herramientas para la presentación.,0.25
+3.2.4,3.2,,4. Pertinencia en la aplicación de la herramienta y/o técnica de expresión gráfica o virtual.,0.25
+4.1.1,4.1,,"1. Explica los dilemas éticos asociados a diferentes problemas, situaciones y contextos de la ingeniería informática.",0.5
+4.1.2,4.1,,"2. Aplica normas técnicas y/o legales, en la proposición y/o desarrollo de la solución.",0.5
+4.2.1,4.2,,1. Evalúa diferentes soluciones e impactos,0.5
+4.2.2,4.2,,2. Hace propuestas argumentadas a partir del estado del arte y los principios informáticos.,0.5
+5.1.1,5.1,,Participación activa de los integrantes del equipo de trabajo.,0.33
+5.1.2,5.1,,Comunicación clara y oportuna entre los integrantes del equipo de trabajo.,0.33
+5.1.3,5.1,,Responsabilidad en el cumplimiento de las tareas asignadas.,0.34
+5.2.1,5.2,,1. Gestiona las actividades para abordar un proyecto.,0.5
+5.2.2,5.2,,2. Planificación del trabajo.,0.5
+6.1.1,6.1,,1. Diseña e implementa el método criptográfico según los requerimientos.,0.5
+6.1.2,6.1,,2. Uso adecuado de herramientas y técnicas defensivas u ofensivas para el endurecimiento de los sistemas de redes y operativos.,0.5
+6.2.1,6.2,,"Define los objetivos, propósitos y el alcance de la política de forma pertinente para atender los problemas y requerimientos de seguridad.",1
+6.3.1,6.3,,"Argumenta la validez de los controles, las técnicas y los procedimientos establecidos por la organización, a la luz de la normatividad vigente aplicada.",1
+7.1.1,7.1,,1. Identificación de la información relevante y crítica que le permitirá ampliar su conocimiento sobre el tema.,0.5
+7.1.2,7.1,,2. Clasifica el contenido de acuerdo a un tema de Interés o propuesto por el Docente.,0.5
+7.2.1,7.2,,1. Aplicabilidad de la información adquirida en el contexto de la situación y/o problema a abordar.,0.5
+7.2.2,7.2,,"2. La alternativa o alternativas de solución propuestas a una situación y/o problema, se basan en el nuevo conocimiento adquirido.",0.5
+8.1.1,8.1,,1. Identificación los objetivos del experimento.,0.35
+8.1.2,8.1,,2. Selección y utilización de equipos y procedimientos para la adquisición de datos.,0.35
+8.1.3,8.1,,3. Ejecución del experimento.,0.3
+8.2.1,8.2,,1. Análisis de los datos obtenidos en el experimento.,0.6
+8.2.2,8.2,,2. Discusión y conclusión sustentada de los resultados obtenidos en el proceso de experimentación.,0.4
