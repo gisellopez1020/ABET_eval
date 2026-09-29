@@ -43,10 +43,14 @@ def cargar_datos():
         datos = json.load(f)
 
     total_criterios = sum(len(a["criterios"]) for a in datos["aspectos"])
-    for aspecto in datos["aspectos"]:
-        suma = sum(Decimal(str(c["peso_porcentaje"])) for c in aspecto["criterios"])
-        if suma != Decimal("100"):
-            raise ValueError(f"Los pesos del aspecto '{aspecto['nombre']}' suman {suma}, no 100")
+    
+    suma = sum(
+        Decimal(str(c["peso_porcentaje"])) for a in datos["aspectos"] for c in a["criterios"]
+    )
+    if suma != Decimal("100"):
+        raise ValueError(
+            f"Los pesos de los {total_criterios} criterios de la actividad suman {suma}, no 100"
+        )
     for equipo in datos["equipos"]:
         if len(equipo["cumple"]) != total_criterios:
             raise ValueError(
@@ -204,7 +208,7 @@ def seed():
             print(f"  Sección: {nombre_seccion} ({n} estudiantes, {', '.join(nombres_equipos)})")
         print(f"  Actividad: {actividad.nombre} — tipo grupal, peso {actividad.peso_nota_final}%")
         print(f"  Aspectos : {len(datos['aspectos'])} ({len(codigos_abet)} con código ABET)")
-        print(f"  Criterios: {len(todos_criterios)} criterios (cada aspecto suma 100%)")
+        print(f"  Criterios: {len(todos_criterios)} criterios (suman 100% en total)")
         for equipo, datos_equipo in equipos:
             cumplidos = sum(datos_equipo["cumple"])
             print(f"  {equipo.nombre}: calificado ({cumplidos}/{len(todos_criterios)} criterios cumplidos)")

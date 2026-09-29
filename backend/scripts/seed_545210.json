@@ -16,27 +16,27 @@
       "criterios": [
         {
           "texto": "Propone  la primer opción de diseño de la red de Internet de 6 enrutadores",
-          "peso_porcentaje": 16.67
+          "peso_porcentaje": 3.33
         },
         {
           "texto": "Muestra las 3 rutas posibles entre origen y destino de la primer opcion",
-          "peso_porcentaje": 16.67
+          "peso_porcentaje": 3.33
         },
         {
           "texto": "Propone la segunda opción de diseño de la red de Internet  de 6 enrutadores",
-          "peso_porcentaje": 16.67
+          "peso_porcentaje": 3.33
         },
         {
           "texto": "Muestra las 3 rutas posibles entre origen y destino de la segunda opcion",
-          "peso_porcentaje": 16.67
+          "peso_porcentaje": 3.33
         },
         {
           "texto": "Propone la tercera opción de diseño de la red de Internet de 6 enrutadores",
-          "peso_porcentaje": 16.67
+          "peso_porcentaje": 3.33
         },
         {
           "texto": "Muestra las 3 rutas posibles entre origen y destino de la tercera opcion",
-          "peso_porcentaje": 16.65
+          "peso_porcentaje": 3.35
         }
       ]
     },
@@ -46,15 +46,15 @@
       "criterios": [
         {
           "texto": "Establece  dos criterios adecuados para seleccionar diseños de redes de datos",
-          "peso_porcentaje": 33.33
+          "peso_porcentaje": 3.33
         },
         {
           "texto": "Selecciona el diseño de red más  adecuada según los dos criterios seleccionados",
-          "peso_porcentaje": 33.33
+          "peso_porcentaje": 3.33
         },
         {
           "texto": "Muestra las 3 rutas posibles entre origen y destino según la red seleccionada",
-          "peso_porcentaje": 33.34
+          "peso_porcentaje": 3.34
         }
       ]
     },
@@ -64,35 +64,35 @@
       "criterios": [
         {
           "texto": "Muestra y calcula correctamente el direccionamiento de la red Casa 1",
-          "peso_porcentaje": 12.5
+          "peso_porcentaje": 1.25
         },
         {
           "texto": "Muestra y calcula correctamente el direccionamiento de la red Casa 2",
-          "peso_porcentaje": 12.5
+          "peso_porcentaje": 1.25
         },
         {
           "texto": "Muestra y calcula correctamente el direccionamiento de la red ISP",
-          "peso_porcentaje": 12.5
+          "peso_porcentaje": 1.25
         },
         {
           "texto": "Muestra y calcula  correctamente el direccionamiento de la red Internet",
-          "peso_porcentaje": 12.5
+          "peso_porcentaje": 1.25
         },
         {
           "texto": "Muestra y calcula correctamente el direccionamiento de la red Servidores 1",
-          "peso_porcentaje": 12.5
+          "peso_porcentaje": 1.25
         },
         {
           "texto": "Muestra y calcula correctamente el direccionamiento de la red Servidores 2",
-          "peso_porcentaje": 12.5
+          "peso_porcentaje": 1.25
         },
         {
           "texto": "Configura correctamente el enrutamiento dinámico",
-          "peso_porcentaje": 12.5
+          "peso_porcentaje": 1.25
         },
         {
           "texto": "Configura correctamente el enrutamiento estático",
-          "peso_porcentaje": 12.5
+          "peso_porcentaje": 1.25
         }
       ]
     },
@@ -102,15 +102,15 @@
       "criterios": [
         {
           "texto": "Muestra el detalle del protocolo FTP en modo simulación",
-          "peso_porcentaje": 33.33
+          "peso_porcentaje": 2.22
         },
         {
           "texto": "Prueba la carga de archivos al servidor FTP",
-          "peso_porcentaje": 33.33
+          "peso_porcentaje": 2.22
         },
         {
           "texto": "Prueba la descarga de archivos del servidor FTP",
-          "peso_porcentaje": 33.34
+          "peso_porcentaje": 2.23
         }
       ]
     },
@@ -120,23 +120,23 @@
       "criterios": [
         {
           "texto": "Muestra la configuración del servidor de correo con los usuarios respectivos usuarios creados",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.33
         },
         {
           "texto": "Muestra el detalle del  protocolo SMTP en modo simulación",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.33
         },
         {
           "texto": "Muestra el detalle del  protocolo POP3 en modo simulación",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.33
         },
         {
           "texto": "Prueba el envió de correo electrónico",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.33
         },
         {
           "texto": "Prueba la recepción de correo electrónico",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.35
         }
       ]
     },
@@ -146,23 +146,23 @@
       "criterios": [
         {
           "texto": "Muestra la tabla de configuración del servidor DNS y sus registros",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.33
         },
         {
           "texto": "Muestra el  protocolo HTTP en modo simulación",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.33
         },
         {
           "texto": "Prueba la descarga de la página web de google",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.33
         },
         {
           "texto": "Prueba la descarga de la página web de youtube",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.33
         },
         {
           "texto": "Prueba la descarga de la página web de facebook",
-          "peso_porcentaje": 20.0
+          "peso_porcentaje": 1.34
         }
       ]
     },
@@ -172,15 +172,15 @@
       "criterios": [
         {
           "texto": "Muestra la tabla de conversión IPv4/IPv6",
-          "peso_porcentaje": 33.33
+          "peso_porcentaje": 6.67
         },
         {
           "texto": "Prueba el funcionamiento de la conversión de direcciones",
-          "peso_porcentaje": 33.33
+          "peso_porcentaje": 6.67
         },
         {
           "texto": "Muestra la cabecera IP y la conversión de la cabecera en modo simulación",
-          "peso_porcentaje": 33.34
+          "peso_porcentaje": 6.66
         }
       ]
     },
@@ -190,51 +190,51 @@
       "criterios": [
         {
           "texto": "El primer aspecto es claro y adecuado",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "El segundo aspecto es claro y adecuado",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "El tercer aspecto es claro y adecuado",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el primer aspecto en economia",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el primer aspecto en sociedad",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el primer aspecto en salud",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el segundo aspecto en economia",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el segundo aspecto en sociedad",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el segundo aspecto en salud",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el tercer aspecto en economia",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el tercer aspecto en sociedad",
-          "peso_porcentaje": 8.33
+          "peso_porcentaje": 0.83
         },
         {
           "texto": "Evalua correctamente el tercer aspecto en salud",
-          "peso_porcentaje": 8.37
+          "peso_porcentaje": 0.87
         }
       ]
     },
@@ -244,43 +244,43 @@
       "criterios": [
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del primer aspecto  en la economía",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del primer aspecto  en la sociedad",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del primer aspecto  en la salud",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del segundo aspecto  en la economía",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del segundo aspecto  en la sociedad",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del segundo aspecto  en la salud",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del tercer aspecto  en la economía",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del tercer aspecto  en la sociedad",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Muestra  una imagen estadísticas con referencias que respalda la evaluación del tercer aspecto  en la salud",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         },
         {
           "texto": "Emplea adecuadamente el referenciamiento en formato apa",
-          "peso_porcentaje": 10.0
+          "peso_porcentaje": 1.0
         }
       ]
     }
