@@ -24,3 +24,14 @@ class EstudianteListadoOut(EstudianteOut):
 class ImportacionCSVResultado(BaseModel):
     importados: int
     errores: List[str] = []
+
+
+class EstudianteLeido(BaseModel):
+    nombre: str
+    codigo: str
+
+
+class VistaPreviaEstudiantes(BaseModel):
+    """Lo que importaría el archivo, sin guardarlo."""
+    estudiantes: List[EstudianteLeido]
+    errores: List[str] = []
