@@ -11,7 +11,7 @@ from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models import Seccion, Estudiante, Curso
 from app.schemas import EstudianteCreate, EstudianteListadoOut, EstudianteOut, ImportacionCSVResultado
-from app.schemas.estudiante import VistaPreviaEstudiantes
+from app.schemas.estudiante import EstudianteCreado, EstudianteUpdate, VistaPreviaEstudiantes
 from app.services.exportar_estudiantes import (
     FilaEstudiante, libro_estudiantes, nombre_archivo_estudiantes,
 )
@@ -43,6 +43,18 @@ def _verificar_seccion(seccion_id: int, email: str, db: Session) -> Seccion:
     if not curso or curso.docente_email != email:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta sección")
     return seccion
+
+
+def _normalizar_email(crudo: Optional[str]) -> Tuple[Optional[str], bool]:
+    """
+    (correo, era_invalido) para el alta manual, con el criterio de la importación:
+    recortado y en minúsculas, vacío -> None, y uno que no lo parece se deja en blanco
+    (nunca se rechaza al estudiante por el formato ni se corrige el dato).
+    """
+    email = (crudo or "").strip().lower() or None
+    if email and not _EMAIL_RE.match(email):
+        return None, True
+    return email, False
 
 
 def _es_excel(archivo: UploadFile) -> bool:
@@ -170,7 +182,7 @@ def listar_estudiantes(
 
 @router.post(
     "/secciones/{seccion_id}/estudiantes",
-    response_model=EstudianteOut,
+    response_model=EstudianteCreado,
     status_code=status.HTTP_201_CREATED,
     summary="Agregar estudiante manualmente",
 )
@@ -180,17 +192,25 @@ def agregar_estudiante(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Agrega un único estudiante a la sección."""
+    """
+    Agrega un único estudiante a la sección. El correo es opcional; si no tiene
+    formato de correo el estudiante se crea igual, con el correo en blanco y un `aviso`.
+    """
     _verificar_seccion(seccion_id, usuario["email"], db)
+    email, email_invalido = _normalizar_email(body.email)
     estudiante = Estudiante(
         nombre_completo=body.nombre_completo.strip().upper(),
         codigo_estudiante=body.codigo_estudiante.strip(),
+        email=email,
         seccion_id=seccion_id,
     )
     db.add(estudiante)
     db.commit()
     db.refresh(estudiante)
-    return estudiante
+    return EstudianteCreado(
+        **EstudianteOut.model_validate(estudiante).model_dump(),
+        aviso=f"El correo '{body.email.strip()}' no es válido, se dejó en blanco" if email_invalido else None,
+    )
 
 
 @router.post(
@@ -320,6 +340,54 @@ def exportar_excel(
         media_type=MIME_XLSX,
         headers={"Content-Disposition": f"attachment; filename=\"{ascii_}\"; filename*=UTF-8''{quote(nombre)}"},
     )
+
+
+@router.put(
+    "/estudiantes/{estudiante_id}",
+    response_model=EstudianteCreado,
+    summary="Editar estudiante",
+)
+def editar_estudiante(
+    estudiante_id: int,
+    body: EstudianteUpdate,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(get_current_user),
+):
+    """
+    Edita nombre, código y/o correo; solo cambia los campos enviados. No toca la
+    sección, los equipos ni las calificaciones del estudiante.
+    El correo se normaliza como en el alta (`null` o vacío lo borra). Uno sin formato
+    de correo no bloquea la edición: se conserva el que había (en blanco si no había)
+    y la respuesta trae un `aviso`.
+    """
+    estudiante = db.get(Estudiante, estudiante_id)
+    if not estudiante:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    seccion = db.get(Seccion, estudiante.seccion_id)
+    curso = db.get(Curso, seccion.curso_id)
+    if not curso or curso.docente_email != usuario["email"]:
+        raise HTTPException(status_code=403, detail="No tiene permiso para editar este estudiante")
+
+    enviados = body.model_fields_set
+    if "nombre_completo" in enviados:
+        estudiante.nombre_completo = body.nombre_completo.upper()
+    if "codigo_estudiante" in enviados:
+        estudiante.codigo_estudiante = body.codigo_estudiante
+
+    aviso = None
+    if "email" in enviados:
+        email, email_invalido = _normalizar_email(body.email)
+        if email_invalido:
+            # Un error de tipeo no debe borrar un correo bueno que ya estaba
+            aviso = f"El correo '{body.email.strip()}' no es válido, " + (
+                "se conservó el anterior" if estudiante.email else "se dejó en blanco"
+            )
+        else:
+            estudiante.email = email
+
+    db.commit()
+    db.refresh(estudiante)
+    return EstudianteCreado(**EstudianteOut.model_validate(estudiante).model_dump(), aviso=aviso)
 
 
 @router.delete(
