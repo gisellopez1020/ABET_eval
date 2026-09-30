@@ -325,7 +325,8 @@ def calificacion_masivo(
 ):
     """
     Aplica los mismos valores de criterios a todos los equipos de la sección
-    que todavía no tienen calificación. Los equipos ya calificados no se modifican.
+    que todavía no tienen calificación. Los equipos ya calificados no se modifican;
+    uno calificado en parte conserva lo que tiene y solo recibe los criterios que le faltan.
     """
     actividad = _verificar_actividad_docente(actividad_id, usuario["email"], db)
 
@@ -347,25 +348,19 @@ def calificacion_masivo(
     todas_guardadas: List[CalificacionOut] = []
 
     for equipo in equipos:
-        # Solo procesar equipos sin calificación
-        ya_calificados = (
-            db.query(func.count(Calificacion.id))
-            .join(Criterio, Calificacion.criterio_id == Criterio.id)
-            .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-            .filter(
-                Calificacion.equipo_id == equipo.id,
-                Aspecto.actividad_id == actividad_id,
-            )
-            .scalar()
-            or 0
-        )
-        if ya_calificados >= total_criterios:
+        # Criterios que el equipo ya tiene calificados: no se sobrescriben
+        ya_calificados = {
+            c.criterio_id
+            for c in _calificaciones_de(Calificacion.equipo_id == equipo.id, actividad_id, db)
+        }
+        if len(ya_calificados) >= total_criterios:
             continue
 
         for vc in body.criterios:
             criterio = criterios_map.get(vc.criterio_id)
-            if not criterio:
+            if not criterio or vc.criterio_id in ya_calificados:
                 continue
+            ya_calificados.add(vc.criterio_id)  # un criterio repetido en el body se inserta una vez
             nota_parcial = calcular_nota_parcial(vc.valor, criterio.peso_porcentaje)
             nueva = Calificacion(
                 criterio_id=vc.criterio_id,
