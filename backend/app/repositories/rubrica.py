@@ -31,6 +31,15 @@ class RubricaRepository:
         self.db.flush()
         return criterio
 
+    def contar_criterios(self, actividad_id: int) -> int:
+        return (
+            self.db.query(func.count(Criterio.id))
+            .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
+            .filter(Aspecto.actividad_id == actividad_id)
+            .scalar()
+            or 0
+        )
+
     def suma_pesos(self, actividad_id: int):
         """Suma de peso_porcentaje de los criterios de la actividad (0 si no tiene)."""
         return (
