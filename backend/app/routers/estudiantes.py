@@ -1,7 +1,9 @@
 import csv
 import io
 import re
-from typing import List, Optional, Tuple
+import unicodedata
+from collections import Counter
+from typing import List, NamedTuple, Optional, Tuple
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, File, status
@@ -24,8 +26,9 @@ except ImportError:  # misma dependencia opcional que utils/excel_parser.py
 
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-# (número de fila en el archivo, nombre crudo, código crudo, correo crudo)
-FilaCruda = Tuple[int, Optional[str], Optional[str], Optional[str]]
+# (número de fila en el archivo, nombre completo crudo, código crudo, correo crudo, grupo crudo).
+# El nombre ya llega combinado con los apellidos si el archivo los trae en otra columna
+FilaCruda = Tuple[int, Optional[str], Optional[str], Optional[str], Optional[str]]
 # (nombre, código, correo o None)
 EstudianteValido = Tuple[str, str, Optional[str]]
 
@@ -68,14 +71,43 @@ async def _leer_filas(archivo: UploadFile) -> List[FilaCruda]:
     return _leer_filas_csv(contenido)
 
 
-def _columnas(campos: List[str]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+class Columnas(NamedTuple):
+    nombre: Optional[str]
+    codigo: Optional[str]
+    email: Optional[str] = None
+    apellidos: Optional[str] = None
+    grupo: Optional[str] = None
+
+
+def _clave(encabezado: str) -> str:
+    """Encabezado comparable: minúsculas, sin tildes y sin espacios de más."""
+    sin_tildes = unicodedata.normalize("NFKD", encabezado).encode("ascii", "ignore").decode()
+    return " ".join(sin_tildes.lower().split())
+
+
+# Formato de la lista institucional: Nombre | Apellido(s) | Número de ID | Dirección de correo | Grupo.
+# Se compara el encabezado entero: buscar "id" como fragmento también encontraría "Apellido(s)"
+_ALIAS_CODIGO = {"numero de id", "id"}
+
+
+def _columnas(campos: List[str]) -> Columnas:
     col_nombre = next((c for c in campos if "nombre" in c.lower()), None)
     col_codigo = next((c for c in campos if "codigo" in c.lower() or "código" in c.lower()), None)
-    # Opcional: sin esta columna el correo queda NULL
+    if col_codigo is None:
+        col_codigo = next((c for c in campos if _clave(c) in _ALIAS_CODIGO), None)
+    # Opcional: sin esta columna el correo queda NULL ("Dirección de correo" entra por "correo")
     col_email = next(
         (c for c in campos if any(k in c.lower() for k in ("email", "e-mail", "correo"))), None
     )
-    return col_nombre, col_codigo, col_email
+    # Opcionales: apellidos en columna aparte (se unen al nombre) y grupo (solo para avisar)
+    col_apellidos = next((c for c in campos if _clave(c).startswith("apellido")), None)
+    col_grupo = next((c for c in campos if _clave(c) == "grupo"), None)
+    return Columnas(col_nombre, col_codigo, col_email, col_apellidos, col_grupo)
+
+
+def _nombre_completo(nombre: Optional[str], apellidos: Optional[str]) -> str:
+    """Une Nombre y Apellido(s) cuando vienen separados; sin apellidos, el nombre ya es el completo."""
+    return f"{(nombre or '').strip()} {(apellidos or '').strip()}".strip()
 
 
 def _leer_filas_csv(contenido: bytes) -> List[FilaCruda]:
@@ -85,16 +117,22 @@ def _leer_filas_csv(contenido: bytes) -> List[FilaCruda]:
         texto = contenido.decode("latin-1")
 
     lector = csv.DictReader(io.StringIO(texto))
-    col_nombre, col_codigo, col_email = _columnas(lector.fieldnames or [])
+    cols = _columnas(lector.fieldnames or [])
 
-    if not col_nombre or not col_codigo:
+    if not cols.nombre or not cols.codigo:
         raise HTTPException(
             status_code=422,
-            detail="El CSV debe tener columnas 'Nombre' y 'Codigo' (o 'Código')",
+            detail="El CSV debe tener columnas 'Nombre' y 'Codigo' (o 'Código', o 'Número de ID')",
         )
 
     return [
-        (i, fila.get(col_nombre), fila.get(col_codigo), fila.get(col_email) if col_email else None)
+        (
+            i,
+            _nombre_completo(fila.get(cols.nombre), fila.get(cols.apellidos) if cols.apellidos else None),
+            fila.get(cols.codigo),
+            fila.get(cols.email) if cols.email else None,
+            fila.get(cols.grupo) if cols.grupo else None,
+        )
         for i, fila in enumerate(lector, start=2)
     ]
 
@@ -110,31 +148,41 @@ def _leer_filas_excel(contenido: bytes) -> List[FilaCruda]:
         raise HTTPException(status_code=422, detail=f"No se pudo leer el archivo Excel: {exc}")
 
     df.columns = [str(c) for c in df.columns]
-    col_nombre, col_codigo, col_email = _columnas(list(df.columns))
+    cols = _columnas(list(df.columns))
 
-    if not col_nombre or not col_codigo:
+    if not cols.nombre or not cols.codigo:
         raise HTTPException(
             status_code=422,
-            detail="El Excel debe tener columnas 'Nombre' y 'Codigo' (o 'Código')",
+            detail="El Excel debe tener columnas 'Nombre' y 'Codigo' (o 'Código', o 'Número de ID')",
         )
 
-    emails = df[col_email] if col_email else [None] * len(df)
+    def columna(nombre_col: Optional[str]):
+        return df[nombre_col] if nombre_col else [None] * len(df)
+
     return [
-        (i, nombre, codigo, email)
-        for i, (nombre, codigo, email) in enumerate(zip(df[col_nombre], df[col_codigo], emails), start=2)
+        (i, _nombre_completo(nombre, apellidos), codigo, email, grupo)
+        for i, (nombre, apellidos, codigo, email, grupo) in enumerate(
+            zip(df[cols.nombre], columna(cols.apellidos), df[cols.codigo], columna(cols.email), columna(cols.grupo)),
+            start=2,
+        )
     ]
 
 
-def _procesar_filas(filas: List[FilaCruda]) -> Tuple[List[EstudianteValido], List[str]]:
+def _procesar_filas(
+    filas: List[FilaCruda], seccion_nombre: Optional[str] = None
+) -> Tuple[List[EstudianteValido], List[str]]:
     """
     Normaliza las filas y separa las válidas (nombre, código, correo) de los errores.
     Un correo que no lo parece no descarta la fila: el estudiante se importa con el
     correo en blanco y queda un aviso.
+    La columna Grupo no se guarda (la sección la define la URL): si se pasa
+    seccion_nombre, solo se avisa cuando no coincide, una vez por valor distinto.
     """
     validos: List[EstudianteValido] = []
     errores: List[str] = []
+    otros_grupos: Counter = Counter()
 
-    for i, nombre_crudo, codigo_crudo, email_crudo in filas:
+    for i, nombre_crudo, codigo_crudo, email_crudo, grupo_crudo in filas:
         nombre = (nombre_crudo or "").strip().upper()
         codigo = (codigo_crudo or "").strip()
         if not nombre or not codigo:
@@ -145,6 +193,15 @@ def _procesar_filas(filas: List[FilaCruda]) -> Tuple[List[EstudianteValido], Lis
             errores.append(f"Fila {i}: correo '{email_crudo.strip()}' no válido, se deja en blanco")
             email = None
         validos.append((nombre, codigo, email))
+        grupo = (grupo_crudo or "").strip()
+        if seccion_nombre is not None and grupo and _clave(grupo) != _clave(seccion_nombre):
+            otros_grupos[grupo] += 1
+
+    for grupo, n in otros_grupos.items():
+        errores.append(
+            f"{n} fila{'s tienen' if n != 1 else ' tiene'} Grupo '{grupo}', distinto de esta "
+            f"sección ('{seccion_nombre}'); se importa{'n' if n != 1 else ''} igual"
+        )
 
     return validos, errores
 
@@ -231,12 +288,16 @@ async def importar_csv(
     OSCAR EVELIO PRADA CEBALLOS,2021001
 
     La columna Email (o Correo) es opcional; sin ella el correo queda en blanco.
+    También acepta el formato de la lista institucional (el mismo que exporta la app):
+    Nombre | Apellido(s) | Número de ID | Dirección de correo | Grupo. Nombre y
+    Apellido(s) se unen en el nombre completo; Grupo no se guarda (la sección es la
+    de la URL) y solo genera un aviso si no coincide con ella.
     También acepta un .xlsx con las mismas dos columnas en la primera hoja
     (se detecta por la extensión o el content_type).
     """
-    _verificar_seccion(seccion_id, usuario["email"], db)
+    seccion = _verificar_seccion(seccion_id, usuario["email"], db)
 
-    validos, errores = _procesar_filas(await _leer_filas(archivo))
+    validos, errores = _procesar_filas(await _leer_filas(archivo), seccion.nombre)
     for nombre, codigo, email in validos:
         db.add(Estudiante(
             nombre_completo=nombre,
@@ -265,8 +326,8 @@ async def vista_previa_estudiantes(
     archivo, sin guardarlos. El frontend la usa para la vista previa de un .xlsx
     (la de un CSV se sigue calculando en el navegador).
     """
-    _verificar_seccion(seccion_id, usuario["email"], db)
-    validos, errores = _procesar_filas(await _leer_filas(archivo))
+    seccion = _verificar_seccion(seccion_id, usuario["email"], db)
+    validos, errores = _procesar_filas(await _leer_filas(archivo), seccion.nombre)
     return VistaPreviaEstudiantes(
         estudiantes=[{"nombre": n, "codigo": c, "email": e} for n, c, e in validos],
         errores=errores,
