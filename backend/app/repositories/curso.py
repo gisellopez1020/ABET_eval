@@ -11,3 +11,11 @@ class CursoRepository:
 
     def get(self, curso_id: int) -> Optional[Curso]:
         return self.db.get(Curso, curso_id)
+
+    def de_docente(self, email: str) -> List[Curso]:
+        return self.db.query(Curso).filter(Curso.docente_email == email).all()
+
+    def agregar(self, curso: Curso) -> Curso:
+        self.db.add(curso)
+        self.db.flush()
+        return curso

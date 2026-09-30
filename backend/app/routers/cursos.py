@@ -1,13 +1,15 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import (
-    Actividad, Aspecto, Calificacion, Criterio, Curso, EquipoTrabajo, Estudiante, RaAbetCatalogo,
-)
+from app.models import Curso
+from app.repositories.calificacion import CalificacionRepository
+from app.repositories.curso import CursoRepository
+from app.repositories.equipo import EquipoRepository
+from app.repositories.estudiante import EstudianteRepository
+from app.repositories.ra_abet import RaAbetRepository
 from app.schemas import ActividadRecienteItem, CursoCreate, CursoUpdate, CursoOut
 
 router = APIRouter(prefix="/cursos", tags=["Cursos"])
@@ -29,11 +31,7 @@ def _validar_ra_abet(codigos: List[str], db: Session) -> None:
     """
     if not codigos:
         return
-    padres = dict(
-        db.query(RaAbetCatalogo.codigo, RaAbetCatalogo.codigo_padre)
-        .filter(RaAbetCatalogo.codigo.in_(codigos))
-        .all()
-    )
+    padres = RaAbetRepository(db).padres_de(codigos)
     desconocidos = [c for c in codigos if c not in padres]
     if desconocidos:
         raise HTTPException(
@@ -55,7 +53,7 @@ def listar_cursos(
     usuario: dict = Depends(get_current_user),
 ):
     """Devuelve todos los cursos (activos e inactivos) del docente autenticado."""
-    return db.query(Curso).filter(Curso.docente_email == usuario["email"]).all()
+    return CursoRepository(db).de_docente(usuario["email"])
 
 
 @router.post("", response_model=CursoOut, status_code=status.HTTP_201_CREATED, summary="Crear curso")
@@ -66,8 +64,7 @@ def crear_curso(
 ):
     """Crea un nuevo curso asociado al docente autenticado."""
     _validar_ra_abet(body.ra_abet, db)
-    curso = Curso(**body.model_dump(), docente_email=usuario["email"])
-    db.add(curso)
+    curso = CursoRepository(db).agregar(Curso(**body.model_dump(), docente_email=usuario["email"]))
     db.commit()
     db.refresh(curso)
     return curso
@@ -80,7 +77,7 @@ def obtener_curso(
     usuario: dict = Depends(get_current_user),
 ):
     """Devuelve el detalle de un curso específico del docente."""
-    curso = db.get(Curso, curso_id)
+    curso = CursoRepository(db).get(curso_id)
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     _verificar_propietario(curso, usuario["email"])
@@ -103,38 +100,17 @@ def actividad_reciente(
     al más antiguo. Un guardado escribe una fila por criterio, así que se agrupa
     por (actividad, equipo o estudiante) y se toma el updated_at más reciente.
     """
-    curso = db.get(Curso, curso_id)
+    curso = CursoRepository(db).get(curso_id)
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     _verificar_propietario(curso, usuario["email"])
 
-    ultimo = func.max(Calificacion.updated_at).label("ultimo")
-    filas = (
-        db.query(
-            Actividad.id.label("actividad_id"),
-            Actividad.nombre.label("actividad_nombre"),
-            Calificacion.equipo_id,
-            Calificacion.estudiante_id,
-            ultimo,
-        )
-        .join(Criterio, Calificacion.criterio_id == Criterio.id)
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .join(Actividad, Aspecto.actividad_id == Actividad.id)
-        .filter(Actividad.curso_id == curso_id)
-        .group_by(Actividad.id, Actividad.nombre, Calificacion.equipo_id, Calificacion.estudiante_id)
-        .order_by(ultimo.desc(), Actividad.id.desc())
-        .limit(limit)
-        .all()
-    )
+    filas = CalificacionRepository(db).ultimas_del_curso(curso_id, limit)
 
     equipo_ids = {f.equipo_id for f in filas if f.equipo_id is not None}
     estudiante_ids = {f.estudiante_id for f in filas if f.estudiante_id is not None}
-    equipos = dict(
-        db.query(EquipoTrabajo.id, EquipoTrabajo.nombre).filter(EquipoTrabajo.id.in_(equipo_ids)).all()
-    )
-    estudiantes = dict(
-        db.query(Estudiante.id, Estudiante.nombre_completo).filter(Estudiante.id.in_(estudiante_ids)).all()
-    )
+    equipos = EquipoRepository(db).nombres_por_id(equipo_ids)
+    estudiantes = EstudianteRepository(db).nombres_por_id(estudiante_ids)
 
     return [
         ActividadRecienteItem(
@@ -156,7 +132,7 @@ def editar_curso(
     usuario: dict = Depends(get_current_user),
 ):
     """Actualiza los campos del curso. Solo campos enviados son modificados."""
-    curso = db.get(Curso, curso_id)
+    curso = CursoRepository(db).get(curso_id)
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     _verificar_propietario(curso, usuario["email"])
@@ -178,7 +154,7 @@ def archivar_curso(
     usuario: dict = Depends(get_current_user),
 ):
     """Marca el curso como inactivo (archivado). No elimina datos."""
-    curso = db.get(Curso, curso_id)
+    curso = CursoRepository(db).get(curso_id)
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     _verificar_propietario(curso, usuario["email"])
@@ -196,7 +172,7 @@ def activar_curso(
     usuario: dict = Depends(get_current_user),
 ):
     """Marca el curso como activo nuevamente (revierte el archivado)."""
-    curso = db.get(Curso, curso_id)
+    curso = CursoRepository(db).get(curso_id)
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     _verificar_propietario(curso, usuario["email"])
