@@ -154,25 +154,12 @@ export function SectionPage() {
     }
   };
 
-  const parseCsv = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-      const rows = lines.slice(1).map((l) => {
-        const [nombre, codigo] = l.split(',').map((s) => s.trim());
-        return { nombre: nombre || '', codigo: codigo || '' };
-      }).filter((r) => r.nombre && r.codigo);
-      setCsvPreview(rows);
-    };
-    reader.readAsText(file);
-  };
-
-  // Un .xlsx no se puede leer como texto: su vista previa la calcula el backend
-  const esExcel = (file: File) => file.name.toLowerCase().endsWith('.xlsx');
+  // La vista previa (CSV y Excel) la calcula el backend con la misma lectura que la
+  // importación: muestra el nombre ya combinado con los apellidos, y los avisos
+  // (correo no válido, Grupo distinto de la sección) se ven antes de importar
   const previewSeq = useRef(0);
 
-  const previewExcel = async (file: File) => {
+  const previewArchivo = async (file: File) => {
     const seq = ++previewSeq.current;
     try {
       const { estudiantes: filas, errores } = await estudiantesApi.vistaPrevia(sid, file);
@@ -180,20 +167,15 @@ export function SectionPage() {
       setCsvPreview(filas);
       if (errores.length > 0) setCsvError(errores.join(' · '));
     } catch (e: any) {
-      if (seq === previewSeq.current) setCsvError(apiErrorMessage(e, 'No se pudo leer el archivo Excel'));
+      if (seq === previewSeq.current) setCsvError(apiErrorMessage(e, 'No se pudo leer el archivo'));
     }
   };
 
   const handleCsvSelect = (file: File) => {
-    previewSeq.current++;
     setCsvFile(file);
     setCsvPreview([]);
     setCsvError('');
-    if (esExcel(file)) {
-      previewExcel(file);
-    } else {
-      parseCsv(file);
-    }
+    previewArchivo(file);
   };
 
   const handleExport = async () => {
@@ -376,7 +358,8 @@ export function SectionPage() {
             </p>
             <p className="text-xs text-gray-400 mt-1">
               Formato: columnas Nombre y Codigo (o Código), con encabezado. En Excel, en la primera hoja.
-              Opcional: una columna Email (o Correo).
+              Opcional: una columna Email (o Correo). También sirve la lista institucional: Nombre,
+              Apellido(s), Número de ID, Dirección de correo y Grupo (la que descarga "Exportar Excel").
             </p>
             <input
               ref={fileRef}
