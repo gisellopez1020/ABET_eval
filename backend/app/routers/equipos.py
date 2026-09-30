@@ -37,6 +37,32 @@ def _verificar_actividad_seccion(
     return actividad, seccion
 
 
+def _validar_sin_otro_equipo(
+    estudiante_ids: List[int], actividad_id: int, db: Session,
+    excluir_equipo_id: Optional[int] = None,
+) -> None:
+    """Un estudiante solo puede estar en un equipo por actividad (en otras actividades, sí)."""
+    if not estudiante_ids:
+        return
+    query = (
+        db.query(Estudiante.nombre_completo, EquipoTrabajo.nombre)
+        .join(MiembroEquipo, MiembroEquipo.estudiante_id == Estudiante.id)
+        .join(EquipoTrabajo, MiembroEquipo.equipo_id == EquipoTrabajo.id)
+        .filter(
+            EquipoTrabajo.actividad_id == actividad_id,
+            MiembroEquipo.estudiante_id.in_(estudiante_ids),
+        )
+    )
+    if excluir_equipo_id is not None:
+        query = query.filter(EquipoTrabajo.id != excluir_equipo_id)
+    choque = query.first()
+    if choque:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El estudiante {choque[0]} ya está en el equipo '{choque[1]}' de esta actividad",
+        )
+
+
 def _nota_total_equipo(equipo_id: int, actividad_id: int, db: Session) -> Optional[Decimal]:
     """Suma las notas parciales de todos los criterios calificados para el equipo."""
     result = (
@@ -146,7 +172,8 @@ def crear_equipos(
 ):
     """
     Crea uno o varios equipos de trabajo para la actividad en la sección.
-    Cada equipo puede incluir una lista de estudiante_ids.
+    Cada equipo puede incluir una lista de estudiante_ids; cada estudiante debe ser
+    de la sección y no estar ya en otro equipo de la actividad (400 si no).
     """
     actividad, seccion = _verificar_actividad_seccion(
         actividad_id, seccion_id, usuario["email"], db
@@ -156,6 +183,25 @@ def crear_equipos(
             status_code=400,
             detail="Solo se pueden crear equipos para actividades de tipo grupal",
         )
+
+    # Validar todos los miembros antes de crear nada
+    equipo_de: dict[int, int] = {}  # estudiante_id -> índice del equipo del payload
+    for idx, eq_in in enumerate(body.equipos):
+        for est_id in eq_in.estudiante_ids:
+            estudiante = db.get(Estudiante, est_id)
+            if not estudiante or estudiante.seccion_id != seccion_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Estudiante {est_id} no pertenece a la sección {seccion_id}",
+                )
+            previo = equipo_de.setdefault(est_id, idx)
+            if previo != idx:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"El estudiante {estudiante.nombre_completo} está en dos equipos: "
+                           f"'{body.equipos[previo].nombre}' y '{eq_in.nombre}'",
+                )
+    _validar_sin_otro_equipo(list(equipo_de), actividad_id, db)
 
     nuevos: List[EquipoTrabajo] = []
     for eq_in in body.equipos:
@@ -168,12 +214,6 @@ def crear_equipos(
         db.flush()
 
         for est_id in eq_in.estudiante_ids:
-            estudiante = db.get(Estudiante, est_id)
-            if not estudiante or estudiante.seccion_id != seccion_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Estudiante {est_id} no pertenece a la sección {seccion_id}",
-                )
             db.add(MiembroEquipo(equipo_id=equipo.id, estudiante_id=est_id))
 
         nuevos.append(equipo)
@@ -196,7 +236,10 @@ def editar_equipo(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Edita el nombre del equipo y/o sus integrantes."""
+    """
+    Edita el nombre del equipo y/o sus integrantes. Cada integrante debe ser de la
+    sección del equipo y no estar en otro equipo de la actividad (400 si no).
+    """
     equipo = db.get(EquipoTrabajo, equipo_id)
     if not equipo:
         raise HTTPException(status_code=404, detail="Equipo no encontrado")
@@ -209,9 +252,6 @@ def editar_equipo(
         equipo.nombre = body.nombre
 
     if body.estudiante_ids is not None:
-        for m in equipo.miembros:
-            db.delete(m)
-        db.flush()
         for est_id in body.estudiante_ids:
             estudiante = db.get(Estudiante, est_id)
             if not estudiante or estudiante.seccion_id != equipo.seccion_id:
@@ -219,6 +259,13 @@ def editar_equipo(
                     status_code=400,
                     detail=f"Estudiante {est_id} no pertenece a la sección del equipo",
                 )
+        # El propio equipo no cuenta: guardar sin cambios no choca consigo mismo
+        _validar_sin_otro_equipo(body.estudiante_ids, equipo.actividad_id, db, excluir_equipo_id=equipo_id)
+
+        for m in equipo.miembros:
+            db.delete(m)
+        db.flush()
+        for est_id in body.estudiante_ids:
             db.add(MiembroEquipo(equipo_id=equipo_id, estudiante_id=est_id))
 
     db.commit()
