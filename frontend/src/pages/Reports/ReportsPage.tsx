@@ -212,7 +212,7 @@ export function ReportsPage() {
       <div className="p-6">
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-uao-dark">Reportes ABET</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Reportes ABET</h2>
             <p className="text-sm text-gray-500 mt-0.5">{curso?.nombre} · {curso?.periodo}</p>
           </div>
           <div className="flex gap-2">
@@ -230,7 +230,7 @@ export function ReportsPage() {
           <div className="flex-1">
             <label className="text-xs font-medium text-gray-600 block mb-1">Sección</label>
             <select
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-uao-mid"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#9E0B0F]/10 focus:border-[#9E0B0F]"
               value={seccionId}
               onChange={(e) => setSeccionId(e.target.value ? Number(e.target.value) : '')}
             >

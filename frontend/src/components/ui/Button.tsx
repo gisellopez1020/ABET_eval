@@ -1,3 +1,4 @@
+
 import { ButtonHTMLAttributes, ReactNode } from 'react';
 
 type ButtonVariant =
@@ -19,11 +20,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    'bg-[#9E0B0F] text-white hover:bg-[#82090d]',
+    'bg-[#9E0B0F] text-white border border-[#9E0B0F] hover:bg-[#82090d] hover:border-[#82090d]',
   secondary:
-    'bg-white text-gray-800 border hover:bg-gray-200',
+    'bg-white text-black border border-[#9E0B0F] hover:bg-[#9E0B0F] hover:text-white',
   danger:
-    'bg-red-50 text-red-700 hover:bg-red-100', 
+    'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100',
   ghost:
     'text-gray-600 hover:bg-gray-100',
   outline:

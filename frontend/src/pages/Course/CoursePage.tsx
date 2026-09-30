@@ -121,14 +121,14 @@ export function CoursePage() {
       <div className="p-6">
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-uao-dark">{curso.nombre}</h2>
+            <h2 className="text-2xl font-bold text-gray-900">{curso.nombre}</h2>
             <p className="text-sm text-gray-500">{curso.codigo} · {curso.periodo}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" icon={<Pencil size={14} />} onClick={() => setEditModal(true)}>
               Editar asignatura
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => navigate(`/cursos/${id}/reportes`)}>
+            <Button variant="primary" size="sm" onClick={() => navigate(`/cursos/${id}/reportes`)}>
               Ver reportes ABET
             </Button>
           </div>
@@ -138,7 +138,7 @@ export function CoursePage() {
           {/* Secciones */}
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold text-uao-dark">Secciones</h3>
+              <h3 className="font-semibold text-gray-900">Secciones</h3>
               <Button size="sm" variant="secondary" onClick={() => setNewSeccionModal(true)}>
                 + Nueva sección
               </Button>
@@ -156,7 +156,7 @@ export function CoursePage() {
                   tabIndex={0}
                   onClick={() => setSelectedSeccion(s.id)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedSeccion(s.id); } }}
-                  className={`cursor-pointer w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors ${selectedSeccion === s.id ? 'bg-blue-50 border-l-4 border-uao-mid' : ''}`}
+                  className={`cursor-pointer w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors ${selectedSeccion === s.id ? 'bg-red-100 border-l-4 border-[#9E0B0F]' : ''}`}
                 >
                   <div>
                     <p className="font-medium text-gray-900 text-sm">{s.nombre}</p>
@@ -181,7 +181,7 @@ export function CoursePage() {
           {/* Actividades */}
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold text-uao-dark">Actividades</h3>
+              <h3 className="font-semibold text-gray-900">Actividades</h3>
               <Button size="sm" variant="secondary" onClick={() => setNewActModal(true)}>
                 + Nueva actividad
               </Button>
@@ -212,7 +212,6 @@ export function CoursePage() {
                       {!tieneRubrica && <Badge variant="warning">Sin rúbrica</Badge>}
                       <Badge variant={variant}>{label}</Badge>
                       {selectedSeccion && (
-                        // El span evita que un clic sobre el botón deshabilitado abra la actividad
                         <span
                           onClick={(e) => e.stopPropagation()}
                           title={tieneRubrica ? undefined : 'Define la rúbrica (100%) antes de calificar'}
@@ -247,7 +246,7 @@ export function CoursePage() {
             onKeyDown={(e) => e.key === 'Enter' && handleCreateSeccion()}
           />
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setNewSeccionModal(false)}>Cancelar</Button>
+            <Button variant="secondary" onClick={() => setNewSeccionModal(false)}>Cancelar</Button>
             <Button onClick={handleCreateSeccion} loading={newSeccionLoading}>Crear</Button>
           </div>
         </div>
@@ -272,7 +271,7 @@ export function CoursePage() {
                     value={t}
                     checked={newAct.tipo === t}
                     onChange={() => setNewAct((f) => ({ ...f, tipo: t }))}
-                    className="text-uao-mid"
+                    className="accent-[#9E0B0F]"
                   />
                   <span className="text-sm capitalize">{t}</span>
                 </label>
@@ -289,7 +288,7 @@ export function CoursePage() {
           />
           {actError && <p className="text-sm text-uao-accent">{actError}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setNewActModal(false)}>Cancelar</Button>
+            <Button variant="secondary" onClick={() => setNewActModal(false)}>Cancelar</Button>
             <Button onClick={handleCreateActividad} loading={newActLoading}>Crear</Button>
           </div>
         </div>

@@ -68,8 +68,7 @@ export function DynamicListEditor<T>({
               onClick={() => remove(index)}
               aria-label={`Quitar fila ${index + 1}`}
               title="Quitar"
-              className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition hover:border-red-300 hover:text-red-600"
-            >
+              className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#9E0B0F] text-white transition hover:bg-[#82090d]"            >
               <Trash2 size={15} />
             </button>
           </div>

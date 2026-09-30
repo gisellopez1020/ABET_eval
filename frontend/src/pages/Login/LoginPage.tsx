@@ -35,7 +35,7 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-4xl bg-white rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] min-h-[580px]">
+      <div className="w-full max-w-4xl bg-white rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] min-h-[540px]">
 
         {/* ── PANEL IZQUIERDO*/}
         <div className="relative hidden lg:flex flex-col justify-between p-10 xl:p-14 text-white overflow-hidden">
