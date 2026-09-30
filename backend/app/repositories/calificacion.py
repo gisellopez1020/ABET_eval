@@ -1,4 +1,4 @@
-from sqlalchemy import func
+from sqlalchemy import exists, func
 from sqlalchemy.orm import Session
 
 from app.models import Actividad, Aspecto, Calificacion, Criterio
@@ -7,6 +7,15 @@ from app.models import Actividad, Aspecto, Calificacion, Criterio
 class CalificacionRepository:
     def __init__(self, db: Session):
         self.db = db
+
+    def existen_para_actividad(self, actividad_id: int) -> bool:
+        return self.db.query(
+            exists().where(
+                Calificacion.criterio_id == Criterio.id,
+                Criterio.aspecto_id == Aspecto.id,
+                Aspecto.actividad_id == actividad_id,
+            )
+        ).scalar()
 
     def ultimas_del_curso(self, curso_id: int, limit: int):
         """

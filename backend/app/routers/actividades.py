@@ -1,11 +1,14 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import exists, func
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Curso, Actividad, Calificacion, Criterio, Aspecto
+from app.models import Curso, Actividad
+from app.repositories.actividad import ActividadRepository
+from app.repositories.calificacion import CalificacionRepository
+from app.repositories.curso import CursoRepository
+from app.repositories.rubrica import RubricaRepository
 from app.schemas import ActividadCreate, ActividadUpdate, ActividadOut
 from app.schemas.criterio import AspectoOut
 
@@ -13,7 +16,7 @@ router = APIRouter(tags=["Actividades"])
 
 
 def _verificar_curso(curso_id: int, email: str, db: Session) -> Curso:
-    curso = db.get(Curso, curso_id)
+    curso = CursoRepository(db).get(curso_id)
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     if curso.docente_email != email:
@@ -22,22 +25,8 @@ def _verificar_curso(curso_id: int, email: str, db: Session) -> Curso:
 
 
 def _tiene_calificaciones(actividad_id: int, db: Session) -> bool:
-    return db.query(
-        exists().where(
-            Calificacion.criterio_id == Criterio.id,
-            Criterio.aspecto_id == Aspecto.id,
-            Aspecto.actividad_id == actividad_id,
-        )
-    ).scalar()
-
-
-def _total_peso_criterios(actividad_id: int, db: Session):
-    return (
-        db.query(func.coalesce(func.sum(Criterio.peso_porcentaje), 0))
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(Aspecto.actividad_id == actividad_id)
-        .scalar()
-    )
+    # Transitorio: lo sigue importando criterios.py hasta migrarlo a los repositorios
+    return CalificacionRepository(db).existen_para_actividad(actividad_id)
 
 
 def _actividad_out(actividad: Actividad, total_peso) -> ActividadOut:
@@ -61,15 +50,7 @@ def listar_actividades(
     con la suma de pesos de sus criterios calculada en una sola consulta.
     """
     _verificar_curso(curso_id, usuario["email"], db)
-    filas = (
-        db.query(Actividad, func.coalesce(func.sum(Criterio.peso_porcentaje), 0))
-        .outerjoin(Aspecto, Aspecto.actividad_id == Actividad.id)
-        .outerjoin(Criterio, Criterio.aspecto_id == Aspecto.id)
-        .filter(Actividad.curso_id == curso_id)
-        .group_by(Actividad.id)
-        .order_by(Actividad.created_at)
-        .all()
-    )
+    filas = ActividadRepository(db).de_curso_con_total_peso(curso_id)
     return [_actividad_out(actividad, total) for actividad, total in filas]
 
 
@@ -87,8 +68,7 @@ def crear_actividad(
 ):
     """Crea una actividad (individual o grupal) dentro del curso."""
     _verificar_curso(curso_id, usuario["email"], db)
-    actividad = Actividad(**body.model_dump(), curso_id=curso_id)
-    db.add(actividad)
+    actividad = ActividadRepository(db).agregar(Actividad(**body.model_dump(), curso_id=curso_id))
     db.commit()
     db.refresh(actividad)
     return actividad
@@ -104,14 +84,15 @@ def obtener_actividad(
     usuario: dict = Depends(get_current_user),
 ):
     """Devuelve la actividad con sus aspectos y criterios anidados."""
-    actividad = db.get(Actividad, actividad_id)
+    repo = ActividadRepository(db)
+    actividad = repo.get(actividad_id)
     if not actividad:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = db.get(Curso, actividad.curso_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     if not curso or curso.docente_email != usuario["email"]:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
 
-    out = _actividad_out(actividad, _total_peso_criterios(actividad_id, db))
+    out = _actividad_out(actividad, RubricaRepository(db).suma_pesos(actividad_id))
     aspectos_out = [AspectoOut.model_validate(a) for a in actividad.aspectos]
     return {**out.model_dump(), "aspectos": [a.model_dump() for a in aspectos_out]}
 
@@ -131,10 +112,11 @@ def editar_actividad(
     Edita nombre o peso de la actividad.
     El tipo (individual/grupal) NO puede modificarse si ya hay calificaciones.
     """
-    actividad = db.get(Actividad, actividad_id)
+    repo = ActividadRepository(db)
+    actividad = repo.get(actividad_id)
     if not actividad:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = db.get(Curso, actividad.curso_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     if not curso or curso.docente_email != usuario["email"]:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
 
@@ -143,7 +125,7 @@ def editar_actividad(
 
     db.commit()
     db.refresh(actividad)
-    return _actividad_out(actividad, _total_peso_criterios(actividad_id, db))
+    return _actividad_out(actividad, RubricaRepository(db).suma_pesos(actividad_id))
 
 
 @router.delete(
@@ -157,19 +139,20 @@ def eliminar_actividad(
     usuario: dict = Depends(get_current_user),
 ):
     """Elimina la actividad solo si no tiene calificaciones registradas."""
-    actividad = db.get(Actividad, actividad_id)
+    repo = ActividadRepository(db)
+    actividad = repo.get(actividad_id)
     if not actividad:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = db.get(Curso, actividad.curso_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     if not curso or curso.docente_email != usuario["email"]:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
 
-    if _tiene_calificaciones(actividad_id, db):
+    if CalificacionRepository(db).existen_para_actividad(actividad_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"No se puede eliminar '{actividad.nombre}' porque ya tiene "
                    "calificaciones registradas.",
         )
 
-    db.delete(actividad)
+    repo.eliminar(actividad)
     db.commit()
