@@ -120,6 +120,7 @@ def crear_equipos(
     equipo_de: dict[int, int] = {}  # estudiante_id -> índice del equipo del payload
     estudiantes = EstudianteRepository(db)
     for idx, eq_in in enumerate(body.equipos):
+        vistos: set[int] = set()
         for est_id in eq_in.estudiante_ids:
             estudiante = estudiantes.get(est_id)
             if not estudiante or estudiante.seccion_id != seccion_id:
@@ -127,6 +128,14 @@ def crear_equipos(
                     status_code=400,
                     detail=f"Estudiante {est_id} no pertenece a la sección {seccion_id}",
                 )
+            # Repetido dentro del mismo equipo: setdefault no lo detecta (mismo índice)
+            if est_id in vistos:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"El estudiante {estudiante.nombre_completo} está repetido "
+                           f"en el equipo '{eq_in.nombre}'",
+                )
+            vistos.add(est_id)
             previo = equipo_de.setdefault(est_id, idx)
             if previo != idx:
                 raise HTTPException(
@@ -186,6 +195,7 @@ def editar_equipo(
 
     if body.estudiante_ids is not None:
         estudiantes = EstudianteRepository(db)
+        vistos: set[int] = set()
         for est_id in body.estudiante_ids:
             estudiante = estudiantes.get(est_id)
             if not estudiante or estudiante.seccion_id != equipo.seccion_id:
@@ -193,6 +203,13 @@ def editar_equipo(
                     status_code=400,
                     detail=f"Estudiante {est_id} no pertenece a la sección del equipo",
                 )
+            if est_id in vistos:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"El estudiante {estudiante.nombre_completo} está repetido "
+                           f"en el equipo '{equipo.nombre}'",
+                )
+            vistos.add(est_id)
         # El propio equipo no cuenta: guardar sin cambios no choca consigo mismo
         _validar_sin_otro_equipo(body.estudiante_ids, equipo.actividad_id, db, excluir_equipo_id=equipo_id)
 
