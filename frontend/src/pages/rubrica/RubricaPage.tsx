@@ -501,11 +501,11 @@ export default function RubricaPage() {
 
   return (
     <AppLayout>
-      <div className="min-h-screen bg-[#f3f3f3] p-6">
+      <div className="p-6">
         <div className="mx-auto max-w-[1280px]">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Rúbricas y Criterios ABET</h1>
+              <h1 className="text-2xl font-semibold text-gray-900">Rúbricas y Criterios ABET</h1>
               <p className="mt-1 text-sm text-gray-500">
                 {selectedActividad
                   ? `${selectedCurso ? `${selectedCurso.nombre} · ` : ''}Actividad: ${selectedActividad.nombre}`

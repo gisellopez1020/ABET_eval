@@ -146,12 +146,12 @@ export function EstadisticasPage() {
 
   return (
     <AppLayout>
-      <div className="min-h-screen bg-[#f3f3f3] p-6">
+      <div className="p-6">
         <div className="mx-auto max-w-[1280px]">
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div className="mb-6 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-uao-dark">Estadísticas ABET</h1>
-              <p className="mt-0.5 text-sm text-gray-500">
+              <h1 className="text-2xl font-semibold text-gray-900">Estadísticas ABET</h1>
+              <p className="mt-1 text-sm text-gray-500">
                 Distribución de estudiantes por Criterio ABET y por Resultado de Aprendizaje en una actividad.
               </p>
             </div>
