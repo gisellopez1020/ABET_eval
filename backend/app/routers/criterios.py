@@ -5,22 +5,26 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Curso, Actividad, Aspecto, Criterio, RaAbetCatalogo
+from app.models import Actividad, Aspecto, Criterio
 from app.schemas.criterio import (
     CriteriosPayload, CriteriosResponse, AspectoOut, VinculoAbetIn, RubricaExcelPreview,
 )
 from app.schemas.curso import MAX_RA_ABET
-from app.routers.actividades import _tiene_calificaciones
+from app.repositories.actividad import ActividadRepository
+from app.repositories.calificacion import CalificacionRepository
+from app.repositories.curso import CursoRepository
+from app.repositories.ra_abet import RaAbetRepository
+from app.repositories.rubrica import RubricaRepository
 from app.utils.excel_parser import ExcelParserError, parsear_excel_criterios
 
 router = APIRouter(tags=["Criterios"])
 
 
 def _verificar_actividad(actividad_id: int, email: str, db: Session) -> Actividad:
-    actividad = db.get(Actividad, actividad_id)
+    actividad = ActividadRepository(db).get(actividad_id)
     if not actividad:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = db.get(Curso, actividad.curso_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     if not curso or curso.docente_email != email:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
     return actividad
@@ -34,11 +38,7 @@ def _validar_codigos_abet(codigos: Iterable[Optional[str]], db: Session) -> List
     codigos = [c for c in dict.fromkeys(codigos) if c]
     if not codigos:
         return []
-    padres = dict(
-        db.query(RaAbetCatalogo.codigo, RaAbetCatalogo.codigo_padre)
-        .filter(RaAbetCatalogo.codigo.in_(codigos))
-        .all()
-    )
+    padres = RaAbetRepository(db).padres_de(codigos)
     for codigo in codigos:
         if codigo not in padres:
             raise HTTPException(
@@ -59,7 +59,7 @@ def _agregar_ra_al_curso(actividad: Actividad, codigos_ra: List[str], db: Sessio
     Agrega al ra_abet del curso los RA padre que falten (no se exige configurarlos antes).
     Conserva lo que ya haya, incluidos valores antiguos, y respeta el máximo de RA por curso.
     """
-    curso = db.get(Curso, actividad.curso_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     actual = list(curso.ra_abet or [])
     faltantes = [c for c in codigos_ra if c not in actual]
     if not faltantes:
@@ -100,7 +100,7 @@ def obtener_criterios(
     return CriteriosResponse(
         aspectos=aspectos_out,
         total_peso=total,
-        tiene_calificaciones=_tiene_calificaciones(actividad_id, db),
+        tiene_calificaciones=CalificacionRepository(db).existen_para_actividad(actividad_id),
     )
 
 
@@ -126,7 +126,7 @@ def reemplazar_criterios(
     """
     actividad = _verificar_actividad(actividad_id, usuario["email"], db)
 
-    if _tiene_calificaciones(actividad_id, db):
+    if CalificacionRepository(db).existen_para_actividad(actividad_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"No se puede modificar la rúbrica de '{actividad.nombre}' porque ya "
@@ -150,29 +150,25 @@ def reemplazar_criterios(
     _agregar_ra_al_curso(actividad, codigos_ra, db)
 
     # Eliminar aspectos/criterios existentes y reemplazar
-    for aspecto_existente in actividad.aspectos:
-        db.delete(aspecto_existente)
-    db.flush()
+    rubrica = RubricaRepository(db)
+    rubrica.eliminar_aspectos_de(actividad)
 
     nuevos_aspectos = []
     for orden_asp, asp_in in enumerate(body.aspectos):
-        aspecto = Aspecto(
+        aspecto = rubrica.agregar_aspecto(Aspecto(
             nombre=asp_in.nombre,
             actividad_id=actividad_id,
             orden=asp_in.orden if asp_in.orden else orden_asp,
             codigo_abet=asp_in.codigo_abet,
-        )
-        db.add(aspecto)
-        db.flush()
+        ))
 
         for orden_crit, crit_in in enumerate(asp_in.criterios):
-            criterio = Criterio(
+            rubrica.agregar_criterio(Criterio(
                 texto=crit_in.texto,
                 peso_porcentaje=crit_in.peso_porcentaje,
                 aspecto_id=aspecto.id,
                 orden=crit_in.orden if crit_in.orden else orden_crit,
-            )
-            db.add(criterio)
+            ))
 
         nuevos_aspectos.append(aspecto)
 
@@ -206,7 +202,7 @@ async def importar_excel_criterios(
     """
     actividad = _verificar_actividad(actividad_id, usuario["email"], db)
 
-    if _tiene_calificaciones(actividad_id, db):
+    if CalificacionRepository(db).existen_para_actividad(actividad_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"No se puede modificar la rúbrica de '{actividad.nombre}' porque ya "
@@ -237,7 +233,7 @@ def vincular_codigo_abet(
     El RA padre se agrega al ra_abet del curso si falta.
     """
     actividad = _verificar_actividad(actividad_id, usuario["email"], db)
-    aspecto = db.get(Aspecto, aspecto_id)
+    aspecto = RubricaRepository(db).get_aspecto(aspecto_id)
     if not aspecto or aspecto.actividad_id != actividad_id:
         raise HTTPException(status_code=404, detail="Aspecto no encontrado en esta actividad")
 

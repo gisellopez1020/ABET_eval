@@ -1,16 +1,18 @@
-from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import (
-    Curso, Actividad, Seccion, Estudiante, EquipoTrabajo, MiembroEquipo,
-    Calificacion, Criterio, Aspecto,
-)
+from app.models import Actividad, Seccion, EquipoTrabajo
 from app.models.actividad import TipoActividad
+from app.repositories.actividad import ActividadRepository
+from app.repositories.calificacion import CalificacionRepository
+from app.repositories.curso import CursoRepository
+from app.repositories.equipo import EquipoRepository
+from app.repositories.estudiante import EstudianteRepository
+from app.repositories.rubrica import RubricaRepository
+from app.repositories.seccion import SeccionRepository
 from app.schemas.equipo import (
     EquiposPayload, EquipoUpdate, EquipoOut,
     ModoCalificacionItem, ModoCalificacionResponse,
@@ -23,13 +25,13 @@ router = APIRouter(tags=["Equipos de trabajo"])
 def _verificar_actividad_seccion(
     actividad_id: int, seccion_id: int, email: str, db: Session
 ) -> tuple[Actividad, Seccion]:
-    actividad = db.get(Actividad, actividad_id)
+    actividad = ActividadRepository(db).get(actividad_id)
     if not actividad:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = db.get(Curso, actividad.curso_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     if not curso or curso.docente_email != email:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
-    seccion = db.get(Seccion, seccion_id)
+    seccion = SeccionRepository(db).get(seccion_id)
     if not seccion or seccion.curso_id != actividad.curso_id:
         raise HTTPException(
             status_code=404, detail="Sección no encontrada en este curso"
@@ -44,18 +46,7 @@ def _validar_sin_otro_equipo(
     """Un estudiante solo puede estar en un equipo por actividad (en otras actividades, sí)."""
     if not estudiante_ids:
         return
-    query = (
-        db.query(Estudiante.nombre_completo, EquipoTrabajo.nombre)
-        .join(MiembroEquipo, MiembroEquipo.estudiante_id == Estudiante.id)
-        .join(EquipoTrabajo, MiembroEquipo.equipo_id == EquipoTrabajo.id)
-        .filter(
-            EquipoTrabajo.actividad_id == actividad_id,
-            MiembroEquipo.estudiante_id.in_(estudiante_ids),
-        )
-    )
-    if excluir_equipo_id is not None:
-        query = query.filter(EquipoTrabajo.id != excluir_equipo_id)
-    choque = query.first()
+    choque = EquipoRepository(db).choque_de_membresia(estudiante_ids, actividad_id, excluir_equipo_id)
     if choque:
         raise HTTPException(
             status_code=400,
@@ -63,65 +54,13 @@ def _validar_sin_otro_equipo(
         )
 
 
-def _nota_total_equipo(equipo_id: int, actividad_id: int, db: Session) -> Optional[Decimal]:
-    """Suma las notas parciales de todos los criterios calificados para el equipo."""
-    result = (
-        db.query(func.sum(Calificacion.nota_calculada))
-        .join(Criterio, Calificacion.criterio_id == Criterio.id)
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(
-            Calificacion.equipo_id == equipo_id,
-            Aspecto.actividad_id == actividad_id,
-        )
-        .scalar()
-    )
-    return result
-
-
-def _nota_total_estudiante(estudiante_id: int, actividad_id: int, db: Session) -> Optional[Decimal]:
-    result = (
-        db.query(func.sum(Calificacion.nota_calculada))
-        .join(Criterio, Calificacion.criterio_id == Criterio.id)
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(
-            Calificacion.estudiante_id == estudiante_id,
-            Aspecto.actividad_id == actividad_id,
-        )
-        .scalar()
-    )
-    return result
-
-
-def _criterios_calificados_equipo(equipo_id: int, actividad_id: int, db: Session) -> int:
-    return (
-        db.query(func.count(Calificacion.id))
-        .join(Criterio, Calificacion.criterio_id == Criterio.id)
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(
-            Calificacion.equipo_id == equipo_id,
-            Aspecto.actividad_id == actividad_id,
-        )
-        .scalar()
-        or 0
-    )
-
-
-def _total_criterios_actividad(actividad_id: int, db: Session) -> int:
-    return (
-        db.query(func.count(Criterio.id))
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(Aspecto.actividad_id == actividad_id)
-        .scalar()
-        or 0
-    )
-
-
 def _build_equipo_out(equipo: EquipoTrabajo, actividad_id: int, db: Session) -> EquipoOut:
     miembros = [EstudianteOut.model_validate(m.estudiante) for m in equipo.miembros]
-    total_criterios = _total_criterios_actividad(actividad_id, db)
-    calificados = _criterios_calificados_equipo(equipo.id, actividad_id, db)
+    calificaciones = CalificacionRepository(db)
+    total_criterios = RubricaRepository(db).contar_criterios(actividad_id)
+    calificados = calificaciones.contar_de_equipo(equipo.id, actividad_id)
     calificado = total_criterios > 0 and calificados >= total_criterios
-    nota = _nota_total_equipo(equipo.id, actividad_id, db) if calificado else None
+    nota = calificaciones.suma_notas_de_equipo(equipo.id, actividad_id) if calificado else None
     return EquipoOut(
         id=equipo.id,
         nombre=equipo.nombre,
@@ -146,14 +85,7 @@ def listar_equipos(
 ):
     """Lista los equipos de trabajo para la actividad en la sección indicada."""
     _verificar_actividad_seccion(actividad_id, seccion_id, usuario["email"], db)
-    equipos = (
-        db.query(EquipoTrabajo)
-        .filter(
-            EquipoTrabajo.actividad_id == actividad_id,
-            EquipoTrabajo.seccion_id == seccion_id,
-        )
-        .all()
-    )
+    equipos = EquipoRepository(db).de_actividad_y_seccion(actividad_id, seccion_id)
     return [_build_equipo_out(e, actividad_id, db) for e in equipos]
 
 
@@ -186,9 +118,10 @@ def crear_equipos(
 
     # Validar todos los miembros antes de crear nada
     equipo_de: dict[int, int] = {}  # estudiante_id -> índice del equipo del payload
+    estudiantes = EstudianteRepository(db)
     for idx, eq_in in enumerate(body.equipos):
         for est_id in eq_in.estudiante_ids:
-            estudiante = db.get(Estudiante, est_id)
+            estudiante = estudiantes.get(est_id)
             if not estudiante or estudiante.seccion_id != seccion_id:
                 raise HTTPException(
                     status_code=400,
@@ -203,18 +136,17 @@ def crear_equipos(
                 )
     _validar_sin_otro_equipo(list(equipo_de), actividad_id, db)
 
+    equipos = EquipoRepository(db)
     nuevos: List[EquipoTrabajo] = []
     for eq_in in body.equipos:
-        equipo = EquipoTrabajo(
+        equipo = equipos.agregar(EquipoTrabajo(
             nombre=eq_in.nombre,
             actividad_id=actividad_id,
             seccion_id=seccion_id,
-        )
-        db.add(equipo)
-        db.flush()
+        ))
 
         for est_id in eq_in.estudiante_ids:
-            db.add(MiembroEquipo(equipo_id=equipo.id, estudiante_id=est_id))
+            equipos.agregar_miembro(equipo.id, est_id)
 
         nuevos.append(equipo)
 
@@ -240,11 +172,12 @@ def editar_equipo(
     Edita el nombre del equipo y/o sus integrantes. Cada integrante debe ser de la
     sección del equipo y no estar en otro equipo de la actividad (400 si no).
     """
-    equipo = db.get(EquipoTrabajo, equipo_id)
+    equipos = EquipoRepository(db)
+    equipo = equipos.get(equipo_id)
     if not equipo:
         raise HTTPException(status_code=404, detail="Equipo no encontrado")
-    actividad = db.get(Actividad, equipo.actividad_id)
-    curso = db.get(Curso, actividad.curso_id)
+    actividad = ActividadRepository(db).get(equipo.actividad_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     if not curso or curso.docente_email != usuario["email"]:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre este equipo")
 
@@ -252,8 +185,9 @@ def editar_equipo(
         equipo.nombre = body.nombre
 
     if body.estudiante_ids is not None:
+        estudiantes = EstudianteRepository(db)
         for est_id in body.estudiante_ids:
-            estudiante = db.get(Estudiante, est_id)
+            estudiante = estudiantes.get(est_id)
             if not estudiante or estudiante.seccion_id != equipo.seccion_id:
                 raise HTTPException(
                     status_code=400,
@@ -262,11 +196,9 @@ def editar_equipo(
         # El propio equipo no cuenta: guardar sin cambios no choca consigo mismo
         _validar_sin_otro_equipo(body.estudiante_ids, equipo.actividad_id, db, excluir_equipo_id=equipo_id)
 
-        for m in equipo.miembros:
-            db.delete(m)
-        db.flush()
+        equipos.eliminar_miembros(equipo)
         for est_id in body.estudiante_ids:
-            db.add(MiembroEquipo(equipo_id=equipo_id, estudiante_id=est_id))
+            equipos.agregar_miembro(equipo_id, est_id)
 
     db.commit()
     db.refresh(equipo)
@@ -291,24 +223,18 @@ def modo_calificacion(
     actividad, seccion = _verificar_actividad_seccion(
         actividad_id, seccion_id, usuario["email"], db
     )
-    total_criterios = _total_criterios_actividad(actividad_id, db)
+    total_criterios = RubricaRepository(db).contar_criterios(actividad_id)
+    calificaciones = CalificacionRepository(db)
 
     if actividad.tipo == TipoActividad.grupal:
-        equipos = (
-            db.query(EquipoTrabajo)
-            .filter(
-                EquipoTrabajo.actividad_id == actividad_id,
-                EquipoTrabajo.seccion_id == seccion_id,
-            )
-            .all()
-        )
+        equipos = EquipoRepository(db).de_actividad_y_seccion(actividad_id, seccion_id)
         items: List[ModoCalificacionItem] = []
         calificados = 0
         for e in equipos:
             miembros = [EstudianteOut.model_validate(m.estudiante) for m in e.miembros]
-            calif_count = _criterios_calificados_equipo(e.id, actividad_id, db)
+            calif_count = calificaciones.contar_de_equipo(e.id, actividad_id)
             es_calificado = total_criterios > 0 and calif_count >= total_criterios
-            nota = _nota_total_equipo(e.id, actividad_id, db) if es_calificado else None
+            nota = calificaciones.suma_notas_de_equipo(e.id, actividad_id) if es_calificado else None
             if es_calificado:
                 calificados += 1
             items.append(ModoCalificacionItem(
@@ -326,28 +252,13 @@ def modo_calificacion(
         )
 
     else:  # individual
-        estudiantes = (
-            db.query(Estudiante)
-            .filter(Estudiante.seccion_id == seccion_id)
-            .order_by(Estudiante.nombre_completo)
-            .all()
-        )
+        estudiantes = EstudianteRepository(db).de_seccion(seccion_id)
         items = []
         calificados = 0
         for est in estudiantes:
-            calif_count = (
-                db.query(func.count(Calificacion.id))
-                .join(Criterio, Calificacion.criterio_id == Criterio.id)
-                .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-                .filter(
-                    Calificacion.estudiante_id == est.id,
-                    Aspecto.actividad_id == actividad_id,
-                )
-                .scalar()
-                or 0
-            )
+            calif_count = calificaciones.contar_de_estudiante(est.id, actividad_id)
             es_calificado = total_criterios > 0 and calif_count >= total_criterios
-            nota = _nota_total_estudiante(est.id, actividad_id, db) if es_calificado else None
+            nota = calificaciones.suma_notas_de_estudiante(est.id, actividad_id) if es_calificado else None
             if es_calificado:
                 calificados += 1
             items.append(ModoCalificacionItem(

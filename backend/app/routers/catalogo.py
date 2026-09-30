@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Aspecto, Curso, RaAbetCatalogo
+from app.models import RaAbetCatalogo
+from app.repositories.curso import CursoRepository
+from app.repositories.ra_abet import RaAbetRepository
+from app.repositories.rubrica import RubricaRepository
 from app.schemas import (
     RaAbetCreate, RaAbetUpdate, RaAbetOut, RaAbetImportPayload, RaAbetImportResultado,
 )
@@ -15,26 +18,8 @@ from app.schemas import (
 router = APIRouter(prefix="/catalogo/ra-abet", tags=["Catálogo RA ABET"])
 
 
-def _cursos_que_usan(codigo: str, db: Session) -> int:
-    """
-    Cuenta los cursos (de cualquier docente) cuyo ra_abet contiene el código.
-    Se revisa en Python en vez de con operadores jsonb para que sea portable;
-    el volumen de cursos es pequeño.
-    """
-    return sum(1 for (ra_abet,) in db.query(Curso.ra_abet).all() if codigo in (ra_abet or []))
-
-
-def _aspectos_que_usan(codigo: str, db: Session) -> int:
-    """Aspectos de rúbrica (de cualquier docente) vinculados al código."""
-    return db.query(Aspecto).filter(Aspecto.codigo_abet == codigo).count()
-
-
-def _contar_hijos(codigo: str, db: Session) -> int:
-    return db.query(RaAbetCatalogo).filter(RaAbetCatalogo.codigo_padre == codigo).count()
-
-
 def _obtener(codigo: str, db: Session) -> RaAbetCatalogo:
-    ra = db.get(RaAbetCatalogo, codigo)
+    ra = RaAbetRepository(db).get(codigo)
     if not ra:
         raise HTTPException(status_code=404, detail=f"El código '{codigo}' no existe en el catálogo")
     return ra
@@ -42,7 +27,7 @@ def _obtener(codigo: str, db: Session) -> RaAbetCatalogo:
 
 def _validar_padre(codigo_padre: str, db: Session) -> RaAbetCatalogo:
     """El padre debe existir y ser un Resultado de Aprendizaje (solo 2 niveles, nunca 3)."""
-    padre = db.get(RaAbetCatalogo, codigo_padre)
+    padre = RaAbetRepository(db).get(codigo_padre)
     if not padre:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -72,10 +57,7 @@ def listar_ra_abet(
     usuario: dict = Depends(get_current_user),
 ):
     """Devuelve el catálogo ordenado por código; con `solo_raiz=true`, solo el nivel superior."""
-    query = db.query(RaAbetCatalogo)
-    if solo_raiz:
-        query = query.filter(RaAbetCatalogo.codigo_padre.is_(None))
-    return query.order_by(RaAbetCatalogo.codigo).all()
+    return RaAbetRepository(db).listar(solo_raiz)
 
 
 @router.post(
@@ -93,7 +75,8 @@ def crear_ra_abet(
     Crea un código nuevo. Si no se envía `so`, se deduce del código ("2.1" -> "2").
     Un Criterio (con `codigo_padre` y `peso`) sin competencia hereda la de su RA.
     """
-    if db.get(RaAbetCatalogo, body.codigo):
+    repo = RaAbetRepository(db)
+    if repo.get(body.codigo):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"El código '{body.codigo}' ya existe en el catálogo",
@@ -102,8 +85,7 @@ def crear_ra_abet(
     if body.codigo_padre is not None:
         padre = _validar_padre(body.codigo_padre, db)
         datos["competencia"] = body.competencia or padre.competencia
-    ra = RaAbetCatalogo(**datos)
-    db.add(ra)
+    ra = repo.agregar(RaAbetCatalogo(**datos))
     db.commit()
     db.refresh(ra)
     return ra
@@ -125,7 +107,8 @@ def importar_ra_abet(
     y luego los Criterios, sin importar el orden del archivo. Los pesos no tienen
     que sumar 1.0.
     """
-    existentes: Dict[str, RaAbetCatalogo] = {ra.codigo: ra for ra in db.query(RaAbetCatalogo).all()}
+    repo = RaAbetRepository(db)
+    existentes: Dict[str, RaAbetCatalogo] = repo.por_codigo()
     archivo = {item.codigo: item for item in body.items}
 
     def padre_final(codigo: str) -> Optional[str]:
@@ -173,10 +156,10 @@ def importar_ra_abet(
                         setattr(existente, campo, valor)
                     actualizados += 1
                 else:
-                    db.add(RaAbetCatalogo(codigo=item.codigo, **{**item.model_dump(exclude={"codigo"}), **datos}))
+                    repo.agregar(RaAbetCatalogo(codigo=item.codigo, **{**item.model_dump(exclude={"codigo"}), **datos}))
                     creados += 1
             # Los RA deben existir en la BD antes de insertar Criterios que los referencian (FK)
-            db.flush()
+            repo.flush()
         db.commit()
     except Exception:
         db.rollback()
@@ -227,14 +210,14 @@ def eliminar_ra_abet(
     ra_abet y ningún aspecto de rúbrica está vinculado a él.
     """
     ra = _obtener(codigo, db)
-    hijos = _contar_hijos(codigo, db)
+    hijos = RaAbetRepository(db).contar_hijos(codigo)
     if hijos:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"No se puede eliminar '{codigo}' porque tiene {hijos} "
                    f"criterio{'s' if hijos != 1 else ''}; elimínelos primero.",
         )
-    en_uso = _cursos_que_usan(codigo, db)
+    en_uso = CursoRepository(db).contar_que_usan_ra(codigo)
     if en_uso:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -242,12 +225,12 @@ def eliminar_ra_abet(
                    f"{en_uso} curso{'s' if en_uso != 1 else ''}.",
         )
     # Desvincular en silencio haría desaparecer sus calificaciones del reporte ABET
-    aspectos = _aspectos_que_usan(codigo, db)
+    aspectos = RubricaRepository(db).contar_aspectos_con_codigo(codigo)
     if aspectos:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"No se puede eliminar '{codigo}' porque está vinculado a {aspectos} "
                    f"aspecto{'s' if aspectos != 1 else ''} de rúbrica.",
         )
-    db.delete(ra)
+    RaAbetRepository(db).eliminar(ra)
     db.commit()

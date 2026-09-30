@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Seccion, Estudiante, Curso
+from app.models import Seccion, Estudiante
+from app.repositories.curso import CursoRepository
+from app.repositories.estudiante import EstudianteRepository
+from app.repositories.seccion import SeccionRepository
 from app.schemas import EstudianteCreate, EstudianteListadoOut, EstudianteOut, ImportacionCSVResultado
 from app.schemas.estudiante import EstudianteCreado, EstudianteUpdate, VistaPreviaEstudiantes
 from app.services.exportar_estudiantes import (
@@ -39,10 +42,10 @@ router = APIRouter(tags=["Estudiantes"])
 
 
 def _verificar_seccion(seccion_id: int, email: str, db: Session) -> Seccion:
-    seccion = db.get(Seccion, seccion_id)
+    seccion = SeccionRepository(db).get(seccion_id)
     if not seccion:
         raise HTTPException(status_code=404, detail="Sección no encontrada")
-    curso = db.get(Curso, seccion.curso_id)
+    curso = CursoRepository(db).get(seccion.curso_id)
     if not curso or curso.docente_email != email:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta sección")
     return seccion
@@ -221,12 +224,7 @@ def listar_estudiantes(
     ponderado sobre las actividades calificadas del curso (ver services/notas.py).
     """
     seccion = _verificar_seccion(seccion_id, usuario["email"], db)
-    estudiantes = (
-        db.query(Estudiante)
-        .filter(Estudiante.seccion_id == seccion_id)
-        .order_by(Estudiante.nombre_completo)
-        .all()
-    )
+    estudiantes = EstudianteRepository(db).de_seccion(seccion_id)
     promedios = promedios_estudiantes(db, seccion.curso_id, [e.id for e in estudiantes])
     return [
         EstudianteListadoOut(
@@ -255,13 +253,12 @@ def agregar_estudiante(
     """
     _verificar_seccion(seccion_id, usuario["email"], db)
     email, email_invalido = _normalizar_email(body.email)
-    estudiante = Estudiante(
+    estudiante = EstudianteRepository(db).agregar(Estudiante(
         nombre_completo=body.nombre_completo.strip().upper(),
         codigo_estudiante=body.codigo_estudiante.strip(),
         email=email,
         seccion_id=seccion_id,
-    )
-    db.add(estudiante)
+    ))
     db.commit()
     db.refresh(estudiante)
     return EstudianteCreado(
@@ -298,13 +295,15 @@ async def importar_csv(
     seccion = _verificar_seccion(seccion_id, usuario["email"], db)
 
     validos, errores = _procesar_filas(await _leer_filas(archivo), seccion.nombre)
-    for nombre, codigo, email in validos:
-        db.add(Estudiante(
+    EstudianteRepository(db).agregar_varios([
+        Estudiante(
             nombre_completo=nombre,
             codigo_estudiante=codigo,
             email=email,
             seccion_id=seccion_id,
-        ))
+        )
+        for nombre, codigo, email in validos
+    ])
 
     db.commit()
     return ImportacionCSVResultado(importados=len(validos), errores=errores)
@@ -356,7 +355,7 @@ def exportar_excel(
     email = usuario["email"]
     curso = None
     if curso_id is not None:
-        curso = db.get(Curso, curso_id)
+        curso = CursoRepository(db).get(curso_id)
         if not curso:
             raise HTTPException(status_code=404, detail="Asignatura no encontrada")
         if curso.docente_email != email:
@@ -367,18 +366,11 @@ def exportar_excel(
         if curso is not None and seccion.curso_id != curso.id:
             raise HTTPException(status_code=404, detail="Sección no encontrada en esta asignatura")
 
-    query = (
-        db.query(Estudiante, Seccion, Curso)
-        .join(Seccion, Estudiante.seccion_id == Seccion.id)
-        .join(Curso, Seccion.curso_id == Curso.id)
-        .filter(Curso.docente_email == email)
-    )
+    repo = EstudianteRepository(db)
     if seccion is not None:
-        query = query.filter(Seccion.id == seccion.id)
+        resultados = repo.para_exportar(email, seccion_id=seccion.id, solo_activas=False)
     else:
-        query = query.filter(Seccion.activo == True)  # noqa: E712
-        if curso is not None:
-            query = query.filter(Curso.id == curso.id)
+        resultados = repo.para_exportar(email, curso_id=curso.id if curso is not None else None)
     filas = [
         FilaEstudiante(
             nombre_completo=est.nombre_completo,
@@ -387,11 +379,11 @@ def exportar_excel(
             grupo=sec.nombre,
             asignatura=f"{cur.nombre} ({cur.codigo} · {cur.periodo})",
         )
-        for est, sec, cur in query.order_by(Curso.nombre, Seccion.nombre, Estudiante.nombre_completo).all()
+        for est, sec, cur in resultados
     ]
 
     # El archivo lleva el código de la asignatura y la sección solo si se filtró por ellas
-    curso_archivo = curso or (db.get(Curso, seccion.curso_id) if seccion else None)
+    curso_archivo = curso or (CursoRepository(db).get(seccion.curso_id) if seccion else None)
     nombre = nombre_archivo_estudiantes(
         [*([curso_archivo.codigo] if curso_archivo else []), *([seccion.nombre] if seccion else [])]
     )
@@ -421,11 +413,12 @@ def editar_estudiante(
     de correo no bloquea la edición: se conserva el que había (en blanco si no había)
     y la respuesta trae un `aviso`.
     """
-    estudiante = db.get(Estudiante, estudiante_id)
+    repo = EstudianteRepository(db)
+    estudiante = repo.get(estudiante_id)
     if not estudiante:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-    seccion = db.get(Seccion, estudiante.seccion_id)
-    curso = db.get(Curso, seccion.curso_id)
+    seccion = SeccionRepository(db).get(estudiante.seccion_id)
+    curso = CursoRepository(db).get(seccion.curso_id)
     if not curso or curso.docente_email != usuario["email"]:
         raise HTTPException(status_code=403, detail="No tiene permiso para editar este estudiante")
 
@@ -462,13 +455,14 @@ def eliminar_estudiante(
     usuario: dict = Depends(get_current_user),
 ):
     """Elimina un estudiante. También elimina sus calificaciones individuales."""
-    estudiante = db.get(Estudiante, estudiante_id)
+    repo = EstudianteRepository(db)
+    estudiante = repo.get(estudiante_id)
     if not estudiante:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-    seccion = db.get(Seccion, estudiante.seccion_id)
-    curso = db.get(Curso, seccion.curso_id)
+    seccion = SeccionRepository(db).get(estudiante.seccion_id)
+    curso = CursoRepository(db).get(seccion.curso_id)
     if not curso or curso.docente_email != usuario["email"]:
         raise HTTPException(status_code=403, detail="No tiene permiso para eliminar este estudiante")
 
-    db.delete(estudiante)
+    repo.eliminar(estudiante)
     db.commit()

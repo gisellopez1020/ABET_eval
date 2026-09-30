@@ -2,14 +2,17 @@ from decimal import Decimal
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import (
-    Curso, Actividad, Seccion, Estudiante, EquipoTrabajo,
-    Calificacion, Criterio, Aspecto,
-)
+from app.models import Actividad, Calificacion
+from app.repositories.actividad import ActividadRepository
+from app.repositories.calificacion import CalificacionRepository
+from app.repositories.curso import CursoRepository
+from app.repositories.equipo import EquipoRepository
+from app.repositories.estudiante import EstudianteRepository
+from app.repositories.rubrica import RubricaRepository
+from app.repositories.seccion import SeccionRepository
 from app.schemas.calificacion import (
     CalificacionCreate, CalificacionOut, CalificacionUpdate,
     CalificacionMasivo, ResumenCalificacion,
@@ -20,33 +23,21 @@ router = APIRouter(tags=["Calificaciones"])
 
 
 def _verificar_actividad_docente(actividad_id: int, email: str, db: Session) -> Actividad:
-    actividad = db.get(Actividad, actividad_id)
+    actividad = ActividadRepository(db).get(actividad_id)
     if not actividad:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = db.get(Curso, actividad.curso_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     if not curso or curso.docente_email != email:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
     return actividad
 
 
-def _criterios_de_actividad(actividad_id: int, db: Session) -> List[Criterio]:
-    return (
-        db.query(Criterio)
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(Aspecto.actividad_id == actividad_id)
-        .all()
-    )
-
-
 def _nota_total(entity_id: int, es_equipo: bool, actividad_id: int, db: Session) -> Decimal:
-    filter_col = Calificacion.equipo_id if es_equipo else Calificacion.estudiante_id
-    result = (
-        db.query(func.sum(Calificacion.nota_calculada))
-        .join(Criterio, Calificacion.criterio_id == Criterio.id)
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(filter_col == entity_id, Aspecto.actividad_id == actividad_id)
-        .scalar()
-    )
+    repo = CalificacionRepository(db)
+    if es_equipo:
+        result = repo.suma_notas_de_equipo(entity_id, actividad_id)
+    else:
+        result = repo.suma_notas_de_estudiante(entity_id, actividad_id)
     return result or Decimal("0")
 
 
@@ -66,41 +57,19 @@ def resumen_calificaciones(
     o estudiante (individual) de la sección.
     """
     actividad = _verificar_actividad_docente(actividad_id, usuario["email"], db)
-    seccion = db.get(Seccion, seccion_id)
+    seccion = SeccionRepository(db).get(seccion_id)
     if not seccion or seccion.curso_id != actividad.curso_id:
         raise HTTPException(status_code=404, detail="Sección no encontrada en este curso")
 
-    total_criterios = (
-        db.query(func.count(Criterio.id))
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(Aspecto.actividad_id == actividad_id)
-        .scalar()
-        or 0
-    )
+    total_criterios = RubricaRepository(db).contar_criterios(actividad_id)
+    calificaciones = CalificacionRepository(db)
 
     resultado: List[ResumenCalificacion] = []
 
     if actividad.tipo.value == "grupal":
-        equipos = (
-            db.query(EquipoTrabajo)
-            .filter(
-                EquipoTrabajo.actividad_id == actividad_id,
-                EquipoTrabajo.seccion_id == seccion_id,
-            )
-            .all()
-        )
+        equipos = EquipoRepository(db).de_actividad_y_seccion(actividad_id, seccion_id)
         for equipo in equipos:
-            calificados_count = (
-                db.query(func.count(Calificacion.id))
-                .join(Criterio, Calificacion.criterio_id == Criterio.id)
-                .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-                .filter(
-                    Calificacion.equipo_id == equipo.id,
-                    Aspecto.actividad_id == actividad_id,
-                )
-                .scalar()
-                or 0
-            )
+            calificados_count = calificaciones.contar_de_equipo(equipo.id, actividad_id)
             calificado = total_criterios > 0 and calificados_count >= total_criterios
             nota = _nota_total(equipo.id, True, actividad_id, db) if calificado else None
             resultado.append(ResumenCalificacion(
@@ -112,24 +81,9 @@ def resumen_calificaciones(
                 criterios_totales=total_criterios,
             ))
     else:
-        estudiantes = (
-            db.query(Estudiante)
-            .filter(Estudiante.seccion_id == seccion_id)
-            .order_by(Estudiante.nombre_completo)
-            .all()
-        )
+        estudiantes = EstudianteRepository(db).de_seccion(seccion_id)
         for est in estudiantes:
-            calificados_count = (
-                db.query(func.count(Calificacion.id))
-                .join(Criterio, Calificacion.criterio_id == Criterio.id)
-                .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-                .filter(
-                    Calificacion.estudiante_id == est.id,
-                    Aspecto.actividad_id == actividad_id,
-                )
-                .scalar()
-                or 0
-            )
+            calificados_count = calificaciones.contar_de_estudiante(est.id, actividad_id)
             calificado = total_criterios > 0 and calificados_count >= total_criterios
             nota = _nota_total(est.id, False, actividad_id, db) if calificado else None
             resultado.append(ResumenCalificacion(
@@ -142,17 +96,6 @@ def resumen_calificaciones(
             ))
 
     return resultado
-
-
-def _calificaciones_de(filtro, actividad_id: int, db: Session) -> List[Calificacion]:
-    """Calificaciones guardadas de una entidad (filtro por equipo o estudiante) en los criterios de la actividad."""
-    return (
-        db.query(Calificacion)
-        .join(Criterio, Calificacion.criterio_id == Criterio.id)
-        .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
-        .filter(filtro, Aspecto.actividad_id == actividad_id)
-        .all()
-    )
 
 
 @router.get(
@@ -171,11 +114,11 @@ def calificaciones_equipo(
     de la actividad. Los criterios sin fila todavía no tienen calificación.
     """
     _verificar_actividad_docente(actividad_id, usuario["email"], db)
-    equipo = db.get(EquipoTrabajo, equipo_id)
+    equipo = EquipoRepository(db).get(equipo_id)
     if not equipo or equipo.actividad_id != actividad_id:
         raise HTTPException(status_code=404, detail="Equipo no encontrado en esta actividad")
 
-    return _calificaciones_de(Calificacion.equipo_id == equipo_id, actividad_id, db)
+    return CalificacionRepository(db).de_equipo(equipo_id, actividad_id)
 
 
 @router.get(
@@ -194,12 +137,12 @@ def calificaciones_estudiante(
     criterio calificado de la actividad. No incluye las de sus equipos.
     """
     actividad = _verificar_actividad_docente(actividad_id, usuario["email"], db)
-    estudiante = db.get(Estudiante, estudiante_id)
-    seccion = db.get(Seccion, estudiante.seccion_id) if estudiante else None
+    estudiante = EstudianteRepository(db).get(estudiante_id)
+    seccion = SeccionRepository(db).get(estudiante.seccion_id) if estudiante else None
     if not seccion or seccion.curso_id != actividad.curso_id:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado en este curso")
 
-    return _calificaciones_de(Calificacion.estudiante_id == estudiante_id, actividad_id, db)
+    return CalificacionRepository(db).de_estudiante(estudiante_id, actividad_id)
 
 
 @router.post(
@@ -221,25 +164,26 @@ def guardar_calificacion(
     actividad = _verificar_actividad_docente(body.actividad_id, usuario["email"], db)
 
     if body.equipo_id:
-        equipo = db.get(EquipoTrabajo, body.equipo_id)
+        equipo = EquipoRepository(db).get(body.equipo_id)
         if not equipo or equipo.actividad_id != body.actividad_id:
             raise HTTPException(
                 status_code=400,
                 detail="El equipo no pertenece a esta actividad",
             )
     if body.estudiante_id:
-        est = db.get(Estudiante, body.estudiante_id)
+        est = EstudianteRepository(db).get(body.estudiante_id)
         if not est:
             raise HTTPException(status_code=404, detail="Estudiante no encontrado")
         # Verificar que el estudiante pertenece al curso
-        seccion = db.get(Seccion, est.seccion_id)
+        seccion = SeccionRepository(db).get(est.seccion_id)
         if not seccion or seccion.curso_id != actividad.curso_id:
             raise HTTPException(
                 status_code=400,
                 detail="El estudiante no pertenece a este curso",
             )
 
-    criterios_map = {c.id: c for c in _criterios_de_actividad(body.actividad_id, db)}
+    criterios_map = {c.id: c for c in RubricaRepository(db).criterios_de_actividad(body.actividad_id)}
+    calificaciones = CalificacionRepository(db)
     guardadas: List[CalificacionOut] = []
 
     for vc in body.criterios:
@@ -253,28 +197,22 @@ def guardar_calificacion(
         nota_parcial = calcular_nota_parcial(vc.valor, criterio.peso_porcentaje)
 
         # Buscar calificación previa para este criterio + entidad
-        filtro = [Calificacion.criterio_id == vc.criterio_id]
         if body.equipo_id:
-            filtro.append(Calificacion.equipo_id == body.equipo_id)
+            existente = calificaciones.de_criterio_y_equipo(vc.criterio_id, body.equipo_id)
         else:
-            filtro.append(Calificacion.estudiante_id == body.estudiante_id)
+            existente = calificaciones.de_criterio_y_estudiante(vc.criterio_id, body.estudiante_id)
 
-        existente = db.query(Calificacion).filter(*filtro).first()
         if existente:
-            existente.valor = vc.valor
-            existente.nota_calculada = nota_parcial
-            db.flush()
+            calificaciones.actualizar(existente, vc.valor, nota_parcial)
             guardadas.append(CalificacionOut.model_validate(existente))
         else:
-            nueva = Calificacion(
+            nueva = calificaciones.agregar(Calificacion(
                 criterio_id=vc.criterio_id,
                 valor=vc.valor,
                 equipo_id=body.equipo_id,
                 estudiante_id=body.estudiante_id,
                 nota_calculada=nota_parcial,
-            )
-            db.add(nueva)
-            db.flush()
+            ))
             guardadas.append(CalificacionOut.model_validate(nueva))
 
     db.commit()
@@ -293,14 +231,15 @@ def editar_calificacion(
     usuario: dict = Depends(get_current_user),
 ):
     """Actualiza el valor binario de una calificación y recalcula su puntaje parcial."""
-    calificacion = db.get(Calificacion, calificacion_id)
+    calificacion = CalificacionRepository(db).get(calificacion_id)
     if not calificacion:
         raise HTTPException(status_code=404, detail="Calificación no encontrada")
 
-    criterio = db.get(Criterio, calificacion.criterio_id)
-    aspecto = db.get(Aspecto, criterio.aspecto_id)
-    actividad = db.get(Actividad, aspecto.actividad_id)
-    curso = db.get(Curso, actividad.curso_id)
+    rubrica = RubricaRepository(db)
+    criterio = rubrica.get_criterio(calificacion.criterio_id)
+    aspecto = rubrica.get_aspecto(criterio.aspecto_id)
+    actividad = ActividadRepository(db).get(aspecto.actividad_id)
+    curso = CursoRepository(db).get(actividad.curso_id)
     if not curso or curso.docente_email != usuario["email"]:
         raise HTTPException(status_code=403, detail="No tiene permiso sobre esta calificación")
 
@@ -330,20 +269,14 @@ def calificacion_masivo(
     """
     actividad = _verificar_actividad_docente(actividad_id, usuario["email"], db)
 
-    seccion = db.get(Seccion, body.seccion_id)
+    seccion = SeccionRepository(db).get(body.seccion_id)
     if not seccion or seccion.curso_id != actividad.curso_id:
         raise HTTPException(status_code=404, detail="Sección no encontrada en este curso")
 
-    equipos = (
-        db.query(EquipoTrabajo)
-        .filter(
-            EquipoTrabajo.actividad_id == actividad_id,
-            EquipoTrabajo.seccion_id == body.seccion_id,
-        )
-        .all()
-    )
+    equipos = EquipoRepository(db).de_actividad_y_seccion(actividad_id, body.seccion_id)
 
-    criterios_map = {c.id: c for c in _criterios_de_actividad(actividad_id, db)}
+    criterios_map = {c.id: c for c in RubricaRepository(db).criterios_de_actividad(actividad_id)}
+    calificaciones = CalificacionRepository(db)
     total_criterios = len(criterios_map)
     todas_guardadas: List[CalificacionOut] = []
 
@@ -351,7 +284,7 @@ def calificacion_masivo(
         # Criterios que el equipo ya tiene calificados: no se sobrescriben
         ya_calificados = {
             c.criterio_id
-            for c in _calificaciones_de(Calificacion.equipo_id == equipo.id, actividad_id, db)
+            for c in calificaciones.de_equipo(equipo.id, actividad_id)
         }
         if len(ya_calificados) >= total_criterios:
             continue
@@ -362,14 +295,12 @@ def calificacion_masivo(
                 continue
             ya_calificados.add(vc.criterio_id)  # un criterio repetido en el body se inserta una vez
             nota_parcial = calcular_nota_parcial(vc.valor, criterio.peso_porcentaje)
-            nueva = Calificacion(
+            nueva = calificaciones.agregar(Calificacion(
                 criterio_id=vc.criterio_id,
                 valor=vc.valor,
                 equipo_id=equipo.id,
                 nota_calculada=nota_parcial,
-            )
-            db.add(nueva)
-            db.flush()
+            ))
             todas_guardadas.append(CalificacionOut.model_validate(nueva))
 
     db.commit()
