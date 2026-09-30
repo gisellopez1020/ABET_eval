@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,6 +14,17 @@ class RubricaRepository:
 
     def get_aspecto(self, aspecto_id: int) -> Optional[Aspecto]:
         return self.db.get(Aspecto, aspecto_id)
+
+    def get_criterio(self, criterio_id: int) -> Optional[Criterio]:
+        return self.db.get(Criterio, criterio_id)
+
+    def criterios_de_actividad(self, actividad_id: int) -> List[Criterio]:
+        return (
+            self.db.query(Criterio)
+            .join(Aspecto, Criterio.aspecto_id == Aspecto.id)
+            .filter(Aspecto.actividad_id == actividad_id)
+            .all()
+        )
 
     def eliminar_aspectos_de(self, actividad: Actividad) -> None:
         """Borra los aspectos de la actividad (y sus criterios en cascada) y hace flush."""

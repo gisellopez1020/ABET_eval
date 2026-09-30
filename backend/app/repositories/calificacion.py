@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import exists, func
 from sqlalchemy.orm import Session
@@ -54,6 +54,47 @@ class CalificacionRepository:
             .filter(Calificacion.estudiante_id == estudiante_id)
             .scalar()
         )
+
+    def get(self, calificacion_id: int) -> Optional[Calificacion]:
+        return self.db.get(Calificacion, calificacion_id)
+
+    def de_equipo(self, equipo_id: int, actividad_id: int) -> List[Calificacion]:
+        """Calificaciones guardadas del equipo en los criterios de la actividad."""
+        return self._en_actividad([Calificacion], actividad_id).filter(Calificacion.equipo_id == equipo_id).all()
+
+    def de_estudiante(self, estudiante_id: int, actividad_id: int) -> List[Calificacion]:
+        """Calificaciones individuales del estudiante en los criterios de la actividad."""
+        return (
+            self._en_actividad([Calificacion], actividad_id)
+            .filter(Calificacion.estudiante_id == estudiante_id)
+            .all()
+        )
+
+    def de_criterio_y_equipo(self, criterio_id: int, equipo_id: int) -> Optional[Calificacion]:
+        return (
+            self.db.query(Calificacion)
+            .filter(Calificacion.criterio_id == criterio_id, Calificacion.equipo_id == equipo_id)
+            .first()
+        )
+
+    def de_criterio_y_estudiante(self, criterio_id: int, estudiante_id: int) -> Optional[Calificacion]:
+        return (
+            self.db.query(Calificacion)
+            .filter(Calificacion.criterio_id == criterio_id, Calificacion.estudiante_id == estudiante_id)
+            .first()
+        )
+
+    def agregar(self, calificacion: Calificacion) -> Calificacion:
+        self.db.add(calificacion)
+        self.db.flush()
+        return calificacion
+
+    def actualizar(self, calificacion: Calificacion, valor: int, nota_calculada: Decimal) -> Calificacion:
+        """Cambia el valor y la nota; el flush deja updated_at al día para la respuesta."""
+        calificacion.valor = valor
+        calificacion.nota_calculada = nota_calculada
+        self.db.flush()
+        return calificacion
 
     def existen_para_actividad(self, actividad_id: int) -> bool:
         return self.db.query(
