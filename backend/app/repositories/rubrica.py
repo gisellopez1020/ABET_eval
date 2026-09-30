@@ -18,3 +18,7 @@ class RubricaRepository:
             .filter(Aspecto.actividad_id == actividad_id)
             .scalar()
         )
+
+    def contar_aspectos_con_codigo(self, codigo_abet: str) -> int:
+        """Aspectos de rúbrica (de cualquier docente) vinculados al código."""
+        return self.db.query(Aspecto).filter(Aspecto.codigo_abet == codigo_abet).count()
