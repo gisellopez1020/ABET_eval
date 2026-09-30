@@ -26,6 +26,11 @@ export function SectionPage() {
   const [addModal, setAddModal] = useState(false);
   const [addNombre, setAddNombre] = useState('');
   const [addCodigo, setAddCodigo] = useState('');
+  const [addEmail, setAddEmail] = useState('');
+  // El estudiante se creó, pero el backend dejó el correo en blanco por no ser válido
+  const [addAviso, setAddAviso] = useState('');
+  // Estudiante que se está editando en el modal (null = el modal agrega uno nuevo)
+  const [editing, setEditing] = useState<Estudiante | null>(null);
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
 
@@ -50,22 +55,88 @@ export function SectionPage() {
     }).finally(() => setLoading(false));
   }, [cid, sid]);
 
+  const openAddModal = () => {
+    setAddAviso('');
+    setAddError('');
+    setAddModal(true);
+  };
+
+  // El mismo modal, precargado con los datos actuales
+  const openEditModal = (e: Estudiante) => {
+    setEditing(e);
+    setAddNombre(e.nombre_completo);
+    setAddCodigo(e.codigo_estudiante);
+    setAddEmail(e.email ?? '');
+    setAddAviso('');
+    setAddError('');
+    setAddModal(true);
+  };
+
+  const closeAddModal = () => {
+    setAddModal(false);
+    if (editing) {
+      // Que los datos del estudiante editado no aparezcan luego en "Agregar estudiante"
+      setEditing(null);
+      setAddNombre('');
+      setAddCodigo('');
+      setAddEmail('');
+    }
+  };
+
+  const handleUpdate = async (actual: Estudiante) => {
+    setAddLoading(true);
+    setAddError('');
+    setAddAviso('');
+    try {
+      const { aviso, ...guardado } = await estudiantesApi.update(actual.id, {
+        nombre_completo: addNombre.trim().toUpperCase(),
+        codigo_estudiante: addCodigo.trim(),
+        email: addEmail.trim() || null,
+      });
+      // La respuesta no trae el promedio del listado: se conserva el que ya se mostraba
+      setEstudiantes((prev) => prev.map((e) => (e.id === actual.id ? { ...e, ...guardado } : e)));
+      if (aviso) {
+        // Guardó el resto; el correo quedó como estaba: se muestra el que realmente hay
+        setAddEmail(guardado.email ?? '');
+        setAddAviso(`Cambios guardados. ${aviso}.`);
+        return;
+      }
+      closeAddModal();
+    } catch (err: any) {
+      setAddError(apiErrorMessage(err, 'No se pudo guardar el estudiante'));
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
   const handleAdd = async () => {
     if (!addNombre.trim() || !addCodigo.trim()) {
       setAddError('Nombre y código son obligatorios');
       return;
     }
+    if (editing) {
+      await handleUpdate(editing);
+      return;
+    }
     setAddLoading(true);
     setAddError('');
+    setAddAviso('');
     try {
-      const e = await estudiantesApi.create(sid, {
+      const { aviso, ...e } = await estudiantesApi.create(sid, {
         nombre_completo: addNombre.trim().toUpperCase(),
         codigo_estudiante: addCodigo.trim(),
+        email: addEmail.trim() || null,
       });
       setEstudiantes((prev) => [...prev, e]);
-      setAddModal(false);
+      // Se limpia siempre: el estudiante ya existe y un segundo clic lo duplicaría
       setAddNombre('');
       setAddCodigo('');
+      setAddEmail('');
+      if (aviso) {
+        setAddAviso(`Estudiante agregado. ${aviso}.`);
+        return;
+      }
+      setAddModal(false);
     } catch (err: any) {
       setAddError(err?.response?.data?.detail || 'Error al agregar estudiante');
     } finally {
@@ -202,7 +273,7 @@ export function SectionPage() {
               <Button variant="secondary" size="sm" onClick={handleExport} loading={exporting}>
                 Exportar Excel
               </Button>
-              <Button size="sm" onClick={() => setAddModal(true)}>
+              <Button size="sm" onClick={openAddModal}>
                 + Agregar
               </Button>
             </div>
@@ -221,6 +292,7 @@ export function SectionPage() {
                     <th className="text-left px-4 py-3 font-medium text-gray-600">#</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Nombre</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Código</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Correo</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -230,7 +302,13 @@ export function SectionPage() {
                       <td className="px-4 py-3 text-gray-400">{i + 1}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{e.nombre_completo}</td>
                       <td className="px-4 py-3 text-gray-600">{e.codigo_estudiante}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-gray-600" title={e.email ? undefined : 'Sin correo registrado'}>
+                        {e.email ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <Button variant="ghost" size="sm" onClick={() => openEditModal(e)}>
+                          Editar
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -250,7 +328,7 @@ export function SectionPage() {
       </div>
 
       {/* Modal agregar */}
-      <Modal open={addModal} onClose={() => setAddModal(false)} title="Agregar estudiante">
+      <Modal open={addModal} onClose={closeAddModal} title={editing ? 'Editar estudiante' : 'Agregar estudiante'}>
         <div className="space-y-4">
           <Input
             label="Nombre completo"
@@ -264,10 +342,18 @@ export function SectionPage() {
             onChange={(e) => setAddCodigo(e.target.value)}
             placeholder="2021001"
           />
+          <Input
+            label="Correo (opcional)"
+            type="email"
+            value={addEmail}
+            onChange={(e) => setAddEmail(e.target.value)}
+            placeholder="oscar.prada@uao.edu.co"
+          />
+          {addAviso && <p className="text-sm text-amber-700">{addAviso}</p>}
           {addError && <p className="text-sm text-uao-accent">{addError}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setAddModal(false)}>Cancelar</Button>
-            <Button onClick={handleAdd} loading={addLoading}>Agregar</Button>
+            <Button variant="ghost" onClick={closeAddModal}>{editing && addAviso ? 'Cerrar' : 'Cancelar'}</Button>
+            <Button onClick={handleAdd} loading={addLoading}>{editing ? 'Guardar cambios' : 'Agregar'}</Button>
           </div>
         </div>
       </Modal>

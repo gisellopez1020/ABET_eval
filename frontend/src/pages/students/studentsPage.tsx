@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Plus, Search, Filter, Trash2, X } from 'lucide-react';
+import { Download, PencilLine, Plus, Search, Filter, Trash2, X } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
@@ -21,6 +21,7 @@ interface StudentRow {
   id: number;
   nombre: string;
   codigo: string;
+  email: string | null;
   periodo: string;
   promedio: number | null;
   grupo: string;
@@ -57,6 +58,11 @@ export default function StudentsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentCode, setNewStudentCode] = useState('');
+  const [newStudentEmail, setNewStudentEmail] = useState('');
+  // El estudiante se creó, pero el backend dejó el correo en blanco por no ser válido
+  const [createAviso, setCreateAviso] = useState('');
+  // Estudiante que se está editando en el modal (null = el modal crea uno nuevo)
+  const [editingStudent, setEditingStudent] = useState<StudentRow | null>(null);
   const [createSeccionId, setCreateSeccionId] = useState<number | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -90,6 +96,7 @@ export default function StudentsPage() {
             id: estudiante.id,
             nombre: estudiante.nombre_completo,
             codigo: estudiante.codigo_estudiante,
+            email: estudiante.email ?? null,
             periodo: seccion.cursoPeriodo,
             promedio: estudiante.promedio ?? null,
             grupo: seccion.nombre,
@@ -169,7 +176,59 @@ export default function StudentsPage() {
     // Por defecto, la sección del filtro si hay una elegida
     setCreateSeccionId(sectionFilter);
     setCreateError('');
+    setCreateAviso('');
     setShowCreateModal(true);
+  };
+
+  // El mismo modal, precargado con los datos actuales
+  const openEditModal = (student: StudentRow) => {
+    setEditingStudent(student);
+    setNewStudentName(student.nombre);
+    setNewStudentCode(student.codigo);
+    setNewStudentEmail(student.email ?? '');
+    setCreateSeccionId(student.seccionId);
+    setCreateError('');
+    setCreateAviso('');
+    setShowCreateModal(true);
+  };
+
+  const closeStudentModal = () => {
+    setShowCreateModal(false);
+    setCreateError('');
+    if (editingStudent) {
+      // Que los datos del estudiante editado no aparezcan luego en "Nuevo estudiante"
+      setEditingStudent(null);
+      setNewStudentName('');
+      setNewStudentCode('');
+      setNewStudentEmail('');
+    }
+  };
+
+  const handleUpdateStudent = async (student: StudentRow) => {
+    setCreateLoading(true);
+    setCreateError('');
+    setCreateAviso('');
+
+    try {
+      const guardado = await estudiantesApi.update(student.id, {
+        nombre_completo: newStudentName.trim().toUpperCase(),
+        codigo_estudiante: newStudentCode.trim(),
+        email: newStudentEmail.trim() || null,
+      });
+
+      await loadAll();
+      if (guardado.aviso) {
+        // Guardó el resto; el correo quedó como estaba: se muestra el que realmente hay
+        setNewStudentEmail(guardado.email ?? '');
+        setCreateAviso(`Cambios guardados. ${guardado.aviso}.`);
+        return;
+      }
+      closeStudentModal();
+    } catch (error) {
+      setCreateError(apiErrorMessage(error, 'No se pudo guardar el estudiante.'));
+    } finally {
+      setCreateLoading(false);
+    }
   };
 
   const handleCreateStudent = async () => {
@@ -183,6 +242,11 @@ export default function StudentsPage() {
       return;
     }
 
+    if (editingStudent) {
+      await handleUpdateStudent(editingStudent);
+      return;
+    }
+
     if (!createSeccionId) {
       setCreateError('Debes seleccionar una sección');
       return;
@@ -190,16 +254,24 @@ export default function StudentsPage() {
 
     setCreateLoading(true);
     setCreateError('');
+    setCreateAviso('');
 
     try {
-      await estudiantesApi.create(createSeccionId, {
+      const creado = await estudiantesApi.create(createSeccionId, {
         nombre_completo: newStudentName.trim().toUpperCase(),
         codigo_estudiante: newStudentCode.trim(),
+        email: newStudentEmail.trim() || null,
       });
 
       await loadAll();
+      // Se limpia siempre: el estudiante ya existe y un segundo clic lo duplicaría
       setNewStudentName('');
       setNewStudentCode('');
+      setNewStudentEmail('');
+      if (creado.aviso) {
+        setCreateAviso(`Estudiante creado. ${creado.aviso}.`);
+        return;
+      }
       setShowCreateModal(false);
     } catch (error: any) {
       setCreateError(error?.response?.data?.detail || 'No se pudo crear el estudiante.');
@@ -254,6 +326,13 @@ export default function StudentsPage() {
       ),
     },
     { key: 'codigo', label: 'Código' },
+    {
+      key: 'email',
+      label: 'Correo',
+      render: (student) => (
+        <span title={student.email ? undefined : 'Sin correo registrado'}>{student.email ?? '—'}</span>
+      ),
+    },
     { key: 'periodo', label: 'Periodo' },
     {
       key: 'promedio',
@@ -293,6 +372,13 @@ export default function StudentsPage() {
       align: 'center',
       render: (student) => (
         <div className="flex items-center justify-center gap-2">
+          <TableActionButton
+            title="Editar estudiante"
+            onClick={() => openEditModal(student)}
+            icon={<PencilLine size={12} />}
+          >
+            Editar
+          </TableActionButton>
           <TableActionButton
             variant="danger"
             title="Eliminar estudiante"
@@ -439,15 +525,18 @@ export default function StudentsPage() {
             <div className="w-full max-w-xl rounded-xl bg-white shadow-xl">
               <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Nuevo estudiante</h2>
-                  <p className="text-sm text-gray-500">Crea un estudiante en la sección seleccionada</p>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    {editingStudent ? 'Editar estudiante' : 'Nuevo estudiante'}
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    {editingStudent
+                      ? 'Corrige el nombre, el código o el correo. Sus calificaciones y equipos no cambian.'
+                      : 'Crea un estudiante en la sección seleccionada'}
+                  </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setCreateError('');
-                  }}
+                  onClick={closeStudentModal}
                   className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                 >
                   <X size={19} />
@@ -476,11 +565,24 @@ export default function StudentsPage() {
                 </div>
 
                 <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Correo (opcional)</label>
+                  <input
+                    type="email"
+                    value={newStudentEmail}
+                    onChange={(event) => setNewStudentEmail(event.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+                    placeholder="Ej: ana.lopez@uao.edu.co"
+                  />
+                </div>
+
+                <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700">Sección</label>
                   <select
                     value={createSeccionId ?? ''}
                     onChange={(event) => setCreateSeccionId(event.target.value ? Number(event.target.value) : null)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+                    disabled={editingStudent !== null}
+                    title={editingStudent ? 'La sección no se puede cambiar al editar' : undefined}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50 disabled:text-gray-500"
                   >
                     <option value="">Selecciona una sección</option>
                     {sectionOptions.map((section) => (
@@ -490,6 +592,12 @@ export default function StudentsPage() {
                     ))}
                   </select>
                 </div>
+
+                {createAviso && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {createAviso}
+                  </div>
+                )}
 
                 {createError && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -501,13 +609,10 @@ export default function StudentsPage() {
               <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setCreateError('');
-                  }}
+                  onClick={closeStudentModal}
                   className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
                 >
-                  Cancelar
+                  {editingStudent && createAviso ? 'Cerrar' : 'Cancelar'}
                 </button>
                 <button
                   type="button"
@@ -515,7 +620,9 @@ export default function StudentsPage() {
                   onClick={handleCreateStudent}
                   className="rounded-lg bg-[#9E0B0F] px-4 py-2 text-sm font-medium text-white hover:bg-[#82090d] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {createLoading ? 'Creando...' : 'Crear estudiante'}
+                  {editingStudent
+                    ? createLoading ? 'Guardando...' : 'Guardar cambios'
+                    : createLoading ? 'Creando...' : 'Crear estudiante'}
                 </button>
               </div>
             </div>

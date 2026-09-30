@@ -52,6 +52,8 @@ export interface Estudiante {
   nombre_completo: string;
   codigo_estudiante: string;
   seccion_id: number;
+  /** Correo real (importado o escrito en el alta); null si no se registró. Nunca se deduce. */
+  email?: string | null;
   /** Solo en el listado de sección: promedio ponderado 0-5, null si no hay actividades calificadas. */
   promedio?: number | null;
 }

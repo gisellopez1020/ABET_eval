@@ -5,6 +5,20 @@ import { nombreDesdeContentDisposition } from '../utils/descarga';
 export interface EstudianteCreate {
   nombre_completo: string;
   codigo_estudiante: string;
+  /** Opcional. Si no tiene formato de correo, el estudiante se crea igual sin correo (ver aviso). */
+  email?: string | null;
+}
+
+/** Solo se cambia lo que se envíe. `email: null` borra el correo. La sección no se edita. */
+export interface EstudianteUpdate {
+  nombre_completo?: string;
+  codigo_estudiante?: string;
+  email?: string | null;
+}
+
+/** Respuesta del alta manual y de la edición: `aviso` explica qué pasó con un correo no válido. */
+export interface EstudianteCreado extends Estudiante {
+  aviso?: string | null;
 }
 
 export interface ImportacionCSVResultado {
@@ -22,8 +36,11 @@ export const estudiantesApi = {
     apiClient.get<Estudiante[]>(`/secciones/${seccionId}/estudiantes`).then((r) => r.data),
   create: (seccionId: number, data: EstudianteCreate) =>
     apiClient
-      .post<Estudiante>(`/secciones/${seccionId}/estudiantes`, data)
+      .post<EstudianteCreado>(`/secciones/${seccionId}/estudiantes`, data)
       .then((r) => r.data),
+  /** Un correo no válido no bloquea la edición: se conserva el anterior y llega un aviso. */
+  update: (id: number, data: EstudianteUpdate) =>
+    apiClient.put<EstudianteCreado>(`/estudiantes/${id}`, data).then((r) => r.data),
   /** Acepta CSV o .xlsx: el backend detecta el formato por la extensión o el content_type. */
   importCsv: (seccionId: number, file: File) => {
     const form = new FormData();
