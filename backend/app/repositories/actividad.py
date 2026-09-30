@@ -28,7 +28,6 @@ class ActividadRepository:
 
     def agregar(self, actividad: Actividad) -> Actividad:
         self.db.add(actividad)
-        self.db.flush()
         return actividad
 
     def eliminar(self, actividad: Actividad) -> None:

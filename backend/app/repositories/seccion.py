@@ -21,7 +21,6 @@ class SeccionRepository:
 
     def agregar(self, seccion: Seccion) -> Seccion:
         self.db.add(seccion)
-        self.db.flush()
         return seccion
 
     def eliminar(self, seccion: Seccion) -> None:

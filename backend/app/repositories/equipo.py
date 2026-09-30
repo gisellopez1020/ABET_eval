@@ -76,7 +76,6 @@ class EquipoRepository:
     def agregar_miembro(self, equipo_id: int, estudiante_id: int) -> MiembroEquipo:
         miembro = MiembroEquipo(equipo_id=equipo_id, estudiante_id=estudiante_id)
         self.db.add(miembro)
-        self.db.flush()
         return miembro
 
     def eliminar_miembros(self, equipo: EquipoTrabajo) -> None:

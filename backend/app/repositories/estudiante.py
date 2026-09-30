@@ -68,12 +68,10 @@ class EstudianteRepository:
 
     def agregar(self, estudiante: Estudiante) -> Estudiante:
         self.db.add(estudiante)
-        self.db.flush()
         return estudiante
 
     def agregar_varios(self, estudiantes: List[Estudiante]) -> None:
         self.db.add_all(estudiantes)
-        self.db.flush()
 
     def eliminar(self, estudiante: Estudiante) -> None:
         self.db.delete(estudiante)

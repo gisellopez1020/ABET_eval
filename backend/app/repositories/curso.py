@@ -17,7 +17,6 @@ class CursoRepository:
 
     def agregar(self, curso: Curso) -> Curso:
         self.db.add(curso)
-        self.db.flush()
         return curso
 
     def contar_que_usan_ra(self, codigo: str) -> int:

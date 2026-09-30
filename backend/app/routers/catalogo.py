@@ -156,10 +156,10 @@ def importar_ra_abet(
                         setattr(existente, campo, valor)
                     actualizados += 1
                 else:
-                    # agregar() hace flush: los RA ya están en la BD cuando se insertan
-                    # los Criterios que los referencian (FK)
                     repo.agregar(RaAbetCatalogo(codigo=item.codigo, **{**item.model_dump(exclude={"codigo"}), **datos}))
                     creados += 1
+            # Los RA deben existir en la BD antes de insertar Criterios que los referencian (FK)
+            repo.flush()
         db.commit()
     except Exception:
         db.rollback()

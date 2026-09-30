@@ -45,8 +45,11 @@ class RaAbetRepository:
 
     def agregar(self, ra: RaAbetCatalogo) -> RaAbetCatalogo:
         self.db.add(ra)
-        self.db.flush()
         return ra
+
+    def flush(self) -> None:
+        """Envía a la BD lo pendiente (la importación lo usa para insertar los RA antes que sus Criterios)."""
+        self.db.flush()
 
     def eliminar(self, ra: RaAbetCatalogo) -> None:
         self.db.delete(ra)

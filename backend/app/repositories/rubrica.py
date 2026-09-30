@@ -39,7 +39,6 @@ class RubricaRepository:
 
     def agregar_criterio(self, criterio: Criterio) -> Criterio:
         self.db.add(criterio)
-        self.db.flush()
         return criterio
 
     def contar_criterios(self, actividad_id: int) -> int:
