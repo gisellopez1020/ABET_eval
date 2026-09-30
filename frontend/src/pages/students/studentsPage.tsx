@@ -617,7 +617,8 @@ export default function StudentsPage() {
                 <button
                   type="button"
                   onClick={closeStudentModal}
-                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200
+                  border border-[#E73426]"
                 >
                   {editingStudent && createAviso ? 'Cerrar' : 'Cancelar'}
                 </button>

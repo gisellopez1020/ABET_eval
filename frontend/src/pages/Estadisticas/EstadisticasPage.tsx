@@ -19,7 +19,6 @@ import { DistribucionNivel, NIVELES, Nivel, PestanasNivel } from '../Reports/dis
 
 const SELECT_CLASS =
   'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50 disabled:text-gray-400';
-
 const TOOLTIP_SIN_ACTIVIDAD = 'Elige una actividad específica (no "Todas") para exportar';
 
 type EstadoDetalle =
@@ -186,6 +185,7 @@ export function EstadisticasPage() {
               <select
                 value={cursoId ?? ''}
                 onChange={(e) => handleCurso(e.target.value)}
+                style={{ accentColor: '#9E0B0F' }}
                 className={SELECT_CLASS}
                 disabled={loadingCursos}
               >

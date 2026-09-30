@@ -11,7 +11,7 @@ import {
   Trash2,
   RotateCcw,
 } from 'lucide-react';
-
+import { Button } from '../../components/ui/Button';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
@@ -257,6 +257,7 @@ export function CoursesPage() {
       render: (course) => (
         <div className="flex items-center justify-center gap-2">
           <TableActionButton
+            variant="primary"
             title="Ver información"
             onClick={() => handleView(course)}
             icon={<Eye size={12} />}
@@ -265,6 +266,7 @@ export function CoursesPage() {
           </TableActionButton>
 
           <TableActionButton
+            variant="default"
             title="Editar asignatura"
             onClick={() => handleEdit(course)}
             icon={<Pencil size={12} />}
@@ -273,6 +275,7 @@ export function CoursesPage() {
           </TableActionButton>
 
           <TableActionButton
+            variant="primary"
             title={course.activo ? 'Cerrar asignatura' : 'Reactivar asignatura'}
             onClick={() => handleToggleActivo(course)}
             icon={course.activo ? <Trash2 size={12} /> : <RotateCcw size={12} />}
@@ -313,18 +316,14 @@ export function CoursesPage() {
             />
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
+            icon={<Filter size={17} />}
             onClick={() => setShowFilter((value) => !value)}
-            className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition ${
-              showFilter
-                ? 'border-[#9E0B0F] bg-[#9E0B0F]/5 text-[#9E0B0F]'
-                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-            }`}
           >
-            <Filter size={17} />
             Filtrar
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
