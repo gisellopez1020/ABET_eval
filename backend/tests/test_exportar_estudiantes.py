@@ -283,6 +283,54 @@ class TestImportarCorreo:
         assert filas[1] == ["VALENTINA", "ROJAS MEDINA", "1", "v@uao.edu.co", "S1"]
 
 
+# ── Alta manual con correo ───────────────────────────────────────────────────
+
+def _crear(client, seccion, **extra):
+    return client.post(
+        f"/secciones/{seccion.id}/estudiantes",
+        json={"nombre_completo": "Ana Ruiz", "codigo_estudiante": "1", **extra},
+    )
+
+
+class TestAltaManualCorreo:
+    def test_con_correo_lo_guarda_y_lo_devuelve_en_el_listado(self, client, db_session):
+        _, [s1] = _curso(db_session)
+        resp = _crear(client, s1, email="  Ana.Ruiz@UAO.edu.co ")
+        assert resp.status_code == 201
+        assert (resp.json()["email"], resp.json()["aviso"]) == ("ana.ruiz@uao.edu.co", None)
+
+        [listado] = client.get(f"/secciones/{s1.id}/estudiantes").json()
+        assert (listado["nombre_completo"], listado["email"]) == ("ANA RUIZ", "ana.ruiz@uao.edu.co")
+        assert _correos(db_session, s1) == {"1": "ana.ruiz@uao.edu.co"}
+
+    @pytest.mark.parametrize("extra", [{}, {"email": None}, {"email": ""}, {"email": "   "}],
+                             ids=["omitido", "null", "vacio", "espacios"])
+    def test_sin_correo_sigue_funcionando_con_email_none(self, client, db_session, extra):
+        _, [s1] = _curso(db_session)
+        resp = _crear(client, s1, **extra)
+        assert resp.status_code == 201
+        datos = resp.json()
+        assert (datos["nombre_completo"], datos["codigo_estudiante"], datos["seccion_id"]) == ("ANA RUIZ", "1", s1.id)
+        assert (datos["email"], datos["aviso"]) == (None, None)
+        assert client.get(f"/secciones/{s1.id}/estudiantes").json()[0]["email"] is None
+
+    @pytest.mark.parametrize("invalido", ["ana ruiz", "ana@", "ana.uao.edu.co", "a@b"])
+    def test_correo_invalido_no_impide_la_creacion(self, client, db_session, invalido):
+        _, [s1] = _curso(db_session)
+        resp = _crear(client, s1, email=invalido)
+        assert resp.status_code == 201
+        assert resp.json()["email"] is None
+        assert resp.json()["aviso"] == f"El correo '{invalido}' no es válido, se dejó en blanco"
+        # El estudiante existe, con el correo en blanco: ni rechazado ni inventado
+        assert _correos(db_session, s1) == {"1": None}
+
+    def test_creado_a_mano_con_correo_sale_en_el_export(self, client, db_session):
+        _, [s1] = _curso(db_session)
+        _crear(client, s1, email="ana@uao.edu.co")
+        _, filas = _exportar(client, seccion_id=s1.id)
+        assert filas[1] == ["ANA", "RUIZ", "1", "ana@uao.edu.co", "S1"]
+
+
 # ── Migración 0006 ───────────────────────────────────────────────────────────
 
 def _alembic_sql(*args):
