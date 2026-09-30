@@ -14,6 +14,7 @@ import { descargarBlob } from '../../utils/descarga';
 import { Curso, Seccion } from '../../types';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { useCourseStore } from '../../store/courseStore';
 
 type StudentStatus = 'activo' | 'inactivo';
 
@@ -40,10 +41,8 @@ interface SectionOption extends Seccion {
 const SELECT_CLASS =
   'rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10';
 
-// Pantalla independiente de la asignatura activa del Dashboard (selectedCourseId):
-// carga los estudiantes de todas las secciones de todos los cursos del docente y
-// filtra en memoria por Asignatura/Sección, búsqueda y estado.
 export default function StudentsPage() {
+  const selectedCourseId = useCourseStore((state) => state.selectedCourseId);
   const [courses, setCourses] = useState<Curso[]>([]);
   const [sectionOptions, setSectionOptions] = useState<SectionOption[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -51,7 +50,7 @@ export default function StudentsPage() {
 
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'todos' | StudentStatus>('todos');
-  const [courseFilter, setCourseFilter] = useState<number | null>(null); // null = Todas
+  const [courseFilter, setCourseFilter] = useState<number | null>(selectedCourseId);
   const [sectionFilter, setSectionFilter] = useState<number | null>(null); // null = Todas
   const [showFilter, setShowFilter] = useState(false);
 
@@ -111,6 +110,15 @@ export default function StudentsPage() {
       setCourses(cursos);
       setSectionOptions(secciones);
       setStudents(estudiantesPorSeccion.flat());
+      setCourseFilter((current) => {
+        if (current !== null && cursos.some((curso) => curso.id === current)) {
+          return current;
+        }
+        if (selectedCourseId !== null && cursos.some((curso) => curso.id === selectedCourseId)) {
+          return selectedCourseId;
+        }
+        return cursos[0]?.id ?? null;
+      });
     } catch (error) {
       console.error('Error cargando estudiantes:', error);
       setCourses([]);
@@ -429,7 +437,6 @@ export default function StudentsPage() {
             aria-label="Filtrar por asignatura"
             className={`${SELECT_CLASS} md:w-56`}
           >
-            <option value="">Asignatura: Todas</option>
             {courses.map((course) => (
               <option key={course.id} value={course.id}>
                 {course.nombre} ({course.codigo} · {course.periodo})
