@@ -138,15 +138,9 @@ class TestUnEquipoPorActividad:
         assert _crear(client, act, s1, ("E1", [ana])).status_code == 201
         assert _crear(client, otra, s1, ("Otro E1", [ana])).status_code == 201
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="Estudiante repetido dentro del mismo equipo: choca con uq_miembro_equipo "
-               "al hacer commit y responde 500 en vez de un 400 claro",
-    )
     def test_estudiante_repetido_en_el_mismo_equipo_400(self, client, db_session, curso, grupal, alumnos):
         act, _ = grupal
         ana = alumnos[0]
-        # Mismo app con los overrides de `client`; raise_server_exceptions=False para ver el 500
         resp = TestClient(client.app, raise_server_exceptions=False).post(
             _url(act, _seccion(db_session, curso)),
             json={"equipos": [{"nombre": "E1", "estudiante_ids": [ana.id, ana.id]}]},
@@ -189,6 +183,17 @@ class TestEditarEquipo:
         resp = client.put(f"/equipos/{equipo['id']}", json={"estudiante_ids": [de_s2.id]})
         assert resp.status_code == 400
         assert "sección del equipo" in resp.json()["detail"]
+
+    def test_estudiante_repetido_400(self, client, db_session, equipo, alumnos):
+        ana = alumnos[0]
+        resp = TestClient(client.app, raise_server_exceptions=False).put(
+            f"/equipos/{equipo['id']}", json={"estudiante_ids": [ana.id, ana.id]}
+        )
+        assert resp.status_code == 400
+        assert "repetido" in resp.json()["detail"]
+        # Falla antes de tocar los integrantes: el equipo conserva los que tenía
+        miembros = db_session.query(MiembroEquipo.estudiante_id).filter_by(equipo_id=equipo["id"]).all()
+        assert sorted(eid for (eid,) in miembros) == sorted(_ids_miembros(equipo))
 
     def test_equipo_inexistente_404(self, client):
         assert client.put("/equipos/99999", json={"nombre": "X"}).status_code == 404
