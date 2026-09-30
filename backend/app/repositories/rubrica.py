@@ -51,6 +51,21 @@ class RubricaRepository:
             or 0
         )
 
+    def criterios_vinculados(self, curso_id: int, actividad_id: Optional[int] = None):
+        """
+        Filas (aspecto_id, actividad_id, codigo_abet, criterio_id, peso_porcentaje) de los
+        aspectos del curso vinculados a un código ABET; con actividad_id, solo de esa actividad.
+        """
+        query = (
+            self.db.query(Aspecto.id, Aspecto.actividad_id, Aspecto.codigo_abet, Criterio.id, Criterio.peso_porcentaje)
+            .join(Actividad, Aspecto.actividad_id == Actividad.id)
+            .join(Criterio, Criterio.aspecto_id == Aspecto.id)
+            .filter(Actividad.curso_id == curso_id, Aspecto.codigo_abet.isnot(None))
+        )
+        if actividad_id:
+            query = query.filter(Aspecto.actividad_id == actividad_id)
+        return query.all()
+
     def suma_pesos(self, actividad_id: int):
         """Suma de peso_porcentaje de los criterios de la actividad (0 si no tiene)."""
         return (

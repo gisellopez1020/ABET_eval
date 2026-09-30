@@ -1,6 +1,7 @@
 import base64
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
+from functools import partial
 from typing import Optional
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,12 +10,17 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import (
-    Curso, Actividad, Seccion, EquipoTrabajo, MiembroEquipo, Estudiante,
-    Calificacion, Criterio, Aspecto, RaAbetCatalogo,
-)
+from app.models import Curso, Actividad, Seccion, RaAbetCatalogo
 from app.models.actividad import TipoActividad
 from app.models.curso import RANGOS_CALIFICACION_DEFAULT
+from app.repositories.actividad import ActividadRepository
+from app.repositories.calificacion import CalificacionRepository
+from app.repositories.curso import CursoRepository
+from app.repositories.equipo import EquipoRepository
+from app.repositories.estudiante import EstudianteRepository
+from app.repositories.ra_abet import RaAbetRepository
+from app.repositories.rubrica import RubricaRepository
+from app.repositories.seccion import SeccionRepository
 from app.schemas.reporte import (
     DetalleXlsxRequest, DetalleXlsxResponse, EstadoDrive, RangoReporte,
     ReporteABETResponse, ReporteActividadResponse, ReporteCriterioItem, ReporteRAItem,
@@ -91,7 +97,7 @@ def _rangos_curso(curso: Curso) -> list[RangoReporte]:
 
 
 def _verificar_curso(curso_id: int, usuario: dict, db: Session) -> Curso:
-    curso = db.get(Curso, curso_id)
+    curso = CursoRepository(db).get(curso_id)
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     if curso.docente_email != usuario["email"]:
@@ -104,12 +110,12 @@ def _verificar_actividad(
 ) -> tuple[Curso, Actividad, Optional[Seccion]]:
     """Valida curso, actividad y sección (si se filtró). La sección es None sin filtro."""
     curso = _verificar_curso(curso_id, usuario, db)
-    actividad = db.get(Actividad, actividad_id)
+    actividad = ActividadRepository(db).get(actividad_id)
     if not actividad or actividad.curso_id != curso_id:
         raise HTTPException(status_code=404, detail="Actividad no encontrada en este curso")
     seccion = None
     if seccion_id:
-        seccion = db.get(Seccion, seccion_id)
+        seccion = SeccionRepository(db).get(seccion_id)
         if not seccion or seccion.curso_id != curso_id:
             raise HTTPException(status_code=404, detail="Sección no encontrada en este curso")
     return curso, actividad, seccion
@@ -126,36 +132,16 @@ def _calcular_niveles(
 
     # Aspectos vinculados: {aspecto_id: (actividad_id, codigo_abet, {criterio_id: peso})}
     aspectos: Aspectos = {}
-    q_criterios = (
-        db.query(Aspecto.id, Aspecto.actividad_id, Aspecto.codigo_abet, Criterio.id, Criterio.peso_porcentaje)
-        .join(Actividad, Aspecto.actividad_id == Actividad.id)
-        .join(Criterio, Criterio.aspecto_id == Aspecto.id)
-        .filter(Actividad.curso_id == curso.id, Aspecto.codigo_abet.isnot(None))
-    )
-    if actividad_id:
-        q_criterios = q_criterios.filter(Aspecto.actividad_id == actividad_id)
-    for aspecto_id, act_id, codigo, criterio_id, peso in q_criterios.all():
+    for aspecto_id, act_id, codigo, criterio_id, peso in RubricaRepository(db).criterios_vinculados(curso.id, actividad_id):
         aspectos.setdefault(aspecto_id, (act_id, codigo, {}))[2][criterio_id] = Decimal(peso)
     codigos_vinculados = {codigo for _, codigo, _ in aspectos.values()}
 
     # Estudiantes del curso (o de la sección filtrada)
-    q_est = db.query(Estudiante.id).join(Seccion, Estudiante.seccion_id == Seccion.id).filter(
-        Seccion.curso_id == curso.id
-    )
-    if seccion_id:
-        q_est = q_est.filter(Estudiante.seccion_id == seccion_id)
-    estudiantes = [eid for (eid,) in q_est.all()]
+    estudiantes = EstudianteRepository(db).ids_de_curso(curso.id, seccion_id)
 
     # Fuentes de cada estudiante: sus calificaciones propias y las de sus equipos
     fuentes_est: dict[int, list[Fuente]] = {eid: [("e", eid)] for eid in estudiantes}
-    membresias = (
-        db.query(MiembroEquipo.estudiante_id, MiembroEquipo.equipo_id)
-        .join(EquipoTrabajo, MiembroEquipo.equipo_id == EquipoTrabajo.id)
-        .join(Actividad, EquipoTrabajo.actividad_id == Actividad.id)
-        .filter(Actividad.curso_id == curso.id)
-        .all()
-    )
-    for eid, equipo_id in membresias:
+    for eid, equipo_id in EquipoRepository(db).membresias_de_curso(curso.id):
         if eid in fuentes_est:
             fuentes_est[eid].append(("t", equipo_id))
 
@@ -163,11 +149,7 @@ def _calcular_niveles(
     valores: dict[Fuente, dict[int, int]] = defaultdict(dict)
     criterio_ids = [cid for _, _, pesos in aspectos.values() for cid in pesos]
     if criterio_ids:
-        filas_cal = (
-            db.query(Calificacion.criterio_id, Calificacion.valor, Calificacion.estudiante_id, Calificacion.equipo_id)
-            .filter(Calificacion.criterio_id.in_(criterio_ids))
-            .all()
-        )
+        filas_cal = CalificacionRepository(db).valores_por_criterios(criterio_ids)
         for criterio_id, valor, estudiante_id, equipo_id in filas_cal:
             fuente: Fuente = ("t", equipo_id) if equipo_id is not None else ("e", estudiante_id)
             valores[fuente][criterio_id] = valor
@@ -186,14 +168,12 @@ def _calcular_niveles(
             notas_criterio[codigo][eid] = sum(notas) / len(notas)
 
     # Catálogo: Criterios vinculados, sus RA padre y los Criterios hermanos
-    catalogo = {
-        c.codigo: c
-        for c in db.query(RaAbetCatalogo).filter(RaAbetCatalogo.codigo.in_(codigos_vinculados)).all()
-    }
+    ra_abet = RaAbetRepository(db)
+    catalogo = {c.codigo: c for c in ra_abet.por_codigos(codigos_vinculados)}
     padres = {c.codigo_padre for c in catalogo.values() if c.codigo_padre}
-    ras = {r.codigo: r for r in db.query(RaAbetCatalogo).filter(RaAbetCatalogo.codigo.in_(padres)).all()}
+    ras = {r.codigo: r for r in ra_abet.por_codigos(padres)}
     hijos: dict[str, list[RaAbetCatalogo]] = defaultdict(list)
-    for c in db.query(RaAbetCatalogo).filter(RaAbetCatalogo.codigo_padre.in_(padres)).all():
+    for c in ra_abet.hijos_de(padres):
         hijos[c.codigo_padre].append(c)
 
     criterios_out = []
@@ -259,40 +239,32 @@ def _hojas_detalle(actividad: Actividad, seccion_id: Optional[int], db: Session)
         for a in aspectos_act
     }
 
-    # Entidades: (nombre de hoja, filtro de calificaciones, integrantes)
+    # Entidades: (nombre de hoja, lector de sus calificaciones, integrantes)
+    calificaciones = CalificacionRepository(db)
     if actividad.tipo == TipoActividad.grupal:
-        q = db.query(EquipoTrabajo).filter(EquipoTrabajo.actividad_id == actividad.id)
-        if seccion_id:
-            q = q.filter(EquipoTrabajo.seccion_id == seccion_id)
         entidades = [
             (
                 e.nombre,
-                Calificacion.equipo_id == e.id,
+                partial(calificaciones.valores_de_equipo, e.id),
                 sorted(
                     (f"{m.estudiante.nombre_completo} ({m.estudiante.codigo_estudiante})" for m in e.miembros),
                 ),
             )
-            for e in q.order_by(EquipoTrabajo.nombre).all()
+            for e in EquipoRepository(db).de_actividad_ordenados(actividad.id, seccion_id)
         ]
     else:
-        q = db.query(Estudiante).join(Seccion, Estudiante.seccion_id == Seccion.id).filter(
-            Seccion.curso_id == actividad.curso_id
-        )
-        if seccion_id:
-            q = q.filter(Estudiante.seccion_id == seccion_id)
         entidades = [
-            (e.nombre_completo, Calificacion.estudiante_id == e.id, [f"{e.nombre_completo} ({e.codigo_estudiante})"])
-            for e in q.order_by(Estudiante.nombre_completo).all()
+            (
+                e.nombre_completo,
+                partial(calificaciones.valores_de_estudiante, e.id),
+                [f"{e.nombre_completo} ({e.codigo_estudiante})"],
+            )
+            for e in EstudianteRepository(db).de_curso(actividad.curso_id, seccion_id)
         ]
 
     hojas: list[HojaDetalle] = []
-    for nombre, filtro, integrantes in entidades:
-        filas = (
-            db.query(Calificacion.criterio_id, Calificacion.valor, Calificacion.nota_calculada)
-            .filter(filtro, Calificacion.criterio_id.in_(criterio_ids))
-            .all()
-            if criterio_ids else []
-        )
+    for nombre, leer_valores, integrantes in entidades:
+        filas = leer_valores(criterio_ids) if criterio_ids else []
         if not filas:
             continue
         valores = {cid: valor for cid, valor, _ in filas}

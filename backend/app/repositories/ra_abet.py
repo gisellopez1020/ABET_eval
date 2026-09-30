@@ -33,6 +33,13 @@ class RaAbetRepository:
             .all()
         )
 
+    def por_codigos(self, codigos: Iterable[str]) -> List[RaAbetCatalogo]:
+        return self.db.query(RaAbetCatalogo).filter(RaAbetCatalogo.codigo.in_(list(codigos))).all()
+
+    def hijos_de(self, codigos_padre: Iterable[str]) -> List[RaAbetCatalogo]:
+        """Criterios cuyo RA padre está entre codigos_padre."""
+        return self.db.query(RaAbetCatalogo).filter(RaAbetCatalogo.codigo_padre.in_(list(codigos_padre))).all()
+
     def contar_hijos(self, codigo: str) -> int:
         return self.db.query(RaAbetCatalogo).filter(RaAbetCatalogo.codigo_padre == codigo).count()
 

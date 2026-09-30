@@ -21,6 +21,21 @@ class EstudianteRepository:
             .all()
         )
 
+    def de_curso(self, curso_id: int, seccion_id: Optional[int] = None) -> List[Estudiante]:
+        """Estudiantes del curso (o solo de la sección) ordenados por nombre completo."""
+        query = self._de_curso(self.db.query(Estudiante), curso_id, seccion_id)
+        return query.order_by(Estudiante.nombre_completo).all()
+
+    def ids_de_curso(self, curso_id: int, seccion_id: Optional[int] = None) -> List[int]:
+        return [eid for (eid,) in self._de_curso(self.db.query(Estudiante.id), curso_id, seccion_id).all()]
+
+    @staticmethod
+    def _de_curso(query, curso_id: int, seccion_id: Optional[int]):
+        query = query.join(Seccion, Estudiante.seccion_id == Seccion.id).filter(Seccion.curso_id == curso_id)
+        if seccion_id:
+            query = query.filter(Estudiante.seccion_id == seccion_id)
+        return query
+
     def para_exportar(
         self,
         docente_email: str,

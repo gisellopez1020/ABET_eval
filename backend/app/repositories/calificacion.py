@@ -96,6 +96,29 @@ class CalificacionRepository:
         self.db.flush()
         return calificacion
 
+    def valores_por_criterios(self, criterio_ids: List[int]):
+        """Filas (criterio_id, valor, estudiante_id, equipo_id) de todas las calificaciones de esos criterios."""
+        return (
+            self.db.query(Calificacion.criterio_id, Calificacion.valor, Calificacion.estudiante_id, Calificacion.equipo_id)
+            .filter(Calificacion.criterio_id.in_(criterio_ids))
+            .all()
+        )
+
+    def valores_de_equipo(self, equipo_id: int, criterio_ids: List[int]):
+        """Filas (criterio_id, valor, nota_calculada) del equipo en esos criterios."""
+        return self._valores(Calificacion.equipo_id == equipo_id, criterio_ids)
+
+    def valores_de_estudiante(self, estudiante_id: int, criterio_ids: List[int]):
+        """Filas (criterio_id, valor, nota_calculada) del estudiante en esos criterios."""
+        return self._valores(Calificacion.estudiante_id == estudiante_id, criterio_ids)
+
+    def _valores(self, filtro, criterio_ids: List[int]):
+        return (
+            self.db.query(Calificacion.criterio_id, Calificacion.valor, Calificacion.nota_calculada)
+            .filter(filtro, Calificacion.criterio_id.in_(criterio_ids))
+            .all()
+        )
+
     def existen_para_actividad(self, actividad_id: int) -> bool:
         return self.db.query(
             exists().where(

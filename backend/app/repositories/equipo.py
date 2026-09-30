@@ -2,7 +2,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
-from app.models import Estudiante, EquipoTrabajo, MiembroEquipo
+from app.models import Actividad, Estudiante, EquipoTrabajo, MiembroEquipo
 
 
 class EquipoRepository:
@@ -21,6 +21,23 @@ class EquipoRepository:
                 EquipoTrabajo.actividad_id == actividad_id,
                 EquipoTrabajo.seccion_id == seccion_id,
             )
+            .all()
+        )
+
+    def de_actividad_ordenados(self, actividad_id: int, seccion_id: Optional[int] = None) -> List[EquipoTrabajo]:
+        """Equipos de la actividad (o solo de la sección) ordenados por nombre."""
+        query = self.db.query(EquipoTrabajo).filter(EquipoTrabajo.actividad_id == actividad_id)
+        if seccion_id:
+            query = query.filter(EquipoTrabajo.seccion_id == seccion_id)
+        return query.order_by(EquipoTrabajo.nombre).all()
+
+    def membresias_de_curso(self, curso_id: int) -> List[Tuple[int, int]]:
+        """(estudiante_id, equipo_id) de todos los equipos de las actividades del curso."""
+        return (
+            self.db.query(MiembroEquipo.estudiante_id, MiembroEquipo.equipo_id)
+            .join(EquipoTrabajo, MiembroEquipo.equipo_id == EquipoTrabajo.id)
+            .join(Actividad, EquipoTrabajo.actividad_id == Actividad.id)
+            .filter(Actividad.curso_id == curso_id)
             .all()
         )
 
