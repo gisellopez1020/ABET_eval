@@ -24,11 +24,6 @@ def _verificar_curso(curso_id: int, email: str, db: Session) -> Curso:
     return curso
 
 
-def _tiene_calificaciones(actividad_id: int, db: Session) -> bool:
-    # Transitorio: lo sigue importando criterios.py hasta migrarlo a los repositorios
-    return CalificacionRepository(db).existen_para_actividad(actividad_id)
-
-
 def _actividad_out(actividad: Actividad, total_peso) -> ActividadOut:
     return ActividadOut.model_validate(actividad).model_copy(
         update={"total_peso_criterios": total_peso}

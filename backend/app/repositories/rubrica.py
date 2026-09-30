@@ -1,7 +1,9 @@
+from typing import Optional
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Aspecto, Criterio
+from app.models import Actividad, Aspecto, Criterio
 
 
 class RubricaRepository:
@@ -9,6 +11,25 @@ class RubricaRepository:
 
     def __init__(self, db: Session):
         self.db = db
+
+    def get_aspecto(self, aspecto_id: int) -> Optional[Aspecto]:
+        return self.db.get(Aspecto, aspecto_id)
+
+    def eliminar_aspectos_de(self, actividad: Actividad) -> None:
+        """Borra los aspectos de la actividad (y sus criterios en cascada) y hace flush."""
+        for aspecto in actividad.aspectos:
+            self.db.delete(aspecto)
+        self.db.flush()
+
+    def agregar_aspecto(self, aspecto: Aspecto) -> Aspecto:
+        self.db.add(aspecto)
+        self.db.flush()
+        return aspecto
+
+    def agregar_criterio(self, criterio: Criterio) -> Criterio:
+        self.db.add(criterio)
+        self.db.flush()
+        return criterio
 
     def suma_pesos(self, actividad_id: int):
         """Suma de peso_porcentaje de los criterios de la actividad (0 si no tiene)."""
