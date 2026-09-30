@@ -247,7 +247,7 @@ class TestEstudiantesExcel:
         resp = client.post(f"/secciones/{s1.id}/estudiantes/vista-previa", files=_subir_xlsx(contenido))
         assert resp.status_code == 200
         assert resp.json() == {
-            "estudiantes": [{"nombre": "ANA RUIZ", "codigo": "2021002"}],
+            "estudiantes": [{"nombre": "ANA RUIZ", "codigo": "2021002", "email": None}],
             "errores": ["Fila 3: nombre o código vacío, se omite"],
         }
         assert client.get(f"/secciones/{s1.id}/estudiantes").json() == []
