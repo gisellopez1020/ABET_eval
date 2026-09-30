@@ -1,7 +1,7 @@
 from decimal import Decimal
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class ValorCriterio(BaseModel):
@@ -22,15 +22,15 @@ class CalificacionCreate(BaseModel):
     equipo_id: Optional[int] = None
     estudiante_id: Optional[int] = None
 
-    @field_validator("estudiante_id")
-    @classmethod
-    def validar_xor(cls, v: Optional[int], info) -> Optional[int]:
-        equipo_id = info.data.get("equipo_id")
-        if equipo_id is None and v is None:
+    # model_validator y no field_validator: este último no corre si el campo se omite
+    # (Pydantic no valida defaults) y el body sin ninguno de los dos llegaba a la BD
+    @model_validator(mode="after")
+    def validar_xor(self) -> "CalificacionCreate":
+        if self.equipo_id is None and self.estudiante_id is None:
             raise ValueError("Debe especificar equipo_id o estudiante_id")
-        if equipo_id is not None and v is not None:
+        if self.equipo_id is not None and self.estudiante_id is not None:
             raise ValueError("No puede especificar equipo_id y estudiante_id a la vez")
-        return v
+        return self
 
 
 class CalificacionOut(BaseModel):
