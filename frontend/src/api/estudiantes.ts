@@ -1,5 +1,6 @@
 import apiClient from './client';
 import { Estudiante } from '../types';
+import { nombreDesdeContentDisposition } from '../utils/descarga';
 
 export interface EstudianteCreate {
   nombre_completo: string;
@@ -12,7 +13,7 @@ export interface ImportacionCSVResultado {
 }
 
 export interface VistaPreviaEstudiantes {
-  estudiantes: { nombre: string; codigo: string }[];
+  estudiantes: { nombre: string; codigo: string; email?: string | null }[];
   errores: string[];
 }
 
@@ -42,6 +43,18 @@ export const estudiantesApi = {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       .then((r) => r.data);
+  },
+  /**
+   * .xlsx con Nombre | Apellido(s) | Número de ID | Dirección de correo | Grupo de las
+   * asignaturas del docente, acotado por asignatura y/o sección si se indican.
+   */
+  exportarExcel: async (filtros: { curso_id?: number; seccion_id?: number } = {}) => {
+    const response = await apiClient.get<Blob>('/estudiantes/exportar-excel', {
+      params: filtros,
+      responseType: 'blob',
+    });
+    const nombre = nombreDesdeContentDisposition(response.headers['content-disposition'], 'Estudiantes.xlsx');
+    return { blob: response.data, nombre };
   },
   delete: (id: number) =>
     apiClient.delete(`/estudiantes/${id}`).then((r) => r.data),

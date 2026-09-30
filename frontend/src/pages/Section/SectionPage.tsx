@@ -10,6 +10,7 @@ import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
 import { estudiantesApi } from '../../api/estudiantes';
 import { apiErrorMessage } from '../../api/errors';
+import { descargarBlob } from '../../utils/descarga';
 import { Curso, Seccion, Estudiante } from '../../types';
 
 export function SectionPage() {
@@ -30,7 +31,9 @@ export function SectionPage() {
 
   const [csvModal, setCsvModal] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [csvPreview, setCsvPreview] = useState<{ nombre: string; codigo: string }[]>([]);
+  const [csvPreview, setCsvPreview] = useState<{ nombre: string; codigo: string; email?: string | null }[]>([]);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [csvLoading, setCsvLoading] = useState(false);
   const [csvError, setCsvError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -122,6 +125,19 @@ export function SectionPage() {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const { blob, nombre } = await estudiantesApi.exportarExcel({ seccion_id: sid });
+      descargarBlob(blob, nombre);
+    } catch (e: any) {
+      setExportError(apiErrorMessage(e, 'No se pudo exportar la lista de estudiantes'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleCsvImport = async () => {
     if (!csvFile) return;
     setCsvLoading(true);
@@ -183,11 +199,15 @@ export function SectionPage() {
               <Button variant="secondary" size="sm" onClick={() => setCsvModal(true)}>
                 Importar CSV / Excel
               </Button>
+              <Button variant="secondary" size="sm" onClick={handleExport} loading={exporting}>
+                Exportar Excel
+              </Button>
               <Button size="sm" onClick={() => setAddModal(true)}>
                 + Agregar
               </Button>
             </div>
           </div>
+          {exportError && <p className="px-5 pt-3 text-sm text-uao-accent">{exportError}</p>}
 
           {estudiantes.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-gray-400">
@@ -270,6 +290,7 @@ export function SectionPage() {
             </p>
             <p className="text-xs text-gray-400 mt-1">
               Formato: columnas Nombre y Codigo (o Código), con encabezado. En Excel, en la primera hoja.
+              Opcional: una columna Email (o Correo).
             </p>
             <input
               ref={fileRef}
@@ -290,6 +311,7 @@ export function SectionPage() {
                   <div key={i} className="flex gap-4 px-3 py-2">
                     <span className="font-medium">{r.nombre}</span>
                     <span className="text-gray-500">{r.codigo}</span>
+                    {r.email && <span className="text-gray-500">{r.email}</span>}
                   </div>
                 ))}
               </div>

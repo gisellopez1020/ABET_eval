@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Filter, Trash2, X } from 'lucide-react';
+import { Download, Plus, Search, Filter, Trash2, X } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
@@ -9,6 +9,8 @@ import { TableActionButton } from '../../components/ui/TableActionButton';
 import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
 import { estudiantesApi } from '../../api/estudiantes';
+import { apiErrorMessage } from '../../api/errors';
+import { descargarBlob } from '../../utils/descarga';
 import { Curso, Seccion } from '../../types';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -59,6 +61,8 @@ export default function StudentsPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const pageSize = 5;
 
@@ -224,6 +228,23 @@ export default function StudentsPage() {
     }
   };
 
+  // Exporta lo que acotan los filtros de Asignatura y Sección (no la búsqueda ni el estado)
+  const handleExport = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const { blob, nombre } = await estudiantesApi.exportarExcel({
+        ...(courseFilter !== null ? { curso_id: courseFilter } : {}),
+        ...(sectionFilter !== null ? { seccion_id: sectionFilter } : {}),
+      });
+      descargarBlob(blob, nombre);
+    } catch (e) {
+      setExportError(apiErrorMessage(e, 'No se pudo exportar la lista de estudiantes.'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const columns: DataTableColumn<StudentRow>[] = [
     {
       key: 'nombre',
@@ -353,12 +374,24 @@ export default function StudentsPage() {
             </Button>
 
           <Button
+            variant="outline"
+            icon={<Download size={17} />}
+            onClick={handleExport}
+            loading={exporting}
+            title="Exporta los estudiantes de la asignatura y sección filtradas"
+          >
+            Exportar Excel
+          </Button>
+
+          <Button
           icon={<Plus size={18} />}
           onClick={openCreateModal}
         >
           Nuevo estudiante
         </Button>
         </div>
+
+        {exportError && <p className="mb-4 text-sm text-red-600">{exportError}</p>}
 
         {showFilter && (
           <div className="mb-5 flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-white p-4">
