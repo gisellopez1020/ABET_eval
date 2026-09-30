@@ -5,13 +5,15 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models import Curso, Seccion
+from app.repositories.curso import CursoRepository
+from app.repositories.seccion import SeccionRepository
 from app.schemas import SeccionCreate, SeccionUpdate, SeccionOut
 
 router = APIRouter(tags=["Secciones"])
 
 
 def _verificar_curso(curso_id: int, email: str, db: Session) -> Curso:
-    curso = db.get(Curso, curso_id)
+    curso = CursoRepository(db).get(curso_id)
     if not curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
     if curso.docente_email != email:
@@ -37,11 +39,7 @@ def listar_secciones(
 ):
     """Devuelve las secciones activas del curso con su conteo de estudiantes."""
     _verificar_curso(curso_id, usuario["email"], db)
-    secciones = (
-        db.query(Seccion)
-        .filter(Seccion.curso_id == curso_id, Seccion.activo == True)
-        .all()
-    )
+    secciones = SeccionRepository(db).activas_de_curso(curso_id)
     return [_seccion_con_total(s) for s in secciones]
 
 
@@ -59,8 +57,7 @@ def crear_seccion(
 ):
     """Crea una nueva sección (grupo) dentro del curso."""
     _verificar_curso(curso_id, usuario["email"], db)
-    seccion = Seccion(nombre=body.nombre, curso_id=curso_id)
-    db.add(seccion)
+    seccion = SeccionRepository(db).agregar(Seccion(nombre=body.nombre, curso_id=curso_id))
     db.commit()
     db.refresh(seccion)
     return _seccion_con_total(seccion)
@@ -74,7 +71,8 @@ def editar_seccion(
     usuario: dict = Depends(get_current_user),
 ):
     """Renombra una sección existente."""
-    seccion = db.get(Seccion, seccion_id)
+    repo = SeccionRepository(db)
+    seccion = repo.get(seccion_id)
     if not seccion:
         raise HTTPException(status_code=404, detail="Sección no encontrada")
     _verificar_curso(seccion.curso_id, usuario["email"], db)
@@ -98,7 +96,8 @@ def eliminar_seccion(
     Elimina una sección solo si no tiene estudiantes registrados.
     Si tiene estudiantes, retorna 409 Conflict.
     """
-    seccion = db.get(Seccion, seccion_id)
+    repo = SeccionRepository(db)
+    seccion = repo.get(seccion_id)
     if not seccion:
         raise HTTPException(status_code=404, detail="Sección no encontrada")
     _verificar_curso(seccion.curso_id, usuario["email"], db)
@@ -111,5 +110,5 @@ def eliminar_seccion(
                    "Elimine los estudiantes primero.",
         )
 
-    db.delete(seccion)
+    repo.eliminar(seccion)
     db.commit()
