@@ -29,6 +29,7 @@ class ImportacionCSVResultado(BaseModel):
 class EstudianteLeido(BaseModel):
     nombre: str
     codigo: str
+    email: Optional[str] = None
 
 
 class VistaPreviaEstudiantes(BaseModel):
