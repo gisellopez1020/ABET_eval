@@ -15,9 +15,8 @@ from app.repositories.rubrica import RubricaRepository
 from app.schemas import ActividadOut
 from app.schemas.actividad import ActividadDetalleOut
 from app.schemas.criterio import AspectoOut
-from app.services.errores import (
-    ActividadConCalificaciones, ActividadNoEncontrada, CursoNoEncontrado, SinPermiso,
-)
+from app.services.acceso import actividad_del_docente
+from app.services.errores import ActividadConCalificaciones, CursoNoEncontrado, SinPermiso
 
 
 class ActividadService:
@@ -83,11 +82,4 @@ class ActividadService:
         return curso
 
     def _actividad_del_docente(self, actividad_id: int, email: str) -> Actividad:
-        actividad = self.actividades.get(actividad_id)
-        if not actividad:
-            raise ActividadNoEncontrada()
-        # Una actividad cuyo curso no existe también es 403 (no 404), como antes del refactor
-        curso = self.cursos.get(actividad.curso_id)
-        if not curso or curso.docente_email != email:
-            raise SinPermiso("No tiene permiso sobre esta actividad")
-        return actividad
+        return actividad_del_docente(self.actividades, self.cursos, actividad_id, email)
