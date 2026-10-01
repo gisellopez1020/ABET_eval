@@ -302,3 +302,41 @@ class EstudianteYaEnOtroEquipo(SolicitudInvalida):
         self.estudiante = estudiante
         self.equipo = equipo
         super().__init__(f"El estudiante {estudiante} ya está en el equipo '{equipo}' de esta actividad")
+
+
+# ── Calificaciones ───────────────────────────────────────────────────────────
+# El equipo y el estudiante tienen dos excepciones por regla: si el id viene en la URL
+# (lecturas) el recurso pedido "no existe aquí" (404); si viene en el body (guardar),
+# la petición es inválida (400).
+
+class EquipoFueraDeActividad(NoEncontrado):
+    def __init__(self):
+        super().__init__("Equipo no encontrado en esta actividad")
+
+
+class EstudianteFueraDelCurso(NoEncontrado):
+    """El estudiante de la URL no existe o no es del curso de la actividad."""
+
+    def __init__(self):
+        super().__init__("Estudiante no encontrado en este curso")
+
+
+class EquipoNoPerteneceAActividad(SolicitudInvalida):
+    def __init__(self):
+        super().__init__("El equipo no pertenece a esta actividad")
+
+
+class EstudianteNoPerteneceAlCurso(SolicitudInvalida):
+    def __init__(self):
+        super().__init__("El estudiante no pertenece a este curso")
+
+
+class CriterioFueraDeActividad(SolicitudInvalida):
+    def __init__(self, criterio_id: int):
+        self.criterio_id = criterio_id
+        super().__init__(f"Criterio {criterio_id} no pertenece a esta actividad")
+
+
+class CalificacionNoEncontrada(NoEncontrado):
+    def __init__(self):
+        super().__init__("Calificación no encontrada")
