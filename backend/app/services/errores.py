@@ -63,6 +63,19 @@ class ArchivoInvalido(DatosInvalidos):
     """El archivo subido no se puede leer o le faltan columnas obligatorias (el mensaje dice cuál)."""
 
 
+class ActividadNoEncontrada(NoEncontrado):
+    def __init__(self):
+        super().__init__("Actividad no encontrada")
+
+
+class ActividadConCalificaciones(Conflicto):
+    """Eliminar la actividad borraría en cascada calificaciones ya registradas."""
+
+    def __init__(self, nombre: str):
+        self.nombre = nombre
+        super().__init__(f"No se puede eliminar '{nombre}' porque ya tiene calificaciones registradas.")
+
+
 class RaAbetDesconocidos(DatosInvalidos):
     def __init__(self, codigos: list[str]):
         self.codigos = codigos

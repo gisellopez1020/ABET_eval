@@ -1,33 +1,15 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Curso, Actividad
-from app.repositories.actividad import ActividadRepository
-from app.repositories.calificacion import CalificacionRepository
-from app.repositories.curso import CursoRepository
-from app.repositories.rubrica import RubricaRepository
 from app.schemas import ActividadCreate, ActividadUpdate, ActividadOut
-from app.schemas.criterio import AspectoOut
+from app.services.actividades import ActividadService
 
+# Los errores de negocio (404, 403, 409) los lanza ActividadService y los traduce
+# a HTTP el manejador global registrado en main.py (app/errores_http.py)
 router = APIRouter(tags=["Actividades"])
-
-
-def _verificar_curso(curso_id: int, email: str, db: Session) -> Curso:
-    curso = CursoRepository(db).get(curso_id)
-    if not curso:
-        raise HTTPException(status_code=404, detail="Curso no encontrado")
-    if curso.docente_email != email:
-        raise HTTPException(status_code=403, detail="No tiene permiso sobre este curso")
-    return curso
-
-
-def _actividad_out(actividad: Actividad, total_peso) -> ActividadOut:
-    return ActividadOut.model_validate(actividad).model_copy(
-        update={"total_peso_criterios": total_peso}
-    )
 
 
 @router.get(
@@ -43,10 +25,9 @@ def listar_actividades(
     """
     Devuelve todas las actividades del curso ordenadas por fecha de creación,
     con la suma de pesos de sus criterios calculada en una sola consulta.
+    404 si el curso no existe, 403 si es de otro docente.
     """
-    _verificar_curso(curso_id, usuario["email"], db)
-    filas = ActividadRepository(db).de_curso_con_total_peso(curso_id)
-    return [_actividad_out(actividad, total) for actividad, total in filas]
+    return ActividadService(db).listar(curso_id, usuario["email"])
 
 
 @router.post(
@@ -61,12 +42,11 @@ def crear_actividad(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Crea una actividad (individual o grupal) dentro del curso."""
-    _verificar_curso(curso_id, usuario["email"], db)
-    actividad = ActividadRepository(db).agregar(Actividad(**body.model_dump(), curso_id=curso_id))
-    db.commit()
-    db.refresh(actividad)
-    return actividad
+    """
+    Crea una actividad (individual o grupal) dentro del curso.
+    404 si el curso no existe, 403 si es de otro docente.
+    """
+    return ActividadService(db).crear(curso_id, usuario["email"], body.model_dump())
 
 
 @router.get(
@@ -78,18 +58,15 @@ def obtener_actividad(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Devuelve la actividad con sus aspectos y criterios anidados."""
-    repo = ActividadRepository(db)
-    actividad = repo.get(actividad_id)
-    if not actividad:
-        raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = CursoRepository(db).get(actividad.curso_id)
-    if not curso or curso.docente_email != usuario["email"]:
-        raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
-
-    out = _actividad_out(actividad, RubricaRepository(db).suma_pesos(actividad_id))
-    aspectos_out = [AspectoOut.model_validate(a) for a in actividad.aspectos]
-    return {**out.model_dump(), "aspectos": [a.model_dump() for a in aspectos_out]}
+    """
+    Devuelve la actividad con sus aspectos y criterios anidados.
+    404 si la actividad no existe, 403 si es de otro docente.
+    """
+    detalle = ActividadService(db).obtener(actividad_id, usuario["email"])
+    # Sin response_model y con model_dump() en modo Python a propósito: los Decimal
+    # salen como número (20.0), como siempre ha respondido este endpoint. Con
+    # response_model, o devolviendo el modelo sin volcar, saldrían como texto ("20.00")
+    return detalle.model_dump()
 
 
 @router.put(
@@ -104,23 +81,11 @@ def editar_actividad(
     usuario: dict = Depends(get_current_user),
 ):
     """
-    Edita nombre o peso de la actividad.
-    El tipo (individual/grupal) NO puede modificarse si ya hay calificaciones.
+    Edita el nombre y/o el peso en la nota final; solo cambia los campos enviados.
+    El tipo (individual/grupal) no es editable.
+    404 si la actividad no existe, 403 si es de otro docente.
     """
-    repo = ActividadRepository(db)
-    actividad = repo.get(actividad_id)
-    if not actividad:
-        raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = CursoRepository(db).get(actividad.curso_id)
-    if not curso or curso.docente_email != usuario["email"]:
-        raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
-
-    for campo, valor in body.model_dump(exclude_none=True).items():
-        setattr(actividad, campo, valor)
-
-    db.commit()
-    db.refresh(actividad)
-    return _actividad_out(actividad, RubricaRepository(db).suma_pesos(actividad_id))
+    return ActividadService(db).editar(actividad_id, usuario["email"], body.model_dump(exclude_none=True))
 
 
 @router.delete(
@@ -133,21 +98,8 @@ def eliminar_actividad(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Elimina la actividad solo si no tiene calificaciones registradas."""
-    repo = ActividadRepository(db)
-    actividad = repo.get(actividad_id)
-    if not actividad:
-        raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    curso = CursoRepository(db).get(actividad.curso_id)
-    if not curso or curso.docente_email != usuario["email"]:
-        raise HTTPException(status_code=403, detail="No tiene permiso sobre esta actividad")
-
-    if CalificacionRepository(db).existen_para_actividad(actividad_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"No se puede eliminar '{actividad.nombre}' porque ya tiene "
-                   "calificaciones registradas.",
-        )
-
-    repo.eliminar(actividad)
-    db.commit()
+    """
+    Elimina la actividad solo si no tiene calificaciones registradas.
+    409 si las tiene, 404 si la actividad no existe, 403 si es de otro docente.
+    """
+    ActividadService(db).eliminar(actividad_id, usuario["email"])

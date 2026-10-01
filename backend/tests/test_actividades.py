@@ -118,7 +118,7 @@ def test_actividad_de_otro_docente_403_sin_cambios(client, db_session, ajeno, me
 
 class TestObtener:
     def test_detalle_con_aspectos_y_numeros_como_float(self, client, db_session, curso):
-        act, [[c1, c2]] = _actividad(db_session, curso, [("2.1.1", [60, 40])])
+        act, [[c1, c2]] = _actividad(db_session, curso, [(None, [60, 40])])
         resp = client.get(f"/actividades/{act.id}")
         assert resp.status_code == 200
         cuerpo = resp.json()
@@ -126,7 +126,7 @@ class TestObtener:
         # Sin response_model: los Decimal salen como número, no como texto
         assert (cuerpo["peso_nota_final"], cuerpo["total_peso_criterios"]) == (20.0, 100.0)
         [aspecto] = cuerpo["aspectos"]
-        assert (aspecto["nombre"], aspecto["codigo_abet"]) == ("A0", "2.1.1")
+        assert (aspecto["nombre"], aspecto["codigo_abet"]) == ("A0", None)
         assert [(c["id"], c["peso_porcentaje"]) for c in aspecto["criterios"]] == [(c1.id, 60.0), (c2.id, 40.0)]
 
     def test_sin_rubrica(self, client, db_session, curso):
