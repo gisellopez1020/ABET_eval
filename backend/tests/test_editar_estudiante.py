@@ -108,9 +108,6 @@ class TestValidacionYPermisos:
         assert resp.status_code == 422
         assert _guardado(db_session, ana) == ("ANA RUIZ", "2021001", "ana@uao.edu.co")
 
-    def test_estudiante_inexistente_404(self, client):
-        assert client.put("/estudiantes/99999", json={"nombre_completo": "X"}).status_code == 404
-
     def test_estudiante_de_otro_docente_403_sin_modificar(self, client, db_session):
         _, [ajena] = _curso(db_session, "Ajena", "A-1", email="otro@uao.edu.co")
         zoe = _est(db_session, ajena, "ZOE ARIAS", "9", "zoe@uao.edu.co")

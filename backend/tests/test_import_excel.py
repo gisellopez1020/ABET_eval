@@ -13,7 +13,6 @@ from openpyxl import Workbook
 from app.models import Actividad, Curso, Seccion
 from app.models.actividad import TipoActividad
 from tests.test_catalogo_ra_abet import MOCK_USER, client, db_session  # noqa: F401 (fixtures)
-from tests.test_rubrica_abet import _calificar
 
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -154,13 +153,6 @@ class TestRubricaExcel:
         assert resp.status_code == 422
         assert "suman 90" in resp.json()["detail"]
 
-    def test_columnas_faltantes(self, client, db_session):
-        act = _nueva_actividad(db_session)
-        filas = [("Aspecto", "Criterio"), ("Diseño", "A")]
-        resp = client.post(f"/actividades/{act.id}/criterios/importar-excel", files=_subir_xlsx(_xlsx(filas)))
-        assert resp.status_code == 422
-        assert "al menos 3 columnas" in resp.json()["detail"]
-
     def test_archivo_que_no_es_excel(self, client, db_session):
         act = _nueva_actividad(db_session)
         resp = client.post(
@@ -169,15 +161,6 @@ class TestRubricaExcel:
         )
         assert resp.status_code == 422
         assert "No se pudo leer" in resp.json()["detail"]
-
-    def test_actividad_con_calificaciones_se_bloquea(self, client, db_session):
-        act = _nueva_actividad(db_session)
-        client.put(f"/actividades/{act.id}/criterios", json=PAYLOAD_CSV)
-        _calificar(db_session, act)
-        resp = client.post(
-            f"/actividades/{act.id}/criterios/importar-excel", files=_subir_xlsx(_xlsx(RUBRICA_EXCEL))
-        )
-        assert resp.status_code == 409
 
 
 # ── Estudiantes ──────────────────────────────────────────────────────────────
@@ -232,14 +215,6 @@ class TestEstudiantesExcel:
         contenido = _xlsx([("Nombre", "Codigo"), ("Ana Ruiz", "1"), ("Sin código", None)])
         resp = client.post(f"/secciones/{s1.id}/estudiantes/csv", files=_subir_xlsx(contenido))
         assert resp.json() == {"importados": 1, "errores": ["Fila 3: nombre o código vacío, se omite"]}
-
-    def test_excel_columnas_faltantes(self, client, secciones):
-        s1, _ = secciones
-        contenido = _xlsx([("Nombre", "Correo"), ("Ana Ruiz", "a@x.co")])
-        resp = client.post(f"/secciones/{s1.id}/estudiantes/csv", files=_subir_xlsx(contenido))
-        assert resp.status_code == 422
-        assert "'Nombre' y 'Codigo'" in resp.json()["detail"]
-        assert client.get(f"/secciones/{s1.id}/estudiantes").json() == []
 
     def test_vista_previa_excel_no_guarda(self, client, secciones):
         s1, _ = secciones

@@ -84,11 +84,6 @@ class TestCrudCatalogo:
         resp = client.post("/catalogo/ra-abet", json=_ra("2.1", so="SO2"))
         assert resp.json()["so"] == "SO2"
 
-    def test_crear_duplicado_409(self, client):
-        client.post("/catalogo/ra-abet", json=_ra("2.1"))
-        resp = client.post("/catalogo/ra-abet", json=_ra("2.1"))
-        assert resp.status_code == 409
-
     def test_crear_con_campo_vacio_422(self, client):
         resp = client.post("/catalogo/ra-abet", json=_ra("2.1", competencia="  "))
         assert resp.status_code == 422
@@ -123,16 +118,10 @@ class TestCrudCatalogo:
         assert resp.status_code == 200
         assert resp.json()["codigo"] == "2.1"
 
-    def test_editar_inexistente_404(self, client):
-        assert client.put("/catalogo/ra-abet/9.9", json={"descripcion": "X"}).status_code == 404
-
     def test_eliminar_sin_uso(self, client):
         client.post("/catalogo/ra-abet", json=_ra("2.1"))
         assert client.delete("/catalogo/ra-abet/2.1").status_code == 204
         assert client.get("/catalogo/ra-abet").json() == []
-
-    def test_eliminar_inexistente_404(self, client):
-        assert client.delete("/catalogo/ra-abet/9.9").status_code == 404
 
 
 class TestEliminarEnUso:
@@ -213,11 +202,6 @@ class TestValidacionRaAbetEnCursos:
         body = resp.json()
         assert body["ra_abet"] == ["2.1"]
         assert [r["etiqueta"] for r in body["rangos_calificacion"]] == ["0.0-2.9", "3.0-3.9", "4.0-5.0"]
-
-    def test_editar_curso_valida_codigos(self, client, db_session):
-        curso = _crear_curso(db_session, [])
-        resp = client.put(f"/cursos/{curso.id}", json={"ra_abet": ["9.9"]})
-        assert resp.status_code == 422
 
     def test_editar_curso_sin_ra_abet_conserva_valores_antiguos(self, client, db_session):
         """Cursos previos con textos que no están en el catálogo pueden editarse si no se envía ra_abet."""

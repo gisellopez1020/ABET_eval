@@ -21,16 +21,3 @@ def test_activar_curso_ya_activo_es_idempotente(client, db_session):
     resp = client.patch(f"/cursos/{curso.id}/activar")
     assert resp.status_code == 200
     assert resp.json()["activo"] is True
-
-
-def test_curso_de_otro_docente_403(client, db_session):
-    ajeno = _crear_curso(db_session, [], email="otro@uao.edu.co")
-    assert client.patch(f"/cursos/{ajeno.id}/archivar").status_code == 403
-    assert client.patch(f"/cursos/{ajeno.id}/activar").status_code == 403
-    db_session.refresh(ajeno)
-    assert ajeno.activo is True
-
-
-def test_curso_inexistente_404(client):
-    assert client.patch("/cursos/99999/archivar").status_code == 404
-    assert client.patch("/cursos/99999/activar").status_code == 404

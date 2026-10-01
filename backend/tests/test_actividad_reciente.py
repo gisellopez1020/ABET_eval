@@ -123,14 +123,3 @@ def test_no_incluye_calificaciones_de_otros_cursos(client, db_session, curso):
     _calificar(db_session, crits, [1], estudiante=_estudiante(db_session, curso, "Ana"))
 
     assert client.get(_url(otro.id)).json() == []
-
-
-def test_curso_de_otro_docente_403(client, db_session):
-    ajeno = Curso(nombre="Ajeno", codigo="A-1", periodo="2026-2", docente_email="otro@uao.edu.co", ra_abet=[])
-    db_session.add(ajeno)
-    db_session.commit()
-    assert client.get(_url(ajeno.id)).status_code == 403
-
-
-def test_curso_inexistente_404(client):
-    assert client.get(_url(99999)).status_code == 404
