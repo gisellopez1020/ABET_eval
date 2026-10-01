@@ -1,8 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, field_validator
 from app.models.actividad import TipoActividad
+from app.schemas.criterio import AspectoOut
 
 
 class ActividadCreate(BaseModel):
@@ -41,3 +42,8 @@ class ActividadOut(BaseModel):
     created_at: datetime
     # Suma de pesos de los criterios de la rúbrica (0 si no hay criterios)
     total_peso_criterios: Decimal = Decimal("0")
+
+
+class ActividadDetalleOut(ActividadOut):
+    """Actividad con su rúbrica anidada (GET /actividades/{id})."""
+    aspectos: List[AspectoOut] = []
