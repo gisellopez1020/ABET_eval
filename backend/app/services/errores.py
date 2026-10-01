@@ -30,6 +30,14 @@ class DatosInvalidos(ErrorDeNegocio):
     """Los datos enviados no cumplen una regla que requiere consultar la BD."""
 
 
+class SolicitudInvalida(ErrorDeNegocio):
+    """
+    Igual que DatosInvalidos (la petición no cumple una regla de negocio), pero para los
+    endpoints que históricamente responden 400 en vez de 422 (equipos, calificaciones).
+    Se mantiene aparte para no cambiar esos códigos; unificarlos es un cambio de API.
+    """
+
+
 # ── Excepciones concretas ────────────────────────────────────────────────────
 
 class CursoNoEncontrado(NoEncontrado):
@@ -237,3 +245,60 @@ class LimiteRaAbetCurso(DatosInvalidos):
 
 class RubricaExcelInvalida(DatosInvalidos):
     """El Excel de la rúbrica no tiene el formato esperado (el mensaje es el del parser)."""
+
+
+# ── Equipos de trabajo ───────────────────────────────────────────────────────
+
+class SeccionFueraDelCurso(NoEncontrado):
+    """La sección no existe o es de otro curso que el de la actividad."""
+
+    def __init__(self):
+        super().__init__("Sección no encontrada en este curso")
+
+
+class EquipoNoEncontrado(NoEncontrado):
+    def __init__(self):
+        super().__init__("Equipo no encontrado")
+
+
+class ActividadNoGrupal(SolicitudInvalida):
+    def __init__(self):
+        super().__init__("Solo se pueden crear equipos para actividades de tipo grupal")
+
+
+class EstudianteFueraDeSeccion(SolicitudInvalida):
+    """
+    El estudiante no existe o no es de la sección. Al crear se nombra la sección por su
+    id; al editar, como "la sección del equipo".
+    """
+
+    def __init__(self, estudiante_id: int, seccion_id: int | None = None):
+        self.estudiante_id = estudiante_id
+        self.seccion_id = seccion_id
+        seccion = f"la sección {seccion_id}" if seccion_id is not None else "la sección del equipo"
+        super().__init__(f"Estudiante {estudiante_id} no pertenece a {seccion}")
+
+
+class EstudianteRepetidoEnEquipo(SolicitudInvalida):
+    def __init__(self, estudiante: str, equipo: str):
+        self.estudiante = estudiante
+        self.equipo = equipo
+        super().__init__(f"El estudiante {estudiante} está repetido en el equipo '{equipo}'")
+
+
+class EstudianteEnDosEquipos(SolicitudInvalida):
+    """El mismo estudiante aparece en dos equipos de un mismo envío."""
+
+    def __init__(self, estudiante: str, equipo_a: str, equipo_b: str):
+        self.estudiante = estudiante
+        self.equipos = (equipo_a, equipo_b)
+        super().__init__(f"El estudiante {estudiante} está en dos equipos: '{equipo_a}' y '{equipo_b}'")
+
+
+class EstudianteYaEnOtroEquipo(SolicitudInvalida):
+    """Un estudiante solo puede estar en un equipo por actividad (en otras actividades, sí)."""
+
+    def __init__(self, estudiante: str, equipo: str):
+        self.estudiante = estudiante
+        self.equipo = equipo
+        super().__init__(f"El estudiante {estudiante} ya está en el equipo '{equipo}' de esta actividad")
