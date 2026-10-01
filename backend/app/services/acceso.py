@@ -6,10 +6,11 @@ no tenga que depender de otro (cuyos métodos públicos sí hacen commit) solo p
 Reciben los repositorios del servicio que las llama: así ese servicio sigue siendo
 el único dueño de sus repositorios y sus tests pueden sustituirlos.
 """
-from app.models import Actividad
+from app.models import Actividad, Seccion
 from app.repositories.actividad import ActividadRepository
 from app.repositories.curso import CursoRepository
-from app.services.errores import ActividadNoEncontrada, SinPermiso
+from app.repositories.seccion import SeccionRepository
+from app.services.errores import ActividadNoEncontrada, SeccionFueraDelCurso, SinPermiso
 
 
 def actividad_del_docente(
@@ -26,3 +27,15 @@ def actividad_del_docente(
     if not curso or curso.docente_email != email:
         raise SinPermiso("No tiene permiso sobre esta actividad")
     return actividad
+
+
+def seccion_del_curso(secciones: SeccionRepository, seccion_id: int, curso_id: int) -> Seccion:
+    """
+    La sección, si existe y es del curso. SeccionFueraDelCurso (404) si no.
+    No comprueba el docente: `curso_id` debe venir de un recurso ya verificado (por
+    ejemplo, la actividad que devolvió actividad_del_docente).
+    """
+    seccion = secciones.get(seccion_id)
+    if not seccion or seccion.curso_id != curso_id:
+        raise SeccionFueraDelCurso()
+    return seccion
