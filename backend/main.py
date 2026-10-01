@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.errores_http import registrar_manejadores
 from app.routers import auth, cursos, secciones, estudiantes, actividades
 from app.routers import criterios, equipos, calificaciones, reportes, drive, catalogo
 
@@ -19,6 +20,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Errores de negocio de los servicios -> respuestas HTTP (404, 403, 409)
+registrar_manejadores(app)
 
 app.include_router(auth.router)
 app.include_router(cursos.router)

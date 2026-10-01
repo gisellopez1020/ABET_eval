@@ -1,24 +1,16 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Curso, Seccion
-from app.repositories.curso import CursoRepository
-from app.repositories.seccion import SeccionRepository
+from app.models import Seccion
 from app.schemas import SeccionCreate, SeccionUpdate, SeccionOut
+from app.services.secciones import SeccionService
 
+# Los errores de negocio (404, 403, 409) los lanza SeccionService y los traduce
+# a HTTP el manejador global registrado en main.py (app/errores_http.py)
 router = APIRouter(tags=["Secciones"])
-
-
-def _verificar_curso(curso_id: int, email: str, db: Session) -> Curso:
-    curso = CursoRepository(db).get(curso_id)
-    if not curso:
-        raise HTTPException(status_code=404, detail="Curso no encontrado")
-    if curso.docente_email != email:
-        raise HTTPException(status_code=403, detail="No tiene permiso sobre este curso")
-    return curso
 
 
 def _seccion_con_total(seccion: Seccion) -> SeccionOut:
@@ -37,9 +29,11 @@ def listar_secciones(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Devuelve las secciones activas del curso con su conteo de estudiantes."""
-    _verificar_curso(curso_id, usuario["email"], db)
-    secciones = SeccionRepository(db).activas_de_curso(curso_id)
+    """
+    Devuelve las secciones activas del curso con su conteo de estudiantes.
+    404 si el curso no existe, 403 si es de otro docente.
+    """
+    secciones = SeccionService(db).listar(curso_id, usuario["email"])
     return [_seccion_con_total(s) for s in secciones]
 
 
@@ -55,11 +49,11 @@ def crear_seccion(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Crea una nueva sección (grupo) dentro del curso."""
-    _verificar_curso(curso_id, usuario["email"], db)
-    seccion = SeccionRepository(db).agregar(Seccion(nombre=body.nombre, curso_id=curso_id))
-    db.commit()
-    db.refresh(seccion)
+    """
+    Crea una nueva sección (grupo) dentro del curso.
+    404 si el curso no existe, 403 si es de otro docente.
+    """
+    seccion = SeccionService(db).crear(curso_id, usuario["email"], body.nombre)
     return _seccion_con_total(seccion)
 
 
@@ -70,15 +64,11 @@ def editar_seccion(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Renombra una sección existente."""
-    repo = SeccionRepository(db)
-    seccion = repo.get(seccion_id)
-    if not seccion:
-        raise HTTPException(status_code=404, detail="Sección no encontrada")
-    _verificar_curso(seccion.curso_id, usuario["email"], db)
-    seccion.nombre = body.nombre
-    db.commit()
-    db.refresh(seccion)
+    """
+    Renombra una sección existente.
+    404 si la sección (o su curso) no existe, 403 si es de otro docente.
+    """
+    seccion = SeccionService(db).renombrar(seccion_id, usuario["email"], body.nombre)
     return _seccion_con_total(seccion)
 
 
@@ -94,21 +84,7 @@ def eliminar_seccion(
 ):
     """
     Elimina una sección solo si no tiene estudiantes registrados.
-    Si tiene estudiantes, retorna 409 Conflict.
+    409 si tiene estudiantes, 404 si la sección (o su curso) no existe,
+    403 si es de otro docente.
     """
-    repo = SeccionRepository(db)
-    seccion = repo.get(seccion_id)
-    if not seccion:
-        raise HTTPException(status_code=404, detail="Sección no encontrada")
-    _verificar_curso(seccion.curso_id, usuario["email"], db)
-
-    if seccion.estudiantes:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"No se puede eliminar la sección '{seccion.nombre}' porque tiene "
-                   f"{len(seccion.estudiantes)} estudiante(s) registrado(s). "
-                   "Elimine los estudiantes primero.",
-        )
-
-    repo.eliminar(seccion)
-    db.commit()
+    SeccionService(db).eliminar(seccion_id, usuario["email"])
