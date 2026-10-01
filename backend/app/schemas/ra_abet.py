@@ -40,11 +40,11 @@ def _validar_padre_peso(codigo_padre: Optional[str], peso: Optional[float]) -> N
 class RaAbetCreate(BaseModel):
     """
     Resultado de Aprendizaje (sin codigo_padre ni peso) o Criterio de Evaluación
-    (con ambos). La existencia y el nivel del padre se validan en el router (requiere BD).
+    (con ambos). La existencia y el nivel del padre se validan en CatalogoService (requiere BD).
     """
     codigo: str
     so: Optional[str] = None
-    # Obligatoria en un RA; en un Criterio, si viene vacía, el router usa la de su padre
+    # Obligatoria en un RA; en un Criterio, si viene vacía, CatalogoService usa la de su padre
     competencia: Optional[str] = None
     descripcion: str
     programa: str = PROGRAMA_DEFAULT
@@ -94,7 +94,7 @@ class RaAbetCreate(BaseModel):
 class RaAbetUpdate(BaseModel):
     """
     El código no es editable (los cursos lo referencian). codigo_padre y peso se
-    envían juntos; el router no permite cambiar de nivel (RA <-> Criterio).
+    envían juntos; CatalogoService no permite cambiar de nivel (RA <-> Criterio).
     """
     so: Optional[str] = None
     competencia: Optional[str] = None
