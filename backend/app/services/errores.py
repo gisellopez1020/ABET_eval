@@ -42,6 +42,27 @@ class SeccionNoEncontrada(NoEncontrado):
         super().__init__("Sección no encontrada")
 
 
+class EstudianteNoEncontrado(NoEncontrado):
+    def __init__(self):
+        super().__init__("Estudiante no encontrado")
+
+
+class AsignaturaNoEncontrada(NoEncontrado):
+    """El curso pedido como filtro de la exportación no existe (en esa pantalla se llama asignatura)."""
+
+    def __init__(self):
+        super().__init__("Asignatura no encontrada")
+
+
+class SeccionFueraDeAsignatura(NoEncontrado):
+    def __init__(self):
+        super().__init__("Sección no encontrada en esta asignatura")
+
+
+class ArchivoInvalido(DatosInvalidos):
+    """El archivo subido no se puede leer o le faltan columnas obligatorias (el mensaje dice cuál)."""
+
+
 class RaAbetDesconocidos(DatosInvalidos):
     def __init__(self, codigos: list[str]):
         self.codigos = codigos

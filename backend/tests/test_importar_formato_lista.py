@@ -9,7 +9,7 @@ sigue igual. Reutiliza las fixtures de SQLite y los helpers de test_exportar_est
 import pytest
 
 from app.models import Estudiante
-from app.routers.estudiantes import _columnas
+from app.services.lista_estudiantes import _columnas
 from tests.test_catalogo_ra_abet import MOCK_USER, client, db_session  # noqa: F401 (fixtures)
 from tests.test_exportar_estudiantes import MIME_XLSX, _curso, _est, _xlsx
 
