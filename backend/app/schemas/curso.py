@@ -80,7 +80,7 @@ class CursoCreate(BaseModel):
     nombre: str
     codigo: str
     periodo: str
-    # Códigos de ra_abet_catalogo; su existencia se valida en el router (requiere BD)
+    # Códigos de ra_abet_catalogo; su existencia se valida en CursoService (requiere BD)
     ra_abet: List[str] = []
     rangos_calificacion: List[RangoCalificacion] = Field(default_factory=_rangos_default)
 

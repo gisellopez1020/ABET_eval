@@ -26,6 +26,10 @@ class Conflicto(ErrorDeNegocio):
     """La operación choca con el estado actual de los datos."""
 
 
+class DatosInvalidos(ErrorDeNegocio):
+    """Los datos enviados no cumplen una regla que requiere consultar la BD."""
+
+
 # ── Excepciones concretas ────────────────────────────────────────────────────
 
 class CursoNoEncontrado(NoEncontrado):
@@ -36,6 +40,23 @@ class CursoNoEncontrado(NoEncontrado):
 class SeccionNoEncontrada(NoEncontrado):
     def __init__(self):
         super().__init__("Sección no encontrada")
+
+
+class RaAbetDesconocidos(DatosInvalidos):
+    def __init__(self, codigos: list[str]):
+        self.codigos = codigos
+        super().__init__(f"Códigos RA ABET que no existen en el catálogo: {', '.join(codigos)}")
+
+
+class CursoConCriteriosAbet(DatosInvalidos):
+    """Un curso solo selecciona Resultados de Aprendizaje, no Criterios individuales."""
+
+    def __init__(self, codigos: list[str]):
+        self.codigos = codigos
+        super().__init__(
+            "Un curso solo puede tener Resultados de Aprendizaje, no Criterios: "
+            f"{', '.join(codigos)}"
+        )
 
 
 class SeccionConEstudiantes(Conflicto):
