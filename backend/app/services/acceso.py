@@ -6,11 +6,25 @@ no tenga que depender de otro (cuyos métodos públicos sí hacen commit) solo p
 Reciben los repositorios del servicio que las llama: así ese servicio sigue siendo
 el único dueño de sus repositorios y sus tests pueden sustituirlos.
 """
-from app.models import Actividad, Seccion
+from app.models import Actividad, Curso, Seccion
 from app.repositories.actividad import ActividadRepository
 from app.repositories.curso import CursoRepository
 from app.repositories.seccion import SeccionRepository
-from app.services.errores import ActividadNoEncontrada, SeccionFueraDelCurso, SinPermiso
+from app.services.errores import ActividadNoEncontrada, CursoNoEncontrado, SeccionFueraDelCurso, SinPermiso
+
+
+def curso_del_docente(cursos: CursoRepository, curso_id: int, email: str) -> Curso:
+    """
+    El curso, si existe y es del docente. CursoNoEncontrado (404) si no existe;
+    SinPermiso("No tiene permiso sobre este curso") (403) si es de otro docente.
+    CursoService no la usa: su 403 dice "...para acceder a este curso".
+    """
+    curso = cursos.get(curso_id)
+    if not curso:
+        raise CursoNoEncontrado()
+    if curso.docente_email != email:
+        raise SinPermiso("No tiene permiso sobre este curso")
+    return curso
 
 
 def actividad_del_docente(
