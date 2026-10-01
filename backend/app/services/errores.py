@@ -180,3 +180,60 @@ class CodigoVinculadoAAspectos(CodigoNoEliminable):
             codigo, cantidad,
             f"está vinculado a {cantidad} aspecto{'s' if cantidad != 1 else ''} de rúbrica.",
         )
+
+
+# ── Rúbrica de una actividad (aspectos y criterios) ──────────────────────────
+
+class AspectoNoEncontrado(NoEncontrado):
+    def __init__(self):
+        super().__init__("Aspecto no encontrado en esta actividad")
+
+
+class RubricaConCalificaciones(Conflicto):
+    """Reemplazar la rúbrica borraría en cascada calificaciones ya registradas."""
+
+    def __init__(self, nombre: str):
+        self.nombre = nombre
+        super().__init__(
+            f"No se puede modificar la rúbrica de '{nombre}' porque ya tiene calificaciones registradas."
+        )
+
+
+class PesosRubricaInvalidos(DatosInvalidos):
+    def __init__(self, total):
+        self.total = total
+        super().__init__(f"Los criterios suman {total}%. Deben sumar exactamente 100%.")
+
+
+class CodigoAbetDesconocido(DatosInvalidos):
+    def __init__(self, codigo: str):
+        self.codigo = codigo
+        super().__init__(f"El código ABET '{codigo}' no existe en el catálogo de Student Outcomes")
+
+
+class CodigoAbetEsResultado(DatosInvalidos):
+    """Un aspecto se vincula a un Criterio del catálogo, no a un Resultado de Aprendizaje."""
+
+    def __init__(self, codigo: str):
+        self.codigo = codigo
+        super().__init__(
+            f"'{codigo}' es un Resultado de Aprendizaje, no un Criterio — usa un código como {codigo}.1"
+        )
+
+
+class LimiteRaAbetCurso(DatosInvalidos):
+    """Vincular el código agregaría al curso más RA de los permitidos (MAX_RA_ABET)."""
+
+    def __init__(self, faltantes: list[str], curso_nombre: str, actuales: int, maximo: int):
+        self.faltantes = faltantes
+        self.actuales = actuales
+        self.maximo = maximo
+        super().__init__(
+            f"Vincular este código agregaría {', '.join(faltantes)} a la asignatura "
+            f"'{curso_nombre}', que ya tiene {actuales} de {maximo} RA ABET. "
+            "Quita alguno en Editar asignatura."
+        )
+
+
+class RubricaExcelInvalida(DatosInvalidos):
+    """El Excel de la rúbrica no tiene el formato esperado (el mensaje es el del parser)."""

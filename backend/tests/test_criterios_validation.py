@@ -79,7 +79,7 @@ class TestBloqueoConCalificaciones:
         app.dependency_overrides[get_db] = lambda: db
         app.dependency_overrides[get_current_user] = lambda: MOCK_USER
         try:
-            with patch("app.routers.criterios._verificar_actividad", return_value=actividad), \
+            with patch("app.services.criterios.actividad_del_docente", return_value=actividad), \
                  patch("app.repositories.calificacion.CalificacionRepository.existen_para_actividad", return_value=True):
                 resp = client.put("/actividades/1/criterios", json=_payload_criterios([100]))
         finally:
