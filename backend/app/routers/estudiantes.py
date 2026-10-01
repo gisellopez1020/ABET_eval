@@ -1,212 +1,25 @@
-import csv
-import io
-import re
-import unicodedata
-from collections import Counter
-from typing import List, NamedTuple, Optional, Tuple
+from typing import List, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, File, status
+from fastapi import APIRouter, Depends, Query, Response, UploadFile, File, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
-from app.models import Seccion, Estudiante
-from app.repositories.curso import CursoRepository
-from app.repositories.estudiante import EstudianteRepository
-from app.repositories.seccion import SeccionRepository
 from app.schemas import EstudianteCreate, EstudianteListadoOut, EstudianteOut, ImportacionCSVResultado
 from app.schemas.estudiante import EstudianteCreado, EstudianteUpdate, VistaPreviaEstudiantes
-from app.services.exportar_estudiantes import (
-    FilaEstudiante, libro_estudiantes, nombre_archivo_estudiantes,
-)
-from app.services.notas import promedios_estudiantes
+from app.services.estudiantes import EstudianteConAviso, EstudianteService
+from app.services.lista_estudiantes import MIME_XLSX
 
-try:
-    import pandas as pd
-except ImportError:  # misma dependencia opcional que utils/excel_parser.py
-    pd = None
-
-MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-# (número de fila en el archivo, nombre completo crudo, código crudo, correo crudo, grupo crudo).
-# El nombre ya llega combinado con los apellidos si el archivo los trae en otra columna
-FilaCruda = Tuple[int, Optional[str], Optional[str], Optional[str], Optional[str]]
-# (nombre, código, correo o None)
-EstudianteValido = Tuple[str, str, Optional[str]]
-
-# Chequeo mínimo: algo@algo.algo sin espacios. No se corrige ni se completa el dato
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
+# Los errores de negocio (404, 403, 422) los lanza EstudianteService y los traduce
+# a HTTP el manejador global registrado en main.py (app/errores_http.py)
 router = APIRouter(tags=["Estudiantes"])
 
 
-def _verificar_seccion(seccion_id: int, email: str, db: Session) -> Seccion:
-    seccion = SeccionRepository(db).get(seccion_id)
-    if not seccion:
-        raise HTTPException(status_code=404, detail="Sección no encontrada")
-    curso = CursoRepository(db).get(seccion.curso_id)
-    if not curso or curso.docente_email != email:
-        raise HTTPException(status_code=403, detail="No tiene permiso sobre esta sección")
-    return seccion
-
-
-def _normalizar_email(crudo: Optional[str]) -> Tuple[Optional[str], bool]:
-    """
-    (correo, era_invalido) para el alta manual, con el criterio de la importación:
-    recortado y en minúsculas, vacío -> None, y uno que no lo parece se deja en blanco
-    (nunca se rechaza al estudiante por el formato ni se corrige el dato).
-    """
-    email = (crudo or "").strip().lower() or None
-    if email and not _EMAIL_RE.match(email):
-        return None, True
-    return email, False
-
-
-def _es_excel(archivo: UploadFile) -> bool:
-    return (archivo.filename or "").lower().endswith(".xlsx") or archivo.content_type == MIME_XLSX
-
-
-async def _leer_filas(archivo: UploadFile) -> List[FilaCruda]:
-    contenido = await archivo.read()
-    if _es_excel(archivo):
-        return _leer_filas_excel(contenido)
-    return _leer_filas_csv(contenido)
-
-
-class Columnas(NamedTuple):
-    nombre: Optional[str]
-    codigo: Optional[str]
-    email: Optional[str] = None
-    apellidos: Optional[str] = None
-    grupo: Optional[str] = None
-
-
-def _clave(encabezado: str) -> str:
-    """Encabezado comparable: minúsculas, sin tildes y sin espacios de más."""
-    sin_tildes = unicodedata.normalize("NFKD", encabezado).encode("ascii", "ignore").decode()
-    return " ".join(sin_tildes.lower().split())
-
-
-# Formato de la lista institucional: Nombre | Apellido(s) | Número de ID | Dirección de correo | Grupo.
-# Se compara el encabezado entero: buscar "id" como fragmento también encontraría "Apellido(s)"
-_ALIAS_CODIGO = {"numero de id", "id"}
-
-
-def _columnas(campos: List[str]) -> Columnas:
-    col_nombre = next((c for c in campos if "nombre" in c.lower()), None)
-    col_codigo = next((c for c in campos if "codigo" in c.lower() or "código" in c.lower()), None)
-    if col_codigo is None:
-        col_codigo = next((c for c in campos if _clave(c) in _ALIAS_CODIGO), None)
-    # Opcional: sin esta columna el correo queda NULL ("Dirección de correo" entra por "correo")
-    col_email = next(
-        (c for c in campos if any(k in c.lower() for k in ("email", "e-mail", "correo"))), None
+def _creado(resultado: EstudianteConAviso) -> EstudianteCreado:
+    return EstudianteCreado(
+        **EstudianteOut.model_validate(resultado.estudiante).model_dump(), aviso=resultado.aviso
     )
-    # Opcionales: apellidos en columna aparte (se unen al nombre) y grupo (solo para avisar)
-    col_apellidos = next((c for c in campos if _clave(c).startswith("apellido")), None)
-    col_grupo = next((c for c in campos if _clave(c) == "grupo"), None)
-    return Columnas(col_nombre, col_codigo, col_email, col_apellidos, col_grupo)
-
-
-def _nombre_completo(nombre: Optional[str], apellidos: Optional[str]) -> str:
-    """Une Nombre y Apellido(s) cuando vienen separados; sin apellidos, el nombre ya es el completo."""
-    return f"{(nombre or '').strip()} {(apellidos or '').strip()}".strip()
-
-
-def _leer_filas_csv(contenido: bytes) -> List[FilaCruda]:
-    try:
-        texto = contenido.decode("utf-8-sig")  # utf-8-sig maneja BOM de Excel
-    except UnicodeDecodeError:
-        texto = contenido.decode("latin-1")
-
-    lector = csv.DictReader(io.StringIO(texto))
-    cols = _columnas(lector.fieldnames or [])
-
-    if not cols.nombre or not cols.codigo:
-        raise HTTPException(
-            status_code=422,
-            detail="El CSV debe tener columnas 'Nombre' y 'Codigo' (o 'Código', o 'Número de ID')",
-        )
-
-    return [
-        (
-            i,
-            _nombre_completo(fila.get(cols.nombre), fila.get(cols.apellidos) if cols.apellidos else None),
-            fila.get(cols.codigo),
-            fila.get(cols.email) if cols.email else None,
-            fila.get(cols.grupo) if cols.grupo else None,
-        )
-        for i, fila in enumerate(lector, start=2)
-    ]
-
-
-def _leer_filas_excel(contenido: bytes) -> List[FilaCruda]:
-    if pd is None:
-        raise HTTPException(status_code=422, detail="pandas y openpyxl son necesarios para leer Excel")
-    try:
-        # dtype=str: un código como 2021001 no debe llegar como 2021001.0;
-        # keep_default_na=False: las celdas vacías llegan como "" y no como NaN
-        df = pd.read_excel(io.BytesIO(contenido), header=0, dtype=str, keep_default_na=False)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"No se pudo leer el archivo Excel: {exc}")
-
-    df.columns = [str(c) for c in df.columns]
-    cols = _columnas(list(df.columns))
-
-    if not cols.nombre or not cols.codigo:
-        raise HTTPException(
-            status_code=422,
-            detail="El Excel debe tener columnas 'Nombre' y 'Codigo' (o 'Código', o 'Número de ID')",
-        )
-
-    def columna(nombre_col: Optional[str]):
-        return df[nombre_col] if nombre_col else [None] * len(df)
-
-    return [
-        (i, _nombre_completo(nombre, apellidos), codigo, email, grupo)
-        for i, (nombre, apellidos, codigo, email, grupo) in enumerate(
-            zip(df[cols.nombre], columna(cols.apellidos), df[cols.codigo], columna(cols.email), columna(cols.grupo)),
-            start=2,
-        )
-    ]
-
-
-def _procesar_filas(
-    filas: List[FilaCruda], seccion_nombre: Optional[str] = None
-) -> Tuple[List[EstudianteValido], List[str]]:
-    """
-    Normaliza las filas y separa las válidas (nombre, código, correo) de los errores.
-    Un correo que no lo parece no descarta la fila: el estudiante se importa con el
-    correo en blanco y queda un aviso.
-    La columna Grupo no se guarda (la sección la define la URL): si se pasa
-    seccion_nombre, solo se avisa cuando no coincide, una vez por valor distinto.
-    """
-    validos: List[EstudianteValido] = []
-    errores: List[str] = []
-    otros_grupos: Counter = Counter()
-
-    for i, nombre_crudo, codigo_crudo, email_crudo, grupo_crudo in filas:
-        nombre = (nombre_crudo or "").strip().upper()
-        codigo = (codigo_crudo or "").strip()
-        if not nombre or not codigo:
-            errores.append(f"Fila {i}: nombre o código vacío, se omite")
-            continue
-        email = (email_crudo or "").strip().lower() or None
-        if email and not _EMAIL_RE.match(email):
-            errores.append(f"Fila {i}: correo '{email_crudo.strip()}' no válido, se deja en blanco")
-            email = None
-        validos.append((nombre, codigo, email))
-        grupo = (grupo_crudo or "").strip()
-        if seccion_nombre is not None and grupo and _clave(grupo) != _clave(seccion_nombre):
-            otros_grupos[grupo] += 1
-
-    for grupo, n in otros_grupos.items():
-        errores.append(
-            f"{n} fila{'s tienen' if n != 1 else ' tiene'} Grupo '{grupo}', distinto de esta "
-            f"sección ('{seccion_nombre}'); se importa{'n' if n != 1 else ''} igual"
-        )
-
-    return validos, errores
 
 
 @router.get(
@@ -222,17 +35,9 @@ def listar_estudiantes(
     """
     Devuelve todos los estudiantes matriculados en la sección, con su promedio
     ponderado sobre las actividades calificadas del curso (ver services/notas.py).
+    404 si la sección no existe, 403 si es de otro docente.
     """
-    seccion = _verificar_seccion(seccion_id, usuario["email"], db)
-    estudiantes = EstudianteRepository(db).de_seccion(seccion_id)
-    promedios = promedios_estudiantes(db, seccion.curso_id, [e.id for e in estudiantes])
-    return [
-        EstudianteListadoOut(
-            **EstudianteOut.model_validate(e).model_dump(),
-            promedio=float(promedios[e.id]) if promedios[e.id] is not None else None,
-        )
-        for e in estudiantes
-    ]
+    return EstudianteService(db).listar(seccion_id, usuario["email"])
 
 
 @router.post(
@@ -250,21 +55,11 @@ def agregar_estudiante(
     """
     Agrega un único estudiante a la sección. El correo es opcional; si no tiene
     formato de correo el estudiante se crea igual, con el correo en blanco y un `aviso`.
+    404 si la sección no existe, 403 si es de otro docente.
     """
-    _verificar_seccion(seccion_id, usuario["email"], db)
-    email, email_invalido = _normalizar_email(body.email)
-    estudiante = EstudianteRepository(db).agregar(Estudiante(
-        nombre_completo=body.nombre_completo.strip().upper(),
-        codigo_estudiante=body.codigo_estudiante.strip(),
-        email=email,
-        seccion_id=seccion_id,
+    return _creado(EstudianteService(db).agregar(
+        seccion_id, usuario["email"], body.nombre_completo, body.codigo_estudiante, body.email,
     ))
-    db.commit()
-    db.refresh(estudiante)
-    return EstudianteCreado(
-        **EstudianteOut.model_validate(estudiante).model_dump(),
-        aviso=f"El correo '{body.email.strip()}' no es válido, se dejó en blanco" if email_invalido else None,
-    )
 
 
 @router.post(
@@ -291,22 +86,13 @@ async def importar_csv(
     de la URL) y solo genera un aviso si no coincide con ella.
     También acepta un .xlsx con las mismas dos columnas en la primera hoja
     (se detecta por la extensión o el content_type).
+    404 si la sección no existe, 403 si es de otro docente, 422 si el archivo no
+    se puede leer o le faltan las columnas obligatorias.
     """
-    seccion = _verificar_seccion(seccion_id, usuario["email"], db)
-
-    validos, errores = _procesar_filas(await _leer_filas(archivo), seccion.nombre)
-    EstudianteRepository(db).agregar_varios([
-        Estudiante(
-            nombre_completo=nombre,
-            codigo_estudiante=codigo,
-            email=email,
-            seccion_id=seccion_id,
-        )
-        for nombre, codigo, email in validos
-    ])
-
-    db.commit()
-    return ImportacionCSVResultado(importados=len(validos), errores=errores)
+    resultado = EstudianteService(db).importar(
+        seccion_id, usuario["email"], await archivo.read(), archivo.filename, archivo.content_type,
+    )
+    return ImportacionCSVResultado(importados=resultado.importados, errores=resultado.avisos)
 
 
 @router.post(
@@ -323,13 +109,10 @@ async def vista_previa_estudiantes(
     """
     Devuelve los estudiantes que importaría POST .../estudiantes/csv con el mismo
     archivo, sin guardarlos. El frontend la usa para la vista previa de un .xlsx
-    (la de un CSV se sigue calculando en el navegador).
+    (la de un CSV se sigue calculando en el navegador). Mismos errores que la importación.
     """
-    seccion = _verificar_seccion(seccion_id, usuario["email"], db)
-    validos, errores = _procesar_filas(await _leer_filas(archivo), seccion.nombre)
-    return VistaPreviaEstudiantes(
-        estudiantes=[{"nombre": n, "codigo": c, "email": e} for n, c, e in validos],
-        errores=errores,
+    return EstudianteService(db).vista_previa(
+        seccion_id, usuario["email"], await archivo.read(), archivo.filename, archivo.content_type,
     )
 
 
@@ -351,45 +134,13 @@ def exportar_excel(
     pantalla Estudiantes); con curso_id y/o seccion_id, solo esos. Una sección pedida
     explícitamente se exporta aunque esté archivada.
     El correo sale del campo email: en blanco si no se importó, nunca calculado.
+    404 si la asignatura o la sección no existen (o la sección no es de esa asignatura),
+    403 si son de otro docente.
     """
-    email = usuario["email"]
-    curso = None
-    if curso_id is not None:
-        curso = CursoRepository(db).get(curso_id)
-        if not curso:
-            raise HTTPException(status_code=404, detail="Asignatura no encontrada")
-        if curso.docente_email != email:
-            raise HTTPException(status_code=403, detail="No tiene permiso sobre esta asignatura")
-    seccion = None
-    if seccion_id is not None:
-        seccion = _verificar_seccion(seccion_id, email, db)
-        if curso is not None and seccion.curso_id != curso.id:
-            raise HTTPException(status_code=404, detail="Sección no encontrada en esta asignatura")
-
-    repo = EstudianteRepository(db)
-    if seccion is not None:
-        resultados = repo.para_exportar(email, seccion_id=seccion.id, solo_activas=False)
-    else:
-        resultados = repo.para_exportar(email, curso_id=curso.id if curso is not None else None)
-    filas = [
-        FilaEstudiante(
-            nombre_completo=est.nombre_completo,
-            codigo=est.codigo_estudiante,
-            email=est.email,
-            grupo=sec.nombre,
-            asignatura=f"{cur.nombre} ({cur.codigo} · {cur.periodo})",
-        )
-        for est, sec, cur in resultados
-    ]
-
-    # El archivo lleva el código de la asignatura y la sección solo si se filtró por ellas
-    curso_archivo = curso or (CursoRepository(db).get(seccion.curso_id) if seccion else None)
-    nombre = nombre_archivo_estudiantes(
-        [*([curso_archivo.codigo] if curso_archivo else []), *([seccion.nombre] if seccion else [])]
-    )
+    contenido, nombre = EstudianteService(db).exportar(usuario["email"], curso_id, seccion_id)
     ascii_ = nombre.encode("ascii", "ignore").decode() or "Estudiantes.xlsx"
     return Response(
-        content=libro_estudiantes(filas),
+        content=contenido,
         media_type=MIME_XLSX,
         headers={"Content-Disposition": f"attachment; filename=\"{ascii_}\"; filename*=UTF-8''{quote(nombre)}"},
     )
@@ -412,36 +163,10 @@ def editar_estudiante(
     El correo se normaliza como en el alta (`null` o vacío lo borra). Uno sin formato
     de correo no bloquea la edición: se conserva el que había (en blanco si no había)
     y la respuesta trae un `aviso`.
+    404 si el estudiante no existe, 403 si es de otro docente.
     """
-    repo = EstudianteRepository(db)
-    estudiante = repo.get(estudiante_id)
-    if not estudiante:
-        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-    seccion = SeccionRepository(db).get(estudiante.seccion_id)
-    curso = CursoRepository(db).get(seccion.curso_id)
-    if not curso or curso.docente_email != usuario["email"]:
-        raise HTTPException(status_code=403, detail="No tiene permiso para editar este estudiante")
-
-    enviados = body.model_fields_set
-    if "nombre_completo" in enviados:
-        estudiante.nombre_completo = body.nombre_completo.upper()
-    if "codigo_estudiante" in enviados:
-        estudiante.codigo_estudiante = body.codigo_estudiante
-
-    aviso = None
-    if "email" in enviados:
-        email, email_invalido = _normalizar_email(body.email)
-        if email_invalido:
-            # Un error de tipeo no debe borrar un correo bueno que ya estaba
-            aviso = f"El correo '{body.email.strip()}' no es válido, " + (
-                "se conservó el anterior" if estudiante.email else "se dejó en blanco"
-            )
-        else:
-            estudiante.email = email
-
-    db.commit()
-    db.refresh(estudiante)
-    return EstudianteCreado(**EstudianteOut.model_validate(estudiante).model_dump(), aviso=aviso)
+    cambios = body.model_dump(include=body.model_fields_set)
+    return _creado(EstudianteService(db).editar(estudiante_id, usuario["email"], cambios))
 
 
 @router.delete(
@@ -454,15 +179,8 @@ def eliminar_estudiante(
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
-    """Elimina un estudiante. También elimina sus calificaciones individuales."""
-    repo = EstudianteRepository(db)
-    estudiante = repo.get(estudiante_id)
-    if not estudiante:
-        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
-    seccion = SeccionRepository(db).get(estudiante.seccion_id)
-    curso = CursoRepository(db).get(seccion.curso_id)
-    if not curso or curso.docente_email != usuario["email"]:
-        raise HTTPException(status_code=403, detail="No tiene permiso para eliminar este estudiante")
-
-    repo.eliminar(estudiante)
-    db.commit()
+    """
+    Elimina un estudiante. También elimina sus calificaciones individuales.
+    404 si el estudiante no existe, 403 si es de otro docente.
+    """
+    EstudianteService(db).eliminar(estudiante_id, usuario["email"])
