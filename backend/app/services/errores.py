@@ -102,3 +102,81 @@ class SeccionConEstudiantes(Conflicto):
             f"{cantidad} estudiante(s) registrado(s). "
             "Elimine los estudiantes primero."
         )
+
+
+# ── Catálogo RA ABET ─────────────────────────────────────────────────────────
+
+class CodigoNoEncontrado(NoEncontrado):
+    def __init__(self, codigo: str):
+        self.codigo = codigo
+        super().__init__(f"El código '{codigo}' no existe en el catálogo")
+
+
+class CodigoDuplicado(Conflicto):
+    def __init__(self, codigo: str):
+        self.codigo = codigo
+        super().__init__(f"El código '{codigo}' ya existe en el catálogo")
+
+
+class PadreInexistente(DatosInvalidos):
+    def __init__(self, codigo_padre: str):
+        self.codigo_padre = codigo_padre
+        super().__init__(f"El RA padre '{codigo_padre}' no existe en el catálogo")
+
+
+class PadreEsCriterio(DatosInvalidos):
+    """El catálogo tiene solo dos niveles: un Criterio no puede tener Criterios hijos."""
+
+    def __init__(self, codigo_padre: str):
+        self.codigo_padre = codigo_padre
+        super().__init__(
+            f"'{codigo_padre}' es un Criterio y no puede tener Criterios hijos (solo se permiten 2 niveles)"
+        )
+
+
+class CambioDeNivel(DatosInvalidos):
+    def __init__(self, codigo: str):
+        self.codigo = codigo
+        super().__init__(
+            f"'{codigo}' no puede cambiar de nivel (Resultado de Aprendizaje <-> Criterio); "
+            "elimínelo y créelo de nuevo"
+        )
+
+
+class ImportacionInvalida(DatosInvalidos):
+    """El estado final de la importación sería inválido; `errores` trae cada motivo."""
+
+    def __init__(self, errores: list[str]):
+        self.errores = errores
+        super().__init__("No se importó nada: " + "; ".join(errores))
+
+
+class CodigoNoEliminable(Conflicto):
+    """Base de los motivos por los que un código del catálogo no se puede eliminar."""
+
+    def __init__(self, codigo: str, cantidad: int, motivo: str):
+        self.codigo = codigo
+        self.cantidad = cantidad
+        super().__init__(f"No se puede eliminar '{codigo}' porque {motivo}")
+
+
+class CodigoConCriterios(CodigoNoEliminable):
+    def __init__(self, codigo: str, cantidad: int):
+        super().__init__(
+            codigo, cantidad, f"tiene {cantidad} criterio{'s' if cantidad != 1 else ''}; elimínelos primero."
+        )
+
+
+class CodigoEnUsoPorCursos(CodigoNoEliminable):
+    def __init__(self, codigo: str, cantidad: int):
+        super().__init__(codigo, cantidad, f"está en uso por {cantidad} curso{'s' if cantidad != 1 else ''}.")
+
+
+class CodigoVinculadoAAspectos(CodigoNoEliminable):
+    """Desvincular en silencio haría desaparecer sus calificaciones del reporte ABET."""
+
+    def __init__(self, codigo: str, cantidad: int):
+        super().__init__(
+            codigo, cantidad,
+            f"está vinculado a {cantidad} aspecto{'s' if cantidad != 1 else ''} de rúbrica.",
+        )
