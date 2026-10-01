@@ -15,8 +15,8 @@ from app.repositories.rubrica import RubricaRepository
 from app.schemas import ActividadOut
 from app.schemas.actividad import ActividadDetalleOut
 from app.schemas.criterio import AspectoOut
-from app.services.acceso import actividad_del_docente
-from app.services.errores import ActividadConCalificaciones, CursoNoEncontrado, SinPermiso
+from app.services.acceso import actividad_del_docente, curso_del_docente
+from app.services.errores import ActividadConCalificaciones
 
 
 class ActividadService:
@@ -74,12 +74,7 @@ class ActividadService:
         return ActividadOut.model_validate(actividad).model_copy(update={"total_peso_criterios": total_peso})
 
     def _curso_del_docente(self, curso_id: int, email: str) -> Curso:
-        curso = self.cursos.get(curso_id)
-        if not curso:
-            raise CursoNoEncontrado()
-        if curso.docente_email != email:
-            raise SinPermiso("No tiene permiso sobre este curso")
-        return curso
+        return curso_del_docente(self.cursos, curso_id, email)
 
     def _actividad_del_docente(self, actividad_id: int, email: str) -> Actividad:
         return actividad_del_docente(self.actividades, self.cursos, actividad_id, email)

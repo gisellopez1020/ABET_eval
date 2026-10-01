@@ -9,9 +9,8 @@ from sqlalchemy.orm import Session
 from app.models import Curso, Seccion
 from app.repositories.curso import CursoRepository
 from app.repositories.seccion import SeccionRepository
-from app.services.errores import (
-    CursoNoEncontrado, SeccionConEstudiantes, SeccionNoEncontrada, SinPermiso,
-)
+from app.services.acceso import curso_del_docente
+from app.services.errores import SeccionConEstudiantes, SeccionNoEncontrada
 
 
 class SeccionService:
@@ -48,12 +47,7 @@ class SeccionService:
         self.db.commit()
 
     def _curso_del_docente(self, curso_id: int, email: str) -> Curso:
-        curso = self.cursos.get(curso_id)
-        if not curso:
-            raise CursoNoEncontrado()
-        if curso.docente_email != email:
-            raise SinPermiso("No tiene permiso sobre este curso")
-        return curso
+        return curso_del_docente(self.cursos, curso_id, email)
 
     def _seccion_del_docente(self, seccion_id: int, email: str) -> Seccion:
         seccion = self.secciones.get(seccion_id)

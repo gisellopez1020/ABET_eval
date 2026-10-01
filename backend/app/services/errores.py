@@ -340,3 +340,12 @@ class CriterioFueraDeActividad(SolicitudInvalida):
 class CalificacionNoEncontrada(NoEncontrado):
     def __init__(self):
         super().__init__("Calificación no encontrada")
+
+
+# ── Reportes ─────────────────────────────────────────────────────────────────
+
+class ActividadFueraDelCurso(NoEncontrado):
+    """La actividad de la URL no existe o es de otro curso que el de la URL."""
+
+    def __init__(self):
+        super().__init__("Actividad no encontrada en este curso")
