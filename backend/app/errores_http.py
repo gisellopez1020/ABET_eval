@@ -8,12 +8,13 @@ basta registrar las categorías: cualquier subclase usa el código de la suya.
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.services.errores import Conflicto, ErrorDeNegocio, NoEncontrado, SinPermiso
+from app.services.errores import Conflicto, DatosInvalidos, ErrorDeNegocio, NoEncontrado, SinPermiso
 
 CODIGOS: dict[type[ErrorDeNegocio], int] = {
     NoEncontrado: status.HTTP_404_NOT_FOUND,
     SinPermiso: status.HTTP_403_FORBIDDEN,
     Conflicto: status.HTTP_409_CONFLICT,
+    DatosInvalidos: status.HTTP_422_UNPROCESSABLE_ENTITY,
 }
 
 
