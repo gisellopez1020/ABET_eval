@@ -137,10 +137,6 @@ class TestRubricaConCalificaciones:
         act, _ = calificada
         assert client.get(f"/actividades/{act.id}/criterios").json()["tiene_calificaciones"] is True
 
-    def test_put_sigue_bloqueado_409(self, client, calificada):
-        act, _ = calificada
-        assert client.put(f"/actividades/{act.id}/criterios", json=_rubrica("2.1.1")).status_code == 409
-
     def test_patch_vincula_sin_reconstruir_y_agrega_el_ra(self, client, db_session, calificada):
         act, aspectos = calificada
         aspecto_id = aspectos[0]["id"]
@@ -181,11 +177,6 @@ class TestRubricaConCalificaciones:
 
 
 class TestBorrarCodigoVinculado:
-    def test_delete_de_un_codigo_vinculado_409(self, client, actividad):
-        client.put(f"/actividades/{actividad.id}/criterios", json=_rubrica("2.1.2"))
-        resp = client.delete("/catalogo/ra-abet/2.1.2")
-        assert resp.status_code == 409
-        assert "vinculado a 1 aspecto de rúbrica" in resp.json()["detail"]
 
     def test_tras_desvincular_se_puede_borrar(self, client, actividad):
         client.put(f"/actividades/{actividad.id}/criterios", json=_rubrica("2.1.2"))

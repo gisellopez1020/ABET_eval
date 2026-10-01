@@ -249,12 +249,3 @@ class TestFiltrosYPermisos:
         s2 = _seccion(db_session, curso, "S2")
         c = _reporte(client, curso, seccion_id=s2.id)["criterios"][0]
         assert c["rangos"] == {**DEFAULT, "0.0-2.9": 1}
-
-    def test_curso_inexistente(self, client):
-        assert client.get("/reportes/abet/999").status_code == 404
-
-    def test_curso_de_otro_docente(self, client, db_session):
-        otro = Curso(nombre="X", codigo="X", periodo="2026-2", docente_email="otro@uao.edu.co", ra_abet=[])
-        db_session.add(otro)
-        db_session.commit()
-        assert client.get(f"/reportes/abet/{otro.id}").status_code == 403

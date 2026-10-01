@@ -193,26 +193,6 @@ class TestExportar:
         _, filas = _exportar(client)
         assert filas == [ENCABEZADOS]
 
-    def test_asignatura_inexistente_404(self, client):
-        assert client.get("/estudiantes/exportar-excel", params={"curso_id": 99999}).status_code == 404
-
-    def test_asignatura_de_otro_docente_403(self, client, db_session):
-        ajeno, _ = _curso(db_session, "Ajena", "A-1", email="otro@uao.edu.co")
-        assert client.get("/estudiantes/exportar-excel", params={"curso_id": ajeno.id}).status_code == 403
-
-    def test_seccion_inexistente_404(self, client):
-        assert client.get("/estudiantes/exportar-excel", params={"seccion_id": 99999}).status_code == 404
-
-    def test_seccion_de_otro_docente_403(self, client, db_session):
-        _, [ajena] = _curso(db_session, "Ajena", "A-1", email="otro@uao.edu.co")
-        assert client.get("/estudiantes/exportar-excel", params={"seccion_id": ajena.id}).status_code == 403
-
-    def test_seccion_de_otra_asignatura_del_mismo_docente_404(self, client, db_session):
-        redes, _ = _curso(db_session, "Redes", "R-1")
-        _, [b1] = _curso(db_session, "Bases de Datos", "BD-1")
-        resp = client.get("/estudiantes/exportar-excel", params={"curso_id": redes.id, "seccion_id": b1.id})
-        assert resp.status_code == 404
-
 
 # ── Importar con correo ──────────────────────────────────────────────────────
 

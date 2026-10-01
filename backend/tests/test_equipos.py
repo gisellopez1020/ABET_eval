@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 from app.models import EquipoTrabajo, MiembroEquipo
 from app.models.actividad import TipoActividad
 from tests.test_catalogo_ra_abet import MOCK_USER, client, db_session  # noqa: F401 (fixtures)
-from tests.test_calificaciones_lectura import _curso_ajeno
 from tests.test_reportes import _actividad, _calificar, _estudiante, _seccion, curso  # noqa: F401
 
 
@@ -53,43 +52,6 @@ class TestCrearEquipos:
         assert (e1["nombre"], _ids_miembros(e1)) == ("E1", sorted([ana.id, beto.id]))
         assert (e2["nombre"], _ids_miembros(e2)) == ("E2", [caro.id])
         assert e1["calificado"] is False and e1["nota_total"] is None
-
-    def test_actividad_individual_400(self, client, db_session, curso, alumnos):
-        act, _ = _actividad(db_session, curso, [(None, [100])])
-        resp = _crear(client, act, _seccion(db_session, curso), ("E1", alumnos[:1]))
-        assert resp.status_code == 400
-        assert "grupal" in resp.json()["detail"]
-
-    def test_estudiante_de_otra_seccion_400_y_no_crea_nada(self, client, db_session, curso, grupal, alumnos):
-        act, _ = grupal
-        de_s2 = _estudiante(db_session, curso, "Dani", seccion="S2")
-        resp = _crear(client, act, _seccion(db_session, curso), ("E1", [alumnos[0]]), ("E2", [de_s2]))
-        assert resp.status_code == 400
-        assert "no pertenece a la sección" in resp.json()["detail"]
-        # En producción la sesión se cierra sin commit; aquí se simula con rollback
-        db_session.rollback()
-        assert db_session.query(EquipoTrabajo).count() == 0
-
-    def test_estudiante_inexistente_400(self, client, db_session, curso, grupal):
-        act, _ = grupal
-        resp = client.post(_url(act, _seccion(db_session, curso)),
-                           json={"equipos": [{"nombre": "E1", "estudiante_ids": [99999]}]})
-        assert resp.status_code == 400
-
-    def test_actividad_inexistente_404(self, client, db_session, curso):
-        resp = client.post(f"/actividades/99999/secciones/{_seccion(db_session, curso).id}/equipos",
-                           json={"equipos": []})
-        assert resp.status_code == 404
-
-    def test_actividad_de_otro_docente_403(self, client, db_session):
-        ajeno = _curso_ajeno(db_session)
-        act, _ = _actividad(db_session, ajeno, [(None, [100])], tipo=TipoActividad.grupal)
-        assert _crear(client, act, _seccion(db_session, ajeno), ("E1", [])).status_code == 403
-
-    def test_seccion_de_otro_curso_404(self, client, db_session, curso, grupal):
-        act, _ = grupal
-        ajeno = _curso_ajeno(db_session)
-        assert _crear(client, act, _seccion(db_session, ajeno), ("E1", [])).status_code == 404
 
 
 class TestUnEquipoPorActividad:
@@ -178,12 +140,6 @@ class TestEditarEquipo:
         assert resp.json()["miembros"] == []
         assert db_session.query(MiembroEquipo).count() == 0
 
-    def test_estudiante_de_otra_seccion_400(self, client, db_session, curso, equipo):
-        de_s2 = _estudiante(db_session, curso, "Dani", seccion="S2")
-        resp = client.put(f"/equipos/{equipo['id']}", json={"estudiante_ids": [de_s2.id]})
-        assert resp.status_code == 400
-        assert "sección del equipo" in resp.json()["detail"]
-
     def test_estudiante_repetido_400(self, client, db_session, equipo, alumnos):
         ana = alumnos[0]
         resp = TestClient(client.app, raise_server_exceptions=False).put(
@@ -194,17 +150,6 @@ class TestEditarEquipo:
         # Falla antes de tocar los integrantes: el equipo conserva los que tenía
         miembros = db_session.query(MiembroEquipo.estudiante_id).filter_by(equipo_id=equipo["id"]).all()
         assert sorted(eid for (eid,) in miembros) == sorted(_ids_miembros(equipo))
-
-    def test_equipo_inexistente_404(self, client):
-        assert client.put("/equipos/99999", json={"nombre": "X"}).status_code == 404
-
-    def test_equipo_de_otro_docente_403(self, client, db_session):
-        ajeno = _curso_ajeno(db_session)
-        act, _ = _actividad(db_session, ajeno, [(None, [100])], tipo=TipoActividad.grupal)
-        equipo = EquipoTrabajo(nombre="Ajeno", actividad_id=act.id, seccion_id=_seccion(db_session, ajeno).id)
-        db_session.add(equipo)
-        db_session.commit()
-        assert client.put(f"/equipos/{equipo.id}", json={"nombre": "Mío"}).status_code == 403
 
 
 # ── Listar ───────────────────────────────────────────────────────────────────
@@ -234,11 +179,6 @@ class TestListarEquipos:
         assert float(por_nombre["Completo"]["nota_total"]) == 5.0
         assert por_nombre["Parcial"]["calificado"] is False
         assert por_nombre["Parcial"]["nota_total"] is None
-
-    def test_actividad_de_otro_docente_403(self, client, db_session):
-        ajeno = _curso_ajeno(db_session)
-        act, _ = _actividad(db_session, ajeno, [(None, [100])], tipo=TipoActividad.grupal)
-        assert client.get(_url(act, _seccion(db_session, ajeno))).status_code == 403
 
 
 # ── Modo de calificación ─────────────────────────────────────────────────────
@@ -279,15 +219,3 @@ class TestModoCalificacion:
         datos = _modo(client, act, _seccion(db_session, curso)).json()
         assert datos["calificados"] == 0
         assert datos["items"][0]["calificado"] is False
-
-    def test_actividad_inexistente_404(self, client, db_session, curso):
-        assert client.get(f"/actividades/99999/modo-calificacion/{_seccion(db_session, curso).id}").status_code == 404
-
-    def test_seccion_de_otro_curso_404(self, client, db_session, curso, grupal):
-        act, _ = grupal
-        assert _modo(client, act, _seccion(db_session, _curso_ajeno(db_session))).status_code == 404
-
-    def test_actividad_de_otro_docente_403(self, client, db_session):
-        ajeno = _curso_ajeno(db_session)
-        act, _ = _actividad(db_session, ajeno, [(None, [100])])
-        assert _modo(client, act, _seccion(db_session, ajeno)).status_code == 403

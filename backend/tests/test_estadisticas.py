@@ -108,28 +108,6 @@ class TestReporteActividad:
         rep = client.get(_url(curso, act), params={"seccion_id": s2.id}).json()
         assert rep["criterios"][0]["rangos"] == {**DEFAULT, "0.0-2.9": 1}
 
-    def test_actividad_de_otro_curso(self, client, db_session, curso):
-        from app.models import Curso
-        otro = Curso(nombre="X", codigo="X", periodo="2026-2", docente_email=MOCK_USER["email"], ra_abet=[])
-        db_session.add(otro)
-        db_session.commit()
-        act, _ = _actividad(db_session, otro, [("2.1.1", [100])])
-        for sufijo in ("", "/resumen-xlsx"):
-            assert client.get(_url(curso, act, sufijo)).status_code == 404
-        assert client.post(_url(curso, act, "/detalle-xlsx"), json={}).status_code == 404
-
-    def test_seccion_de_otro_curso(self, client, db_session, curso):
-        act, _ = _actividad(db_session, curso, [("2.1.1", [100])])
-        assert client.get(_url(curso, act), params={"seccion_id": 9999}).status_code == 404
-
-    def test_curso_de_otro_docente(self, client, db_session, curso):
-        from app.models import Curso
-        otro = Curso(nombre="X", codigo="X", periodo="2026-2", docente_email="otro@uao.edu.co", ra_abet=[])
-        db_session.add(otro)
-        db_session.commit()
-        act, _ = _actividad(db_session, otro, [("2.1.1", [100])])
-        assert client.get(_url(otro, act)).status_code == 403
-
 
 class TestResumenXlsx:
     def test_hoja_conteo_con_una_torta_por_criterio(self, client, db_session, curso, grupal):

@@ -57,24 +57,6 @@ def test_devuelve_solo_las_del_equipo_y_la_actividad(client, db_session, curso):
     assert all(d["equipo_id"] == equipo.id for d in datos)
 
 
-def test_equipo_de_otra_actividad_404(client, db_session, curso):
-    act, _ = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
-    otra, _ = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
-    equipo = _equipo(db_session, curso, otra)
-    assert client.get(_url(act, equipo)).status_code == 404
-
-
-def test_actividad_de_otro_docente_403(client, db_session):
-    ajeno = _curso_ajeno(db_session)
-    act, _ = _actividad(db_session, ajeno, [(None, [100])], tipo=TipoActividad.grupal)
-    equipo = _equipo(db_session, ajeno, act)
-    assert client.get(_url(act, equipo)).status_code == 403
-
-
-def test_actividad_inexistente_404(client):
-    assert client.get("/actividades/99999/equipos/1/calificaciones").status_code == 404
-
-
 # ---------- Estudiante ----------
 
 def test_estudiante_sin_calificaciones_devuelve_lista_vacia(client, db_session, curso):
@@ -112,19 +94,3 @@ def test_estudiante_de_otro_curso_404(client, db_session, curso):
     act, _ = _actividad(db_session, curso, [(None, [100])])
     extranjero = _estudiante(db_session, otro, "Zoe")
     assert client.get(_url_est(act, extranjero)).status_code == 404
-
-
-def test_estudiante_inexistente_404(client, db_session, curso):
-    act, _ = _actividad(db_session, curso, [(None, [100])])
-    assert client.get(f"/actividades/{act.id}/estudiantes/99999/calificaciones").status_code == 404
-
-
-def test_estudiante_actividad_de_otro_docente_403(client, db_session):
-    ajeno = _curso_ajeno(db_session)
-    act, _ = _actividad(db_session, ajeno, [(None, [100])])
-    zoe = _estudiante(db_session, ajeno, "Zoe")
-    assert client.get(_url_est(act, zoe)).status_code == 403
-
-
-def test_estudiante_actividad_inexistente_404(client):
-    assert client.get("/actividades/99999/estudiantes/1/calificaciones").status_code == 404

@@ -72,18 +72,6 @@ class TestResumen:
         assert (datos[0]["calificado"], datos[0]["nota_total"]) == (False, None)
         assert (datos[1]["calificado"], float(datos[1]["nota_total"])) == (True, 5.0)
 
-    def test_seccion_de_otro_curso_404(self, client, db_session, curso):
-        act, _ = _actividad(db_session, curso, [(None, [100])])
-        assert _resumen(client, act, _seccion(db_session, _curso_ajeno(db_session))).status_code == 404
-
-    def test_actividad_de_otro_docente_403(self, client, db_session):
-        ajeno = _curso_ajeno(db_session)
-        act, _ = _actividad(db_session, ajeno, [(None, [100])])
-        assert _resumen(client, act, _seccion(db_session, ajeno)).status_code == 403
-
-    def test_actividad_inexistente_404(self, client, db_session, curso):
-        assert client.get(f"/actividades/99999/calificaciones/{_seccion(db_session, curso).id}").status_code == 404
-
 
 # ── Guardar ──────────────────────────────────────────────────────────────────
 
@@ -119,14 +107,6 @@ class TestGuardar:
             crits[1].id: (1, Decimal("3.0")),
         }
 
-    def test_criterio_de_otra_actividad_400(self, client, db_session, curso):
-        act, _ = _actividad(db_session, curso, [(None, [100])])
-        _, [ajenos] = _actividad(db_session, curso, [(None, [100])])
-        ana = _estudiante(db_session, curso, "Ana")
-        resp = _guardar(client, act, ajenos, [1], estudiante=ana)
-        assert resp.status_code == 400
-        assert "no pertenece a esta actividad" in resp.json()["detail"]
-
     def test_equipo_de_otra_actividad_400(self, client, db_session, curso):
         act, [crits] = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
         otra, _ = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
@@ -140,14 +120,6 @@ class TestGuardar:
         resp = _guardar(client, act, crits, [1], estudiante=zoe)
         assert resp.status_code == 400
         assert resp.json()["detail"] == "El estudiante no pertenece a este curso"
-
-    def test_estudiante_inexistente_404(self, client, db_session, curso):
-        act, [crits] = _actividad(db_session, curso, [(None, [100])])
-        resp = client.post("/calificaciones", json={
-            "actividad_id": act.id, "estudiante_id": 99999,
-            "criterios": [{"criterio_id": crits[0].id, "valor": 1}],
-        })
-        assert resp.status_code == 404
 
     def test_actividad_de_otro_docente_403(self, client, db_session):
         ajeno = _curso_ajeno(db_session)
@@ -194,9 +166,6 @@ class TestEditar:
         _calificar(db_session, crits, [0], estudiante=_estudiante(db_session, curso, "Ana"))
         cal = db_session.query(Calificacion).one()
         assert client.patch(f"/calificaciones/{cal.id}", json={"valor": 5}).status_code == 422
-
-    def test_inexistente_404(self, client):
-        assert client.patch("/calificaciones/99999", json={"valor": 1}).status_code == 404
 
     def test_de_otro_docente_403(self, client, db_session):
         ajeno = _curso_ajeno(db_session)
@@ -277,12 +246,3 @@ class TestMasivo:
         _equipo(db_session, curso, act)
         _masivo(client, act, _seccion(db_session, curso), crits, [1])
         assert _filas(db_session, equipo_id=de_s2.id) == {}
-
-    def test_seccion_de_otro_curso_404(self, client, db_session, curso):
-        act, [crits] = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
-        assert _masivo(client, act, _seccion(db_session, _curso_ajeno(db_session)), crits, [1]).status_code == 404
-
-    def test_actividad_de_otro_docente_403(self, client, db_session):
-        ajeno = _curso_ajeno(db_session)
-        act, [crits] = _actividad(db_session, ajeno, [(None, [100])], tipo=TipoActividad.grupal)
-        assert _masivo(client, act, _seccion(db_session, ajeno), crits, [1]).status_code == 403

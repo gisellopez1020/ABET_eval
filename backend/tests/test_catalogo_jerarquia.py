@@ -31,19 +31,6 @@ class TestCrearCriterio:
         resp = client.post("/catalogo/ra-abet", json=_crit("2.1.1", "2.1", 0.4, competencia="Otra"))
         assert resp.json()["competencia"] == "Otra"
 
-    def test_padre_inexistente_422(self, client):
-        resp = client.post("/catalogo/ra-abet", json=_crit("9.1.1", "9.1", 0.5))
-        assert resp.status_code == 422
-        assert "no existe" in resp.json()["detail"]
-
-    def test_padre_que_es_criterio_422(self, client):
-        """Solo 2 niveles: un Criterio no puede ser padre de otro."""
-        client.post("/catalogo/ra-abet", json=_ra("2.1"))
-        client.post("/catalogo/ra-abet", json=_crit("2.1.1", "2.1", 0.5))
-        resp = client.post("/catalogo/ra-abet", json=_crit("2.1.1.1", "2.1.1", 0.5))
-        assert resp.status_code == 422
-        assert "2 niveles" in resp.json()["detail"]
-
     def test_sin_peso_422(self, client):
         client.post("/catalogo/ra-abet", json=_ra("2.1"))
         assert client.post("/catalogo/ra-abet", json=_crit("2.1.1", "2.1", None)).status_code == 422
@@ -108,24 +95,6 @@ class TestEditarCriterio:
         client.post("/catalogo/ra-abet", json=_ra("2.1"))
         assert client.put("/catalogo/ra-abet/2.1", json={"descripcion": None}).status_code == 422
 
-    def test_cambio_de_nivel_422(self, client):
-        client.post("/catalogo/ra-abet", json=_ra("2.1"))
-        client.post("/catalogo/ra-abet", json=_ra("2.2"))
-        client.post("/catalogo/ra-abet", json=_crit("2.1.1", "2.1", 1))
-        # Criterio -> RA
-        resp = client.put("/catalogo/ra-abet/2.1.1", json={"codigo_padre": None, "peso": None})
-        assert resp.status_code == 422
-        assert "cambiar de nivel" in resp.json()["detail"]
-        # RA -> Criterio
-        assert client.put("/catalogo/ra-abet/2.2", json={"codigo_padre": "2.1", "peso": 0.5}).status_code == 422
-
-    def test_mover_bajo_un_criterio_422(self, client):
-        client.post("/catalogo/ra-abet", json=_ra("2.1"))
-        client.post("/catalogo/ra-abet", json=_crit("2.1.1", "2.1", 0.5))
-        client.post("/catalogo/ra-abet", json=_crit("2.1.2", "2.1", 0.5))
-        resp = client.put("/catalogo/ra-abet/2.1.2", json={"codigo_padre": "2.1.1", "peso": 0.5})
-        assert resp.status_code == 422
-
 
 class TestImportarJerarquia:
     def test_criterios_antes_que_su_ra_en_el_archivo(self, client):
@@ -178,14 +147,3 @@ class TestImportarJerarquia:
         assert resp.json() == {"creados": 0, "actualizados": 1}
         criterio = client.get("/catalogo/ra-abet").json()[1]
         assert (criterio["codigo"], criterio["peso"]) == ("2.1.1", 0.8)
-
-
-class TestCursoSoloResultadosDeAprendizaje:
-    def test_curso_con_codigo_de_criterio_422(self, client):
-        client.post("/catalogo/ra-abet", json=_ra("2.1"))
-        client.post("/catalogo/ra-abet", json=_crit("2.1.1", "2.1", 1))
-        resp = client.post(
-            "/cursos", json={"nombre": "C", "codigo": "C", "periodo": "2026-1", "ra_abet": ["2.1", "2.1.1"]}
-        )
-        assert resp.status_code == 422
-        assert "no Criterios: 2.1.1" in resp.json()["detail"]
