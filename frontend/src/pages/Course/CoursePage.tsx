@@ -14,6 +14,7 @@ import { actividadesApi, ActividadCreate } from '../../api/actividades';
 import { estudiantesApi } from '../../api/estudiantes';
 import { Curso, Seccion, Actividad, rubricaCompleta } from '../../types';
 import { CourseFormModal } from './components/CourseFormModal';
+import { apiErrorMessage } from '../../api/errors';
 
 function estadoActividad(a: Actividad): { label: string; variant: 'neutral' | 'warning' | 'info' | 'success' } {
   return { label: a.tipo === 'grupal' ? 'Grupal' : 'Individual', variant: 'info' };
@@ -35,6 +36,7 @@ export function CoursePage() {
   const [newSeccionModal, setNewSeccionModal] = useState(false);
   const [newSeccionNombre, setNewSeccionNombre] = useState('');
   const [newSeccionLoading, setNewSeccionLoading] = useState(false);
+  const [seccionError, setSeccionError] = useState('');
 
   const [newActModal, setNewActModal] = useState(false);
   const [newAct, setNewAct] = useState<ActividadCreate>({ nombre: '', tipo: 'individual', peso_nota_final: 20 });
@@ -68,6 +70,7 @@ export function CoursePage() {
   const handleCreateSeccion = async () => {
     if (!newSeccionNombre.trim()) return;
     setNewSeccionLoading(true);
+    setSeccionError('');
     try {
       const s = await seccionesApi.create(id, { nombre: newSeccionNombre.trim() });
       setSecciones((prev) => [...prev, s]);
@@ -75,6 +78,8 @@ export function CoursePage() {
       setSelectedSeccion(s.id);
       setNewSeccionModal(false);
       setNewSeccionNombre('');
+    } catch (e) {
+      setSeccionError(apiErrorMessage(e, 'No se pudo crear la sección'));
     } finally {
       setNewSeccionLoading(false);
     }
@@ -139,7 +144,7 @@ export function CoursePage() {
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b">
               <h3 className="font-semibold text-gray-900">Secciones</h3>
-              <Button size="sm" variant="secondary" onClick={() => setNewSeccionModal(true)}>
+              <Button size="sm" variant="secondary" onClick={() => { setSeccionError(''); setNewSeccionModal(true); }}>
                 + Nueva sección
               </Button>
             </div>
@@ -245,6 +250,7 @@ export function CoursePage() {
             placeholder="Ej: Grupo A"
             onKeyDown={(e) => e.key === 'Enter' && handleCreateSeccion()}
           />
+          {seccionError && <p className="text-sm text-uao-accent">{seccionError}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setNewSeccionModal(false)}>Cancelar</Button>
             <Button onClick={handleCreateSeccion} loading={newSeccionLoading}>Crear</Button>

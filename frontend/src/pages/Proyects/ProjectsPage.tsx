@@ -240,30 +240,27 @@ export function ProjectsPage() {
   const handleCreateProject = async (
     payload: CreateProjectPayload
   ) => {
+    // Los errores se propagan: CreateProjectModal los muestra y no se cierra
     if (!payload.seccionId || !payload.actividadId) {
-      return;
+      throw new Error('Selecciona la sección y la actividad.');
     }
 
-    try {
-      await equiposApi.create(
-        payload.actividadId,
-        payload.seccionId,
-        [
-          {
-            nombre: payload.nombre,
-            estudiante_ids: payload.estudianteIds,
-          },
-        ]
-      );
+    await equiposApi.create(
+      payload.actividadId,
+      payload.seccionId,
+      [
+        {
+          nombre: payload.nombre,
+          estudiante_ids: payload.estudianteIds,
+        },
+      ]
+    );
 
-      if (selectedCourse) {
-        await loadProjects(selectedCourse);
-      }
-
-      setCreateModalOpen(false);
-    } catch (error) {
-      console.error('Error creando proyecto:', error);
+    if (selectedCourse) {
+      await loadProjects(selectedCourse);
     }
+
+    setCreateModalOpen(false);
   };
 
 

@@ -15,6 +15,7 @@ import { equiposApi } from '../../../api/equipos';
 import { criteriosApi } from '../../../api/criterios';
 import { calificacionesApi, ValorCriterio } from '../../../api/calificaciones';
 import { Actividad, ModoCalificacionResponse, ModoCalificacionItem, Aspecto } from '../../../types';
+import { apiErrorMessage } from '../../../api/errors';
 
 export function GradingSelectionPage() {
   const { actividadId, seccionId } = useParams<{ actividadId: string; seccionId: string }>();
@@ -34,6 +35,7 @@ export function GradingSelectionPage() {
   const [aspectos, setAspectos] = useState<Aspecto[]>([]);
   const [valoresMasivos, setValoresMasivos] = useState<Record<number, 0 | 1>>({});
   const [masivoLoading, setMasivoLoading] = useState(false);
+  const [masivoError, setMasivoError] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -56,22 +58,32 @@ export function GradingSelectionPage() {
     const init: Record<number, 0 | 1> = {};
     resp.aspectos.forEach((asp) => asp.criterios.forEach((c) => { init[c.id] = 0; }));
     setValoresMasivos(init);
+    setMasivoError('');
     setMasivoModal(true);
   };
 
   const handleMasivo = async () => {
     setMasivoLoading(true);
+    setMasivoError('');
     try {
       const criterios: ValorCriterio[] = Object.entries(valoresMasivos).map(([id, valor]) => ({
         criterio_id: Number(id),
         valor,
       }));
       await calificacionesApi.masivo(actId, criterios, secId);
-      const m = await equiposApi.modoCalificacion(actId, secId);
-      setModo(m);
-      setMasivoModal(false);
+    } catch (e) {
+      setMasivoError(apiErrorMessage(e, 'No se pudo aplicar la calificación masiva'));
+      return;
     } finally {
       setMasivoLoading(false);
+    }
+
+    // La calificación ya se aplicó: un fallo al refrescar la lista no debe reportarse como fallo del masivo
+    setMasivoModal(false);
+    try {
+      setModo(await equiposApi.modoCalificacion(actId, secId));
+    } catch (e) {
+      console.error('Error refrescando equipos tras la calificación masiva:', e);
     }
   };
 
@@ -226,6 +238,7 @@ export function GradingSelectionPage() {
             </div>
           ))}
         </div>
+        {masivoError && <p className="mt-4 text-sm text-uao-accent">{masivoError}</p>}
         <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
           <Button variant="ghost" onClick={() => setMasivoModal(false)}>Cancelar</Button>
           <Button onClick={handleMasivo} loading={masivoLoading}>Aplicar</Button>
