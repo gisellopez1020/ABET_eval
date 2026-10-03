@@ -9,15 +9,19 @@ import { CoursesPage } from './CoursesPage';
 import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
 import { estudiantesApi } from '../../api/estudiantes';
+import { catalogoRaAbetApi } from '../../api/catalogo';
 import { Curso } from '../../types';
 
 // El layout real exige sesión y monta Sidebar/Header: aquí solo interesa la página
 vi.mock('../../components/Layout/AppLayout', () => ({
   AppLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock('../../api/cursos', () => ({ cursosApi: { list: vi.fn(), archivar: vi.fn(), activar: vi.fn() } }));
+vi.mock('../../api/cursos', () => ({
+  cursosApi: { list: vi.fn(), archivar: vi.fn(), activar: vi.fn(), create: vi.fn() },
+}));
 vi.mock('../../api/secciones', () => ({ seccionesApi: { list: vi.fn() } }));
 vi.mock('../../api/estudiantes', () => ({ estudiantesApi: { list: vi.fn() } }));
+vi.mock('../../api/catalogo', () => ({ catalogoRaAbetApi: { list: vi.fn() } }));
 
 const curso = (activo: boolean): Curso => ({
   id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
@@ -27,6 +31,7 @@ const curso = (activo: boolean): Curso => ({
 beforeEach(() => {
   vi.mocked(seccionesApi.list).mockResolvedValue([]);
   vi.mocked(estudiantesApi.list).mockResolvedValue([]);
+  vi.mocked(catalogoRaAbetApi.list).mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -126,5 +131,47 @@ describe('CoursesPage — detalle de asignatura (CourseDetailsModal)', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(ver);
+  });
+});
+
+describe('CoursesPage — nueva asignatura (CourseFormModal como diálogo)', () => {
+  it('atrapa el foco, cierra con Esc (no con el fondo) y devuelve el foco a "Nueva asignatura"', async () => {
+    vi.mocked(cursosApi.list).mockResolvedValue([curso(true)]);
+    const user = userEvent.setup();
+
+    renderPage();
+    const abrir = await screen.findByRole('button', { name: /nueva asignatura/i });
+    await user.click(abrir);
+
+    const dialog = screen.getByRole('dialog', { name: 'Nueva asignatura' });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    for (let i = 0; i < 8; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+
+    await user.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('dialog', { name: 'Nueva asignatura' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(abrir);
+  });
+
+  it('mientras se guarda, Esc no cierra el diálogo', async () => {
+    vi.mocked(cursosApi.list).mockResolvedValue([curso(true)]);
+    vi.mocked(cursosApi.create).mockReturnValue(new Promise(() => {})); // queda pendiente
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /nueva asignatura/i }));
+    await user.type(screen.getByPlaceholderText('Ej: Fundamentos de programación'), 'Cálculo');
+    await user.type(screen.getByPlaceholderText('Ej: FIS-101'), 'MAT-1');
+    await user.type(screen.getByPlaceholderText('Ej: 2026-1'), '2026-2');
+    await user.click(screen.getByRole('button', { name: 'Crear asignatura' }));
+    expect(cursosApi.create).toHaveBeenCalledTimes(1);
+
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Nueva asignatura' })).toBeTruthy();
   });
 });
