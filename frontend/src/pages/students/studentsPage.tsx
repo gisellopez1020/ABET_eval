@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Download, PencilLine, Plus, Search, Filter, Trash2, X } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
@@ -15,6 +15,7 @@ import { Curso, Seccion } from '../../types';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { Dialog } from '../../components/ui/Dialog';
 import { useCourseStore } from '../../store/courseStore';
 
 type StudentStatus = 'activo' | 'inactivo';
@@ -66,6 +67,7 @@ export default function StudentsPage() {
   const [createSeccionId, setCreateSeccionId] = useState<number | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
+  const studentModalTitleId = useId();
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
@@ -542,113 +544,121 @@ export default function StudentsPage() {
         />
 
         {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-xl rounded-xl bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    {editingStudent ? 'Editar estudiante' : 'Nuevo estudiante'}
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    {editingStudent
-                      ? 'Corrige el nombre, el código o el correo. Sus calificaciones y equipos no cambian.'
-                      : 'Crea un estudiante en la sección seleccionada'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeStudentModal}
-                  className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                >
-                  <X size={19} />
-                </button>
-              </div>
-
-              <div className="space-y-4 px-6 py-5">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">Nombre completo</label>
-                  <input
-                    value={newStudentName}
-                    onChange={(event) => setNewStudentName(event.target.value)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-                    placeholder="Ej: Ana María López"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">Código</label>
-                  <input
-                    value={newStudentCode}
-                    onChange={(event) => setNewStudentCode(event.target.value)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-                    placeholder="Ej: 20241001"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">Correo (opcional)</label>
-                  <input
-                    type="email"
-                    value={newStudentEmail}
-                    onChange={(event) => setNewStudentEmail(event.target.value)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-                    placeholder="Ej: ana.lopez@uao.edu.co"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">Sección</label>
-                  <select
-                    value={createSeccionId ?? ''}
-                    onChange={(event) => setCreateSeccionId(event.target.value ? Number(event.target.value) : null)}
-                    disabled={editingStudent !== null}
-                    title={editingStudent ? 'La sección no se puede cambiar al editar' : undefined}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50 disabled:text-gray-500"
-                  >
-                    <option value="">Selecciona una sección</option>
-                    {sectionOptions.map((section) => (
-                      <option key={section.id} value={section.id}>
-                        {section.cursoNombre} · {section.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {createAviso && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    {createAviso}
-                  </div>
-                )}
-
-                {createError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {createError}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
-                <button
-                  type="button"
-                  onClick={closeStudentModal}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200
-                  border border-[#E73426]"
-                >
-                  {editingStudent && createAviso ? 'Cerrar' : 'Cancelar'}
-                </button>
-                <button
-                  type="button"
-                  disabled={createLoading}
-                  onClick={handleCreateStudent}
-                  className="rounded-lg bg-[#9E0B0F] px-4 py-2 text-sm font-medium text-white hover:bg-[#82090d] disabled:cursor-not-allowed disabled:opacity-70"
-                >
+          <Dialog
+            open
+            // Esc no cierra mientras se guarda
+            onClose={() => {
+              if (!createLoading) closeStudentModal();
+            }}
+            labelledBy={studentModalTitleId}
+            overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            panelClassName="w-full max-w-xl rounded-xl bg-white shadow-xl"
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h2 id={studentModalTitleId} className="text-lg font-semibold text-gray-900">
+                  {editingStudent ? 'Editar estudiante' : 'Nuevo estudiante'}
+                </h2>
+                <p className="text-sm text-gray-500">
                   {editingStudent
-                    ? createLoading ? 'Guardando...' : 'Guardar cambios'
-                    : createLoading ? 'Creando...' : 'Crear estudiante'}
-                </button>
+                    ? 'Corrige el nombre, el código o el correo. Sus calificaciones y equipos no cambian.'
+                    : 'Crea un estudiante en la sección seleccionada'}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={closeStudentModal}
+                aria-label="Cerrar diálogo"
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <X size={19} />
+              </button>
             </div>
-          </div>
+
+            <div className="space-y-4 px-6 py-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Nombre completo</label>
+                <input
+                  value={newStudentName}
+                  onChange={(event) => setNewStudentName(event.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+                  placeholder="Ej: Ana María López"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Código</label>
+                <input
+                  value={newStudentCode}
+                  onChange={(event) => setNewStudentCode(event.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+                  placeholder="Ej: 20241001"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Correo (opcional)</label>
+                <input
+                  type="email"
+                  value={newStudentEmail}
+                  onChange={(event) => setNewStudentEmail(event.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+                  placeholder="Ej: ana.lopez@uao.edu.co"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Sección</label>
+                <select
+                  value={createSeccionId ?? ''}
+                  onChange={(event) => setCreateSeccionId(event.target.value ? Number(event.target.value) : null)}
+                  disabled={editingStudent !== null}
+                  title={editingStudent ? 'La sección no se puede cambiar al editar' : undefined}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50 disabled:text-gray-500"
+                >
+                  <option value="">Selecciona una sección</option>
+                  {sectionOptions.map((section) => (
+                    <option key={section.id} value={section.id}>
+                      {section.cursoNombre} · {section.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {createAviso && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {createAviso}
+                </div>
+              )}
+
+              {createError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {createError}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={closeStudentModal}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200
+                border border-[#E73426]"
+              >
+                {editingStudent && createAviso ? 'Cerrar' : 'Cancelar'}
+              </button>
+              <button
+                type="button"
+                disabled={createLoading}
+                onClick={handleCreateStudent}
+                className="rounded-lg bg-[#9E0B0F] px-4 py-2 text-sm font-medium text-white hover:bg-[#82090d] disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {editingStudent
+                  ? createLoading ? 'Guardando...' : 'Guardar cambios'
+                  : createLoading ? 'Creando...' : 'Crear estudiante'}
+              </button>
+            </div>
+          </Dialog>
         )}
 
         {/* Modal eliminar */}

@@ -15,7 +15,9 @@ vi.mock('../../components/Layout/AppLayout', () => ({
 }));
 vi.mock('../../api/cursos', () => ({ cursosApi: { list: vi.fn() } }));
 vi.mock('../../api/secciones', () => ({ seccionesApi: { list: vi.fn() } }));
-vi.mock('../../api/estudiantes', () => ({ estudiantesApi: { list: vi.fn(), delete: vi.fn() } }));
+vi.mock('../../api/estudiantes', () => ({
+  estudiantesApi: { list: vi.fn(), delete: vi.fn(), update: vi.fn() },
+}));
 
 const ANA = { id: 7, nombre_completo: 'Ana Pérez', codigo_estudiante: '2210001', seccion_id: 10 };
 const CONFIRMACION =
@@ -79,5 +81,46 @@ describe('StudentsPage — eliminar estudiante', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.queryByText('Ana Pérez')).toBeNull();
     expect(estudiantesApi.list).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('StudentsPage — crear/editar estudiante como diálogo', () => {
+  it.each([
+    ['Nuevo estudiante', 'Nuevo estudiante'],
+    ['Editar', 'Editar estudiante'],
+  ])('al abrir con "%s": atrapa el foco, cierra con Esc (no con el fondo) y devuelve el foco', async (boton, titulo) => {
+    const user = userEvent.setup();
+    render(<StudentsPage />);
+    await screen.findByText('Ana Pérez');
+
+    const abrir = screen.getByRole('button', { name: boton });
+    await user.click(abrir);
+
+    const dialog = screen.getByRole('dialog', { name: titulo });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    for (let i = 0; i < 6; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+
+    await user.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('dialog', { name: titulo })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(abrir);
+  });
+
+  it('mientras se guarda, Esc no cierra el diálogo', async () => {
+    vi.mocked(estudiantesApi.update).mockReturnValue(new Promise(() => {})); // queda pendiente
+    const user = userEvent.setup();
+    render(<StudentsPage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Editar' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    expect(estudiantesApi.update).toHaveBeenCalledTimes(1);
+
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Editar estudiante' })).toBeTruthy();
   });
 });
