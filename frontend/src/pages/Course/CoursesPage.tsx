@@ -8,7 +8,7 @@ import {
   Users,
   Eye,
   Pencil,
-  Trash2,
+  Archive,
   RotateCcw,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -296,9 +296,9 @@ export function CoursesPage() {
             variant="primary"
             title={course.activo ? 'Cerrar asignatura' : 'Reactivar asignatura'}
             onClick={() => handleToggleActivo(course)}
-            icon={course.activo ? <Trash2 size={12} /> : <RotateCcw size={12} />}
+            icon={course.activo ? <Archive size={12} /> : <RotateCcw size={12} />}
           >
-            {course.activo ? 'Eliminar' : 'Activar'}
+            {course.activo ? 'Cerrar' : 'Activar'}
           </TableActionButton>
         </div>
       ),

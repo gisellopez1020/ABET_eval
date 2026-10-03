@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ReactNode } from 'react';
@@ -58,16 +58,17 @@ describe('CoursesPage — cerrar / reactivar asignatura', () => {
 
     renderPage();
 
-    // El botón de la fila de una asignatura activa dice "Eliminar" (cierra/archiva)
-    await user.click(await screen.findByRole('button', { name: 'Eliminar' }));
+    // La fila y el modal tienen un botón "Cerrar": el de confirmar se busca dentro del diálogo
+    await user.click(await screen.findByRole('button', { name: 'Cerrar' }));
     expect(screen.getByText('¿Deseas cerrar la asignatura "Ingeniería de Software"?')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Cerrar' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cerrar asignatura' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cerrar' }));
 
     // El error llega al modal…
     expect(await screen.findByText('No fue posible cerrar la asignatura.')).toBeTruthy();
     // …y el modal no se cerró
     expect(screen.getByRole('dialog', { name: 'Cerrar asignatura' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Cerrar' })).toBeTruthy();
     expect(cursosApi.archivar).toHaveBeenCalledTimes(1);
     expect(cursosApi.archivar).toHaveBeenCalledWith(1);
     expect(cursosApi.activar).not.toHaveBeenCalled();
