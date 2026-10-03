@@ -102,3 +102,29 @@ describe('CoursesPage — cerrar / reactivar asignatura', () => {
     expect(await screen.findByText('Activo')).toBeTruthy();
   });
 });
+
+describe('CoursesPage — detalle de asignatura (CourseDetailsModal)', () => {
+  it('es un diálogo accesible: atrapa el foco, cierra con Esc (no con el fondo) y devuelve el foco a "Ver"', async () => {
+    vi.mocked(cursosApi.list).mockResolvedValue([curso(true)]);
+    const user = userEvent.setup();
+
+    renderPage();
+    const ver = await screen.findByRole('button', { name: 'Ver' });
+    await user.click(ver);
+
+    const dialog = screen.getByRole('dialog', { name: 'Ingeniería de Software' });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    for (let i = 0; i < 4; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+
+    // Clic en el fondo: no cierra (igual que antes de la migración)
+    await user.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('dialog', { name: 'Ingeniería de Software' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(ver);
+  });
+});
