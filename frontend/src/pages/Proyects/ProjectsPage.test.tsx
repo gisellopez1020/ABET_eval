@@ -126,3 +126,50 @@ describe('ProjectsPage — detalle del proyecto', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
+
+describe('ProjectsPage — crear proyecto (CreateProjectModal como diálogo)', () => {
+  const abrirModal = async (user: ReturnType<typeof userEvent.setup>) => {
+    const boton = await screen.findByRole('button', { name: /nuevo proyecto/i });
+    await user.click(boton);
+    return boton;
+  };
+
+  it('atrapa el foco, cierra con Esc (no con el fondo), devuelve el foco y conserva lo escrito al reabrir', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+
+    const abrir = await abrirModal(user);
+    const dialog = screen.getByRole('dialog', { name: 'Nuevo proyecto' });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.type(screen.getByPlaceholderText('Ej: Sistema de inventarios'), 'Equipo Alfa');
+    for (let i = 0; i < 6; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+
+    await user.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('dialog', { name: 'Nuevo proyecto' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(abrir);
+
+    // El componente no se desmonta al cerrarse: lo escrito sigue ahí al reabrir
+    await abrirModal(user);
+    expect((screen.getByPlaceholderText('Ej: Sistema de inventarios') as HTMLInputElement).value).toBe('Equipo Alfa');
+  });
+
+  it('mientras se crea el proyecto, Esc no cierra el diálogo', async () => {
+    vi.mocked(equiposApi.create).mockReturnValue(new Promise(() => {})); // queda pendiente
+    const user = userEvent.setup();
+    renderConRutas();
+
+    await abrirModal(user);
+    await user.type(screen.getByPlaceholderText('Ej: Sistema de inventarios'), 'Equipo Alfa');
+    await user.click(await screen.findByRole('button', { name: /ana pérez/i }));
+    await user.click(screen.getByRole('button', { name: /crear proyecto/i }));
+    await user.keyboard('{Escape}');
+
+    expect(screen.getByRole('dialog', { name: 'Nuevo proyecto' })).toBeTruthy();
+  });
+});
