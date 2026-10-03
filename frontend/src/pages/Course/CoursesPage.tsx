@@ -9,7 +9,7 @@ import {
   Eye,
   Pencil,
   Archive,
-  RotateCcw,
+  ArchiveRestore,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
@@ -296,7 +296,7 @@ export function CoursesPage() {
             variant="primary"
             title={course.activo ? 'Cerrar asignatura' : 'Reactivar asignatura'}
             onClick={() => handleToggleActivo(course)}
-            icon={course.activo ? <Archive size={12} /> : <RotateCcw size={12} />}
+            icon={course.activo ? <Archive size={12} /> : <ArchiveRestore size={12} />}
           >
             {course.activo ? 'Cerrar' : 'Activar'}
           </TableActionButton>
