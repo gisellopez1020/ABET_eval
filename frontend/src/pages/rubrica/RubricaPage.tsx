@@ -108,6 +108,8 @@ export default function RubricaPage() {
   const [formError, setFormError] = useState('');
   // Aspecto con criterios pendiente de eliminar (modal de confirmación; solo afecta al borrador)
   const [aspectoAEliminar, setAspectoAEliminar] = useState<DraftAspecto | null>(null);
+  // Acción (navegar / cambiar de curso o actividad) en espera de confirmar el descarte de cambios
+  const [pendingDiscard, setPendingDiscard] = useState<(() => void) | null>(null);
 
   const [csvModal, setCsvModal] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -116,6 +118,9 @@ export default function RubricaPage() {
   // El modal de import sirve para CSV (parseo en el navegador) y Excel (lo lee el backend)
   const [importFormato, setImportFormato] = useState<'csv' | 'excel'>('csv');
   const [excelLoading, setExcelLoading] = useState(false);
+  // Importar con cambios sin guardar: el aviso se muestra dentro del modal de import
+  // (un segundo modal encima compartiría el Esc y cerraría los dos)
+  const [csvConfirmDiscard, setCsvConfirmDiscard] = useState(false);
   const excelSeq = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -213,8 +218,21 @@ export default function RubricaPage() {
   const selectedActividad = actividades.find((item) => item.id === selectedActividadId) ?? null;
   const selectedCurso = cursos.find((item) => item.id === selectedCursoId) ?? null;
 
-  const confirmDiscard = () =>
-    !dirty || window.confirm('Hay cambios sin guardar en la rúbrica. ¿Descartarlos?');
+  // Guarda de cambios sin guardar: sin cambios, la acción corre de inmediato; con cambios,
+  // queda pendiente hasta que el usuario la confirma en el modal (no puede bloquear como confirm())
+  const requestDiscard = (accion: () => void) => {
+    if (!dirty) {
+      accion();
+      return;
+    }
+    setPendingDiscard(() => accion);
+  };
+
+  const confirmPendingDiscard = () => {
+    const accion = pendingDiscard;
+    setPendingDiscard(null);
+    accion?.();
+  };
 
   const selectActividad = async (activityId: number | null) => {
     setError('');
@@ -376,6 +394,7 @@ export default function RubricaPage() {
     setCsvFile(null);
     setCsvPreview([]);
     setCsvError('');
+    setCsvConfirmDiscard(false);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -428,11 +447,18 @@ export default function RubricaPage() {
     }
   };
 
-  const handleFileSelect = (file: File) =>
-    importFormato === 'excel' ? handleExcelSelect(file) : handleCsvSelect(file);
+  const handleFileSelect = (file: File) => {
+    // Otro archivo: el aviso de descarte vuelve a pedirse al importar
+    setCsvConfirmDiscard(false);
+    return importFormato === 'excel' ? handleExcelSelect(file) : handleCsvSelect(file);
+  };
 
   const handleCsvImport = () => {
-    if (csvPreview.length === 0 || !confirmDiscard()) return;
+    if (csvPreview.length === 0) return;
+    if (dirty && !csvConfirmDiscard) {
+      setCsvConfirmDiscard(true);
+      return;
+    }
     updateDraft(
       csvPreview.map((aspecto) => ({
         key: newKey('a'),
@@ -525,9 +551,7 @@ export default function RubricaPage() {
                 <Button
                   variant="secondary"
                   size="md"
-                  onClick={() => {
-                    if (confirmDiscard()) navigate(`/cursos/${selectedCursoId}`);
-                  }}
+                  onClick={() => requestDiscard(() => navigate(`/cursos/${selectedCursoId}`))}
                 >
                   ← Volver al curso
                 </Button>
@@ -587,7 +611,7 @@ export default function RubricaPage() {
                 value={selectedCursoId ?? ''}
                 onChange={(event) => {
                   const courseId = Number(event.target.value);
-                  if (courseId && confirmDiscard()) void selectCurso(courseId);
+                  if (courseId) requestDiscard(() => void selectCurso(courseId));
                 }}
                 className={SELECT_CLASS}
               >
@@ -606,7 +630,7 @@ export default function RubricaPage() {
                 value={selectedActividadId ?? ''}
                 onChange={(event) => {
                   const activityId = Number(event.target.value);
-                  if (activityId && confirmDiscard()) void selectActividad(activityId);
+                  if (activityId) requestDiscard(() => void selectActividad(activityId));
                 }}
                 className={SELECT_CLASS}
               >
@@ -1060,12 +1084,24 @@ export default function RubricaPage() {
           {excelLoading && <p className="text-sm text-gray-500">Leyendo el archivo…</p>}
           {csvError && <p className="text-sm text-uao-accent">{csvError}</p>}
 
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={closeCsvModal}>Cancelar</Button>
-            <Button onClick={handleCsvImport} disabled={csvPreview.length === 0}>
-              Importar al borrador
-            </Button>
-          </div>
+          {csvConfirmDiscard ? (
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+              <p className="text-sm text-amber-800">Hay cambios sin guardar en la rúbrica. ¿Descartarlos?</p>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setCsvConfirmDiscard(false)}>Cancelar</Button>
+                <Button variant="danger" onClick={handleCsvImport}>
+                  Descartar e importar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={closeCsvModal}>Cancelar</Button>
+              <Button onClick={handleCsvImport} disabled={csvPreview.length === 0}>
+                Importar al borrador
+              </Button>
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -1086,6 +1122,21 @@ export default function RubricaPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal descartar cambios sin guardar */}
+      <Modal open={pendingDiscard !== null} onClose={() => setPendingDiscard(null)} title="Cambios sin guardar">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">Hay cambios sin guardar en la rúbrica. ¿Descartarlos?</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setPendingDiscard(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={confirmPendingDiscard}>
+              Descartar
+            </Button>
+          </div>
+        </div>
       </Modal>
     </AppLayout>
   );
