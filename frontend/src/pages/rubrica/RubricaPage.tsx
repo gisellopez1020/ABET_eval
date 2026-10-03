@@ -106,6 +106,8 @@ export default function RubricaPage() {
   const [criterioForm, setCriterioForm] = useState<CriterioForm | null>(null);
   const [aspectoForm, setAspectoForm] = useState<AspectoForm | null>(null);
   const [formError, setFormError] = useState('');
+  // Aspecto con criterios pendiente de eliminar (modal de confirmación; solo afecta al borrador)
+  const [aspectoAEliminar, setAspectoAEliminar] = useState<DraftAspecto | null>(null);
 
   const [csvModal, setCsvModal] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -306,13 +308,18 @@ export default function RubricaPage() {
   };
 
   const deleteAspecto = (aspecto: DraftAspecto) => {
-    if (
-      aspecto.criterios.length > 0 &&
-      !window.confirm(`¿Eliminar el aspecto "${aspecto.nombre}" y sus ${aspecto.criterios.length} criterios?`)
-    ) {
+    // Sin criterios se elimina directamente, como antes; con criterios se confirma en el modal
+    if (aspecto.criterios.length > 0) {
+      setAspectoAEliminar(aspecto);
       return;
     }
     updateDraft(draft.filter((a) => a.key !== aspecto.key));
+  };
+
+  const confirmDeleteAspecto = () => {
+    if (!aspectoAEliminar) return;
+    updateDraft(draft.filter((a) => a.key !== aspectoAEliminar.key));
+    setAspectoAEliminar(null);
   };
 
   // ── Criterios ───────────────────────────────────────────────────────────
@@ -1060,6 +1067,25 @@ export default function RubricaPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal eliminar aspecto */}
+      <Modal open={aspectoAEliminar !== null} onClose={() => setAspectoAEliminar(null)} title="Eliminar aspecto">
+        {aspectoAEliminar && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              {`¿Eliminar el aspecto "${aspectoAEliminar.nombre}" y sus ${aspectoAEliminar.criterios.length} criterios?`}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setAspectoAEliminar(null)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" onClick={confirmDeleteAspecto}>
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </AppLayout>
   );
