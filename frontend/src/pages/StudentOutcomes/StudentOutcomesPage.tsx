@@ -109,6 +109,10 @@ export function StudentOutcomesPage() {
   const [csvLoading, setCsvLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [deleting, setDeleting] = useState<RaAbet | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const load = async () => {
     try {
       setCatalogo(await catalogoRaAbetApi.list());
@@ -205,17 +209,35 @@ export function StudentOutcomesPage() {
     }
   };
 
-  const deleteRow = async (ra: RaAbet) => {
-    const tipo = ra.codigo_padre === null ? 'el Resultado de Aprendizaje' : 'el Criterio';
-    if (!window.confirm(`¿Eliminar ${tipo} "${ra.codigo}" del catálogo?`)) return;
+  // ── Eliminar (modal de confirmación) ─────────────────────────────────────
+  const deleteRow = (ra: RaAbet) => {
+    setDeleting(ra);
+    setDeleteError('');
+  };
+
+  const closeDeleteModal = () => {
+    // Mientras la petición está en curso, Esc / clic en el fondo no cierran el modal
+    if (deleteLoading) return;
+    setDeleting(null);
+    setDeleteError('');
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    const ra = deleting;
     resetMessages();
+    setDeleteLoading(true);
+    setDeleteError('');
     try {
       await catalogoRaAbetApi.delete(ra.codigo);
       setCatalogo((prev) => prev.filter((item) => item.codigo !== ra.codigo));
       setMessage(`"${ra.codigo}" eliminado.`);
+      setDeleting(null);
     } catch (err) {
-      // 409 si tiene Criterios hijos o algún curso lo usa en su ra_abet
-      setError(apiErrorMessage(err, 'No se pudo eliminar.'));
+      // 409 si tiene Criterios hijos o algún curso lo usa en su ra_abet; el modal sigue abierto
+      setDeleteError(apiErrorMessage(err, 'No se pudo eliminar.'));
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -698,6 +720,28 @@ export function StudentOutcomesPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal eliminar */}
+      <Modal open={deleting !== null} onClose={closeDeleteModal} title="Eliminar del catálogo">
+        {deleting && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              {`¿Eliminar ${deleting.codigo_padre === null ? 'el Resultado de Aprendizaje' : 'el Criterio'} "${deleting.codigo}" del catálogo?`}
+            </p>
+
+            {deleteError && <p className="text-sm text-uao-accent">{deleteError}</p>}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={closeDeleteModal} disabled={deleteLoading}>
+                Cancelar
+              </Button>
+              <Button variant="danger" onClick={confirmDelete} loading={deleteLoading}>
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </AppLayout>
   );
