@@ -1,14 +1,17 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useId } from 'react';
 
 interface ModalProps {
   open: boolean;
   onClose: () => void;
-  title?: string;
+  /** Obligatorio: es el nombre accesible del diálogo (aria-labelledby). */
+  title: string;
   children: ReactNode;
   maxWidth?: string;
 }
 
 export function Modal({ open, onClose, title, children, maxWidth = 'max-w-lg' }: ModalProps) {
+  const titleId = useId();
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -24,13 +27,21 @@ export function Modal({ open, onClose, title, children, maxWidth = 'max-w-lg' }:
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/50"
+        aria-hidden="true"
         onClick={onClose}
       />
-      <div className={`relative bg-white rounded-xl shadow-xl w-full ${maxWidth} max-h-[90vh] overflow-y-auto`}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={`relative bg-white rounded-xl shadow-xl w-full ${maxWidth} max-h-[90vh] overflow-y-auto`}
+      >
         {title && (
           <div className="flex items-center justify-between px-6 py-4 border-b">
-            <h2 className="text-lg font-semibold text-uao-dark">{title}</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-uao-dark">{title}</h2>
             <button
+              type="button"
+              aria-label="Cerrar diálogo"
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
             >

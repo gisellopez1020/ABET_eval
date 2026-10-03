@@ -61,7 +61,7 @@ describe('CoursesPage — cerrar / reactivar asignatura', () => {
     // El error llega al modal…
     expect(await screen.findByText('No fue posible cerrar la asignatura.')).toBeTruthy();
     // …y el modal no se cerró
-    expect(screen.getByRole('heading', { name: 'Cerrar asignatura' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Cerrar asignatura' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Cerrar' })).toBeTruthy();
     expect(cursosApi.archivar).toHaveBeenCalledTimes(1);
     expect(cursosApi.archivar).toHaveBeenCalledWith(1);
@@ -83,7 +83,7 @@ describe('CoursesPage — cerrar / reactivar asignatura', () => {
     await user.click(screen.getByRole('button', { name: 'Reactivar' }));
 
     expect(await screen.findByText('No fue posible reactivar la asignatura.')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Reactivar asignatura' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Reactivar asignatura' })).toBeTruthy();
   });
 
   it('si la acción tiene éxito, recarga la lista y cierra el modal', async () => {
@@ -96,7 +96,7 @@ describe('CoursesPage — cerrar / reactivar asignatura', () => {
     await user.click(await screen.findByRole('button', { name: 'Activar' }));
     await user.click(screen.getByRole('button', { name: 'Reactivar' }));
 
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Reactivar asignatura' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(cursosApi.activar).toHaveBeenCalledWith(1);
     expect(cursosApi.list).toHaveBeenCalledTimes(2);
     expect(await screen.findByText('Activo')).toBeTruthy();

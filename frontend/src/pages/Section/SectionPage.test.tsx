@@ -46,9 +46,8 @@ const renderPage = () =>
     </MemoryRouter>
   );
 
-// La fila y el modal tienen un botón "Eliminar": se acota la búsqueda al panel del modal
-const modal = () =>
-  within(screen.getByRole('heading', { name: 'Eliminar estudiante' }).closest('.relative') as HTMLElement);
+// La fila y el modal tienen un botón "Eliminar": se acota la búsqueda al diálogo
+const modal = () => within(screen.getByRole('dialog', { name: 'Eliminar estudiante' }));
 
 describe('SectionPage — eliminar estudiante', () => {
   it('si estudiantesApi.delete falla, el modal sigue abierto y muestra el detalle del backend', async () => {
@@ -95,7 +94,7 @@ describe('SectionPage — eliminar estudiante', () => {
     await user.click(await screen.findByRole('button', { name: 'Eliminar' }));
     await user.click(modal().getByRole('button', { name: 'Eliminar' }));
 
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Eliminar estudiante' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.queryByText('Ana Pérez')).toBeNull();
   });
 });

@@ -71,18 +71,18 @@ describe('RubricaPage — eliminar aspecto', () => {
     renderPage();
 
     await user.click(await screen.findByRole('button', { name: 'Eliminar Diseño' }));
-    expect(screen.getByRole('heading', { name: 'Eliminar aspecto' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Eliminar aspecto' })).toBeTruthy();
     expect(screen.getByText('¿Eliminar el aspecto "Diseño" y sus 2 criterios?')).toBeTruthy();
 
     // Cancelar cierra el modal sin tocar el borrador
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
-    expect(screen.queryByRole('heading', { name: 'Eliminar aspecto' })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('button', { name: 'Eliminar Diseño' })).toBeTruthy();
 
     // Confirmar lo quita del borrador
     await user.click(screen.getByRole('button', { name: 'Eliminar Diseño' }));
     await user.click(screen.getByRole('button', { name: 'Eliminar' }));
-    expect(screen.queryByRole('heading', { name: 'Eliminar aspecto' })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Eliminar Diseño' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Eliminar Vacío' })).toBeTruthy();
     expect(confirmSpy).not.toHaveBeenCalled();
@@ -96,7 +96,7 @@ describe('RubricaPage — eliminar aspecto', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Eliminar Vacío' }));
 
-    expect(screen.queryByRole('heading', { name: 'Eliminar aspecto' })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Eliminar Vacío' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Eliminar Diseño' })).toBeTruthy();
     expect(confirmSpy).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe('RubricaPage — descartar cambios sin guardar', () => {
 
     await user.selectOptions(selectActividad(), '200');
 
-    expect(screen.queryByRole('heading', { name: 'Cambios sin guardar' })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect(criteriosApi.get).toHaveBeenLastCalledWith(200));
     expect(confirmSpy).not.toHaveBeenCalled();
   });
@@ -134,12 +134,12 @@ describe('RubricaPage — descartar cambios sin guardar', () => {
     await ensuciarBorrador(user);
 
     await user.selectOptions(selectActividad(), '200');
-    expect(screen.getByRole('heading', { name: 'Cambios sin guardar' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Cambios sin guardar' })).toBeTruthy();
     expect(screen.getByText(AVISO)).toBeTruthy();
 
     // Cancelar: sigue en la misma actividad y con el borrador intacto
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
-    expect(screen.queryByRole('heading', { name: 'Cambios sin guardar' })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(selectActividad().value).toBe('100');
     expect(criteriosApi.get).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: 'Eliminar Vacío' })).toBeNull();
@@ -147,7 +147,7 @@ describe('RubricaPage — descartar cambios sin guardar', () => {
     // Descartar: se ejecuta el cambio de actividad pendiente
     await user.selectOptions(selectActividad(), '200');
     await user.click(screen.getByRole('button', { name: 'Descartar' }));
-    expect(screen.queryByRole('heading', { name: 'Cambios sin guardar' })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect(criteriosApi.get).toHaveBeenLastCalledWith(200));
     expect(confirmSpy).not.toHaveBeenCalled();
   });
@@ -184,8 +184,8 @@ describe('RubricaPage — descartar cambios sin guardar', () => {
 
     // El aviso aparece dentro del modal de import, que sigue abierto; no hay modal de descarte encima
     expect(screen.getByText(AVISO)).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Importar rúbrica desde Excel' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Cambios sin guardar' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Importar rúbrica desde Excel' })).toBeTruthy();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
 
     // Cancelar el aviso vuelve a los botones normales sin importar
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
@@ -195,7 +195,7 @@ describe('RubricaPage — descartar cambios sin guardar', () => {
     // Descartar e importar reemplaza el borrador y cierra el modal
     await user.click(screen.getByRole('button', { name: 'Importar al borrador' }));
     await user.click(screen.getByRole('button', { name: 'Descartar e importar' }));
-    expect(screen.queryByRole('heading', { name: 'Importar rúbrica desde Excel' })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('button', { name: 'Eliminar Importado' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Eliminar Diseño' })).toBeNull();
     expect(confirmSpy).not.toHaveBeenCalled();
