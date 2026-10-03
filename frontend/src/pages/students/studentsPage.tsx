@@ -14,6 +14,7 @@ import { descargarBlob } from '../../utils/descarga';
 import { Curso, Seccion } from '../../types';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
 import { useCourseStore } from '../../store/courseStore';
 
 type StudentStatus = 'activo' | 'inactivo';
@@ -68,6 +69,10 @@ export default function StudentsPage() {
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
+
+  const [deleting, setDeleting] = useState<StudentRow | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const pageSize = 5;
 
@@ -288,23 +293,32 @@ export default function StudentsPage() {
     }
   };
 
-  const handleDelete = async (student: StudentRow) => {
-    const confirmed = window.confirm(
-      `¿Deseas eliminar a "${student.nombre}"?\n\n` +
-        'También se eliminarán sus calificaciones individuales y se retirará de los equipos a los que pertenece. Esta acción no se puede deshacer.'
-    );
+  const handleDelete = (student: StudentRow) => {
+    setDeleting(student);
+    setDeleteError('');
+  };
 
-    if (!confirmed) {
-      return;
-    }
+  const closeDeleteModal = () => {
+    // Mientras la petición está en curso, Esc / clic en el fondo no cierran el modal
+    if (deleteLoading) return;
+    setDeleting(null);
+    setDeleteError('');
+  };
 
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteLoading(true);
+    setDeleteError('');
     try {
-      await estudiantesApi.delete(student.id);
+      await estudiantesApi.delete(deleting.id);
 
       await loadAll();
+      setDeleting(null);
     } catch (error) {
       console.error('Error eliminando estudiante:', error);
-      window.alert('No fue posible eliminar al estudiante.');
+      setDeleteError('No fue posible eliminar al estudiante.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -636,6 +650,27 @@ export default function StudentsPage() {
             </div>
           </div>
         )}
+
+        {/* Modal eliminar */}
+        <Modal open={deleting !== null} onClose={closeDeleteModal} title="Eliminar estudiante">
+          {deleting && (
+            <div className="space-y-4">
+              <p className="whitespace-pre-line text-sm text-gray-700">
+                {`¿Deseas eliminar a "${deleting.nombre}"?\n\n` +
+                  'También se eliminarán sus calificaciones individuales y se retirará de los equipos a los que pertenece. Esta acción no se puede deshacer.'}
+              </p>
+              {deleteError && <p className="text-sm text-uao-accent">{deleteError}</p>}
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={closeDeleteModal} disabled={deleteLoading}>
+                  Cancelar
+                </Button>
+                <Button variant="danger" onClick={confirmDelete} loading={deleteLoading}>
+                  Eliminar
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
 
         <div className="mt-6 flex items-center justify-between">
           <button
