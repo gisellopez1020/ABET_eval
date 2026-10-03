@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { X } from 'lucide-react';
 
 import { cursosApi, CursoCreate } from '../../../api/cursos';
 import { apiErrorMessage } from '../../../api/errors';
+import { Dialog } from '../../../components/ui/Dialog';
 import { Curso } from '../../../types';
 import { RANGOS_CALIFICACION_DEFAULT, RangoForm, rangoToForm, validarRangos } from '../../../utils/rangos';
 import { RaAbetSelector } from './RaAbetSelector';
@@ -32,6 +33,7 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
   const [raAbet, setRaAbet] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const titleId = useId();
 
   // Reinicia el formulario cada vez que se abre
   useEffect(() => {
@@ -90,106 +92,113 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
   const titulo = mode === 'create' ? 'Nueva asignatura' : 'Editar asignatura';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">{titulo}</h2>
-            <p className="text-sm text-gray-500">
-              {mode === 'create' ? 'Crea una asignatura sin salir de esta página' : course?.nombre}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-          >
-            <X size={19} />
-          </button>
+    <Dialog
+      open
+      // Esc no cierra mientras se guarda
+      onClose={() => {
+        if (!saving) onClose();
+      }}
+      labelledBy={titleId}
+      overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      panelClassName="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl"
+    >
+      <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+        <div>
+          <h2 id={titleId} className="text-lg font-semibold text-gray-900">{titulo}</h2>
+          <p className="text-sm text-gray-500">
+            {mode === 'create' ? 'Crea una asignatura sin salir de esta página' : course?.nombre}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        >
+          <X size={19} />
+        </button>
+      </div>
+
+      <div className="space-y-4 overflow-y-auto px-6 py-5">
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">Nombre</label>
+          <input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            className={INPUT_CLASS}
+            placeholder="Ej: Fundamentos de programación"
+          />
         </div>
 
-        <div className="space-y-4 overflow-y-auto px-6 py-5">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">Nombre</label>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Código</label>
             <input
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
+              value={codigo}
+              onChange={(e) => setCodigo(e.target.value)}
               className={INPUT_CLASS}
-              placeholder="Ej: Fundamentos de programación"
+              placeholder="Ej: FIS-101"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">Período</label>
+            <input
+              value={periodo}
+              onChange={(e) => setPeriodo(e.target.value)}
+              className={INPUT_CLASS}
+              placeholder="Ej: 2026-1"
+            />
+          </div>
+        </div>
+
+        <section className="space-y-4 rounded-xl border border-gray-200 bg-[#fafafa] p-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Configuración ABET (opcional)</h3>
+            <p className="text-xs text-gray-500">Puedes ajustarla después desde el detalle de la asignatura.</p>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-gray-700">Rangos de calificación del reporte</p>
+            <RangosCalificacionEditor
+              value={rangos}
+              onChange={setRangos}
+              emptyText={
+                mode === 'create'
+                  ? 'Sin rangos: al crear la asignatura se usarán los 3 rangos por defecto.'
+                  : 'Debe haber al menos un rango.'
+              }
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Código</label>
-              <input
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
-                className={INPUT_CLASS}
-                placeholder="Ej: FIS-101"
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">Período</label>
-              <input
-                value={periodo}
-                onChange={(e) => setPeriodo(e.target.value)}
-                className={INPUT_CLASS}
-                placeholder="Ej: 2026-1"
-              />
-            </div>
+          <div>
+            <p className="mb-2 text-sm font-medium text-gray-700">Student Outcomes (RA ABET)</p>
+            <RaAbetSelector value={raAbet} onChange={setRaAbet} />
           </div>
+        </section>
 
-          <section className="space-y-4 rounded-xl border border-gray-200 bg-[#fafafa] p-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">Configuración ABET (opcional)</h3>
-              <p className="text-xs text-gray-500">Puedes ajustarla después desde el detalle de la asignatura.</p>
-            </div>
-
-            <div>
-              <p className="mb-2 text-sm font-medium text-gray-700">Rangos de calificación del reporte</p>
-              <RangosCalificacionEditor
-                value={rangos}
-                onChange={setRangos}
-                emptyText={
-                  mode === 'create'
-                    ? 'Sin rangos: al crear la asignatura se usarán los 3 rangos por defecto.'
-                    : 'Debe haber al menos un rango.'
-                }
-              />
-            </div>
-
-            <div>
-              <p className="mb-2 text-sm font-medium text-gray-700">Student Outcomes (RA ABET)</p>
-              <RaAbetSelector value={raAbet} onChange={setRaAbet} />
-            </div>
-          </section>
-
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-        className="rounded-lg border border-[#9E0B0F] bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-red-50"          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={handleSubmit}
-            className="rounded-lg bg-[#9E0B0F] px-4 py-2 text-sm font-medium text-white hover:bg-[#82090d] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {saving
-              ? mode === 'create' ? 'Creando...' : 'Guardando...'
-              : mode === 'create' ? 'Crear asignatura' : 'Guardar cambios'}
-          </button>
-        </div>
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        )}
       </div>
-    </div>
+
+      <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+        <button
+          type="button"
+          onClick={onClose}
+      className="rounded-lg border border-[#9E0B0F] bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-red-50"          >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={handleSubmit}
+          className="rounded-lg bg-[#9E0B0F] px-4 py-2 text-sm font-medium text-white hover:bg-[#82090d] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {saving
+            ? mode === 'create' ? 'Creando...' : 'Guardando...'
+            : mode === 'create' ? 'Crear asignatura' : 'Guardar cambios'}
+        </button>
+      </div>
+    </Dialog>
   );
 }

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 
 import { Button } from '../../../components/ui/Button';
+import { Dialog } from '../../../components/ui/Dialog';
 import { Input } from '../../../components/ui/Input';
 import { Actividad, Seccion, Estudiante } from '../../../types';
 import { estudiantesApi } from '../../../api/estudiantes';
@@ -39,6 +40,7 @@ export function CreateProjectModal({
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const titleId = useId();
 
   // El modal no se desmonta al cerrarse y las listas cambian con la asignatura: al abrir se
   // prefiere la preselección; si no, se conserva la elegida mientras siga en la lista, o la primera.
@@ -129,113 +131,121 @@ export function CreateProjectModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900">Nuevo proyecto</h3>
-            <p className="text-sm text-gray-500">Crea un equipo para una actividad grupal</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
-          >
-            <X size={18} />
-          </button>
+    <Dialog
+      open
+      // Esc no cierra mientras se crea el proyecto
+      onClose={() => {
+        if (!loading) onClose();
+      }}
+      labelledBy={titleId}
+      overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      panelClassName="w-full max-w-2xl rounded-2xl bg-white shadow-2xl"
+    >
+      <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+        <div>
+          <h3 id={titleId} className="text-xl font-semibold text-gray-900">Nuevo proyecto</h3>
+          <p className="text-sm text-gray-500">Crea un equipo para una actividad grupal</p>
         </div>
 
-        <div className="space-y-5 px-6 py-5">
-          <Input
-            label="Nombre del proyecto"
-            value={nombre}
-            onChange={(event) => setNombre(event.target.value)}
-            placeholder="Ej: Sistema de inventarios"
-          />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar diálogo"
+          className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+        >
+          <X size={18} />
+        </button>
+      </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Sección</label>
-              <select
-                value={seccionId}
-                onChange={(event) => setSeccionId(Number(event.target.value))}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-              >
-                {sections.map((section) => (
-                  <option key={section.id} value={section.id}>
-                    {section.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <div className="space-y-5 px-6 py-5">
+        <Input
+          label="Nombre del proyecto"
+          value={nombre}
+          onChange={(event) => setNombre(event.target.value)}
+          placeholder="Ej: Sistema de inventarios"
+        />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Actividad grupal</label>
-              <select
-                value={actividadId}
-                onChange={(event) => setActividadId(Number(event.target.value))}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-              >
-                {activities.map((activity) => (
-                  <option key={activity.id} value={activity.id}>
-                    {activity.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Sección</label>
+            <select
+              value={seccionId}
+              onChange={(event) => setSeccionId(Number(event.target.value))}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+            >
+              {sections.map((section) => (
+                <option key={section.id} value={section.id}>
+                  {section.nombre}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">Integrantes</label>
-
-            {estudiantes.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm text-gray-500">
-                No hay estudiantes disponibles en la sección seleccionada.
-              </div>
-            ) : (
-              <div className="grid max-h-56 gap-2 overflow-y-auto rounded-xl border border-gray-200 p-3">
-                {estudiantes.map((student) => {
-                  const active = selectedStudentIds.includes(student.id);
-
-                  return (
-                    <button
-                      key={student.id}
-                      type="button"
-                      onClick={() => toggleStudent(student.id)}
-                      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
-                        active
-                          ? 'border-[#9E0B0F] bg-[#9E0B0F]/5 text-[#9E0B0F]'
-                          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span>{student.nombre_completo}</span>
-                      <span className="text-[11px] font-medium uppercase tracking-[0.12em]">
-                        {active ? 'Selec.' : 'No'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <label className="mb-1 block text-sm font-medium text-gray-700">Actividad grupal</label>
+            <select
+              value={actividadId}
+              onChange={(event) => setActividadId(Number(event.target.value))}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+            >
+              {activities.map((activity) => (
+                <option key={activity.id} value={activity.id}>
+                  {activity.nombre}
+                </option>
+              ))}
+            </select>
           </div>
+        </div>
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">Integrantes</label>
+
+          {estudiantes.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm text-gray-500">
+              No hay estudiantes disponibles en la sección seleccionada.
+            </div>
+          ) : (
+            <div className="grid max-h-56 gap-2 overflow-y-auto rounded-xl border border-gray-200 p-3">
+              {estudiantes.map((student) => {
+                const active = selectedStudentIds.includes(student.id);
+
+                return (
+                  <button
+                    key={student.id}
+                    type="button"
+                    onClick={() => toggleStudent(student.id)}
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
+                      active
+                        ? 'border-[#9E0B0F] bg-[#9E0B0F]/5 text-[#9E0B0F]'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span>{student.nombre_completo}</span>
+                    <span className="text-[11px] font-medium uppercase tracking-[0.12em]">
+                      {active ? 'Selec.' : 'No'}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
-          <Button variant="ghost" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button variant="primary" loading={loading} onClick={handleSubmit} disabled={!isReady || loading}>
-            Crear proyecto
-          </Button>
-        </div>
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
       </div>
-    </div>
+
+      <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+        <Button variant="ghost" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button variant="primary" loading={loading} onClick={handleSubmit} disabled={!isReady || loading}>
+          Crear proyecto
+        </Button>
+      </div>
+    </Dialog>
   );
 }

@@ -43,6 +43,10 @@ export function SectionPage() {
   const [csvError, setCsvError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [deleting, setDeleting] = useState<Estudiante | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   useEffect(() => {
     Promise.all([
       cursosApi.get(cid),
@@ -144,13 +148,31 @@ export function SectionPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este estudiante?')) return;
+  const handleDelete = (estudiante: Estudiante) => {
+    setDeleting(estudiante);
+    setDeleteError('');
+  };
+
+  const closeDeleteModal = () => {
+    // Mientras la petición está en curso, Esc / clic en el fondo no cierran el modal
+    if (deleteLoading) return;
+    setDeleting(null);
+    setDeleteError('');
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    const id = deleting.id;
+    setDeleteLoading(true);
+    setDeleteError('');
     try {
       await estudiantesApi.delete(id);
       setEstudiantes((prev) => prev.filter((e) => e.id !== id));
+      setDeleting(null);
     } catch (e: any) {
-      alert(e?.response?.data?.detail || 'No se pudo eliminar');
+      setDeleteError(e?.response?.data?.detail || 'No se pudo eliminar');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -294,7 +316,7 @@ export function SectionPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(e.id)}
+                          onClick={() => handleDelete(e)}
                           className="text-uao-accent hover:bg-red-50"
                         >
                           Eliminar
@@ -393,6 +415,22 @@ export function SectionPage() {
             <Button variant="ghost" onClick={() => setCsvModal(false)}>Cancelar</Button>
             <Button onClick={handleCsvImport} loading={csvLoading} disabled={!csvFile}>
               Importar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal eliminar */}
+      <Modal open={deleting !== null} onClose={closeDeleteModal} title="Eliminar estudiante">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">¿Eliminar este estudiante?</p>
+          {deleteError && <p className="text-sm text-uao-accent">{deleteError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={closeDeleteModal} disabled={deleteLoading}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={confirmDelete} loading={deleteLoading}>
+              Eliminar
             </Button>
           </div>
         </div>

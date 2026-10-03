@@ -43,7 +43,7 @@ describe('StudentOutcomesPage — eliminar del catálogo', () => {
     // El error del backend llega al modal…
     expect(await screen.findByText(DETALLE_409)).toBeTruthy();
     // …y el modal no se cerró
-    expect(screen.getByRole('heading', { name: 'Eliminar del catálogo' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Eliminar del catálogo' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Eliminar' })).toBeTruthy();
     // La fila sigue en la tabla
     expect(screen.getByRole('button', { name: 'Eliminar 2.1' })).toBeTruthy();
@@ -62,7 +62,7 @@ describe('StudentOutcomesPage — eliminar del catálogo', () => {
     await user.click(screen.getByRole('button', { name: 'Eliminar' }));
 
     expect(await screen.findByText('"2.1" eliminado.')).toBeTruthy();
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Eliminar del catálogo' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.queryByRole('button', { name: 'Eliminar 2.1' })).toBeNull();
   });
 });

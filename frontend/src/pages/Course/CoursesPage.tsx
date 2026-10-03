@@ -8,10 +8,11 @@ import {
   Users,
   Eye,
   Pencil,
-  Trash2,
-  RotateCcw,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
@@ -50,6 +51,11 @@ export function CoursesPage() {
   const [showFilter, setShowFilter] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [courseToView, setCourseToView] = useState<Curso | null>(null);
+
+  // Asignatura pendiente de cerrar/reactivar (modal de confirmación)
+  const [toggling, setToggling] = useState<Curso | null>(null);
+  const [toggleError, setToggleError] = useState('');
+  const [toggleLoading, setToggleLoading] = useState(false);
 
   const loadCourses = async () => {
     try {
@@ -143,15 +149,24 @@ export function CoursesPage() {
   };
 
   // Activa: cierra (archivar). Cerrada: la reactiva.
-  const handleToggleActivo = async (course: Curso) => {
-    const accion = course.activo ? 'cerrar' : 'reactivar';
-    const confirmed = window.confirm(
-      `¿Deseas ${accion} la asignatura "${course.nombre}"?`
-    );
+  const handleToggleActivo = (course: Curso) => {
+    setToggling(course);
+    setToggleError('');
+  };
 
-    if (!confirmed) {
-      return;
-    }
+  const closeToggleModal = () => {
+    // Mientras la petición está en curso, Esc / clic en el fondo no cierran el modal
+    if (toggleLoading) return;
+    setToggling(null);
+    setToggleError('');
+  };
+
+  const confirmToggleActivo = async () => {
+    if (!toggling) return;
+    const course = toggling;
+    const accion = course.activo ? 'cerrar' : 'reactivar';
+    setToggleLoading(true);
+    setToggleError('');
 
     try {
       if (course.activo) {
@@ -161,9 +176,12 @@ export function CoursesPage() {
       }
 
       await loadCourses();
+      setToggling(null);
     } catch (error) {
       console.error(`Error al ${accion} la asignatura:`, error);
-      window.alert(`No fue posible ${accion} la asignatura.`);
+      setToggleError(`No fue posible ${accion} la asignatura.`);
+    } finally {
+      setToggleLoading(false);
     }
   };
 
@@ -278,9 +296,9 @@ export function CoursesPage() {
             variant="primary"
             title={course.activo ? 'Cerrar asignatura' : 'Reactivar asignatura'}
             onClick={() => handleToggleActivo(course)}
-            icon={course.activo ? <Trash2 size={12} /> : <RotateCcw size={12} />}
+            icon={course.activo ? <Archive size={12} /> : <ArchiveRestore size={12} />}
           >
-            {course.activo ? 'Eliminar' : 'Activar'}
+            {course.activo ? 'Cerrar' : 'Activar'}
           </TableActionButton>
         </div>
       ),
@@ -397,6 +415,34 @@ export function CoursesPage() {
         onClose={() => setShowCreateModal(false)}
         onSaved={handleCourseCreated}
       />
+
+      {/* Modal cerrar / reactivar */}
+      <Modal
+        open={toggling !== null}
+        onClose={closeToggleModal}
+        title={toggling?.activo ? 'Cerrar asignatura' : 'Reactivar asignatura'}
+      >
+        {toggling && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              {`¿Deseas ${toggling.activo ? 'cerrar' : 'reactivar'} la asignatura "${toggling.nombre}"?`}
+            </p>
+            {toggleError && <p className="text-sm text-uao-accent">{toggleError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={closeToggleModal} disabled={toggleLoading}>
+                Cancelar
+              </Button>
+              <Button
+                variant={toggling.activo ? 'danger' : 'primary'}
+                onClick={confirmToggleActivo}
+                loading={toggleLoading}
+              >
+                {toggling.activo ? 'Cerrar' : 'Reactivar'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </AppLayout>
   );
 }

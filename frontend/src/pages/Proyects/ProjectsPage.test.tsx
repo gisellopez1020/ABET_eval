@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ReactNode } from 'react';
 
 import { ProjectsPage } from './ProjectsPage';
@@ -69,5 +69,107 @@ describe('ProjectsPage — crear proyecto', () => {
     expect((screen.getByPlaceholderText('Ej: Sistema de inventarios') as HTMLInputElement).value).toBe('Equipo Alfa');
     expect(equiposApi.create).toHaveBeenCalledTimes(1);
     expect(equiposApi.create).toHaveBeenCalledWith(100, 10, [{ nombre: 'Equipo Alfa', estudiante_ids: [7] }]);
+  });
+});
+
+const EQUIPO = {
+  id: 50, nombre: 'Equipo Alfa', actividad_id: 100, seccion_id: 10, calificado: false, nota_total: null,
+  miembros: [{ id: 7, nombre_completo: 'Ana Pérez', codigo_estudiante: '2210001', seccion_id: 10 }],
+};
+
+const renderConRutas = () =>
+  render(
+    <MemoryRouter initialEntries={['/proyectos']}>
+      <Routes>
+        <Route path="/proyectos" element={<ProjectsPage />} />
+        <Route path="/evaluaciones" element={<p>Página de evaluaciones</p>} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+describe('ProjectsPage — detalle del proyecto', () => {
+  beforeEach(() => {
+    vi.mocked(equiposApi.list).mockResolvedValue([EQUIPO]);
+  });
+
+  it('es un diálogo accesible: atrapa el foco, cierra con Esc (no con el fondo) y devuelve el foco a la tarjeta', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+
+    const tarjeta = await screen.findByRole('button', { name: /equipo alfa/i });
+    await user.click(tarjeta);
+
+    const dialog = screen.getByRole('dialog', { name: 'Detalle del Proyecto' });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    for (let i = 0; i < 4; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+
+    // Clic en el fondo: no cierra (igual que antes de la migración)
+    await user.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('dialog', { name: 'Detalle del Proyecto' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(tarjeta);
+  });
+
+  it('"Evaluar Proyecto" cierra el diálogo y navega aunque la tarjeta que lo abrió ya no exista', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+
+    await user.click(await screen.findByRole('button', { name: /equipo alfa/i }));
+    await user.click(screen.getByRole('button', { name: 'Evaluar Proyecto' }));
+
+    expect(await screen.findByText('Página de evaluaciones')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('ProjectsPage — crear proyecto (CreateProjectModal como diálogo)', () => {
+  const abrirModal = async (user: ReturnType<typeof userEvent.setup>) => {
+    const boton = await screen.findByRole('button', { name: /nuevo proyecto/i });
+    await user.click(boton);
+    return boton;
+  };
+
+  it('atrapa el foco, cierra con Esc (no con el fondo), devuelve el foco y conserva lo escrito al reabrir', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+
+    const abrir = await abrirModal(user);
+    const dialog = screen.getByRole('dialog', { name: 'Nuevo proyecto' });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.type(screen.getByPlaceholderText('Ej: Sistema de inventarios'), 'Equipo Alfa');
+    for (let i = 0; i < 6; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+
+    await user.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('dialog', { name: 'Nuevo proyecto' })).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(abrir);
+
+    // El componente no se desmonta al cerrarse: lo escrito sigue ahí al reabrir
+    await abrirModal(user);
+    expect((screen.getByPlaceholderText('Ej: Sistema de inventarios') as HTMLInputElement).value).toBe('Equipo Alfa');
+  });
+
+  it('mientras se crea el proyecto, Esc no cierra el diálogo', async () => {
+    vi.mocked(equiposApi.create).mockReturnValue(new Promise(() => {})); // queda pendiente
+    const user = userEvent.setup();
+    renderConRutas();
+
+    await abrirModal(user);
+    await user.type(screen.getByPlaceholderText('Ej: Sistema de inventarios'), 'Equipo Alfa');
+    await user.click(await screen.findByRole('button', { name: /ana pérez/i }));
+    await user.click(screen.getByRole('button', { name: /crear proyecto/i }));
+    await user.keyboard('{Escape}');
+
+    expect(screen.getByRole('dialog', { name: 'Nuevo proyecto' })).toBeTruthy();
   });
 });
