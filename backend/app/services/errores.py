@@ -304,6 +304,14 @@ class EstudianteYaEnOtroEquipo(SolicitudInvalida):
         super().__init__(f"El estudiante {estudiante} ya está en el equipo '{equipo}' de esta actividad")
 
 
+class EquipoConCalificaciones(Conflicto):
+    """Eliminar el equipo borraría en cascada calificaciones ya registradas."""
+
+    def __init__(self, nombre: str):
+        self.nombre = nombre
+        super().__init__(f"No se puede eliminar el equipo '{nombre}' porque ya tiene calificaciones registradas.")
+
+
 # ── Calificaciones ───────────────────────────────────────────────────────────
 # El equipo y el estudiante tienen dos excepciones por regla: si el id viene en la URL
 # (lecturas) el recurso pedido "no existe aquí" (404); si viene en el body (guardar),

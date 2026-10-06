@@ -7,16 +7,19 @@ import {
   Pencil,
   Plus,
   Search,
+  Trash2,
   X,
 } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
+import { Modal } from '../../components/ui/Modal';
 import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
 import { actividadesApi } from '../../api/actividades';
 import { equiposApi } from '../../api/equipos';
+import { apiErrorMessage } from '../../api/errors';
 import { useCourseStore } from '../../store/courseStore';
 import {
   Actividad,
@@ -104,6 +107,10 @@ export function ProjectsPage() {
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null);
   // Se abre sobre el detalle: al cerrarse, el detalle sigue ahí con los datos nuevos
   const [editingProject, setEditingProject] = useState<ProjectRow | null>(null);
+  // Confirmación de eliminar, también sobre el detalle
+  const [deletingProject, setDeletingProject] = useState<ProjectRow | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const detalleTitleId = useId();
 
   const [search, setSearch] = useState('');
@@ -302,6 +309,32 @@ export function ProjectsPage() {
     setSelectedProject((current) =>
       current?.id === updated.id ? updated : current
     );
+  };
+
+  const closeDeleteModal = () => {
+    // Mientras se elimina, Esc / clic en el fondo no cierran la confirmación
+    if (deleteLoading) return;
+    setDeletingProject(null);
+    setDeleteError('');
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!deletingProject) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      await equiposApi.delete(deletingProject.id);
+
+      // Solo desaparece esta fila: no hace falta recargar todos los equipos
+      setProjects((current) => current.filter((item) => item.id !== deletingProject.id));
+      setDeletingProject(null);
+      setSelectedProject(null);
+    } catch (error) {
+      // P. ej. 409 si el equipo ya tiene calificaciones: el mensaje del backend tal cual
+      setDeleteError(apiErrorMessage(error, 'No se pudo eliminar el equipo.'));
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const openProjectModal = (project: ProjectRow) => {
@@ -643,7 +676,18 @@ export function ProjectsPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button
+              variant="danger"
+              className="sm:mr-auto"
+              onClick={() => {
+                setDeleteError('');
+                setDeletingProject(selectedProject);
+              }}
+            >
+              <Trash2 size={16} />
+              Eliminar equipo
+            </Button>
             <Button variant="secondary" onClick={() => setSelectedProject(null)}>
               Cerrar
             </Button>
@@ -669,6 +713,29 @@ export function ProjectsPage() {
           onSave={(payload) => handleEditProject(editingProject, payload)}
         />
       )}
+
+      {/* Confirmación de eliminar (sobre el detalle) */}
+      <Modal open={deletingProject !== null} onClose={closeDeleteModal} title="Eliminar equipo">
+        {deletingProject && (
+          <div className="space-y-4">
+            <p className="whitespace-pre-line text-sm text-gray-700">
+              {`¿Deseas eliminar el equipo "${deletingProject.nombre}"?
+
+` +
+                'Sus integrantes no se eliminan: quedan libres para formar parte de otro equipo de esta actividad. Esta acción no se puede deshacer.'}
+            </p>
+            {deleteError && <p className="text-sm text-uao-accent">{deleteError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={closeDeleteModal} disabled={deleteLoading}>
+                Cancelar
+              </Button>
+              <Button variant="danger" onClick={confirmDeleteProject} loading={deleteLoading}>
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Modal de creación */}
       <CreateProjectModal

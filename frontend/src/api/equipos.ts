@@ -20,6 +20,8 @@ export const equiposApi = {
       .then((r) => r.data),
   update: (equipoId: number, data: { nombre?: string; estudiante_ids?: number[] }) =>
     apiClient.put<EquipoTrabajo>(`/equipos/${equipoId}`, data).then((r) => r.data),
+  delete: (equipoId: number) =>
+    apiClient.delete(`/equipos/${equipoId}`).then((r) => r.data),
   modoCalificacion: (actividadId: number, seccionId: number) =>
     apiClient
       .get<ModoCalificacionResponse>(
