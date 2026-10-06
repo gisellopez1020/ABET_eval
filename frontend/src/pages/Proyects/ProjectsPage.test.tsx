@@ -74,6 +74,7 @@ describe('ProjectsPage — crear proyecto', () => {
 
 const EQUIPO = {
   id: 50, nombre: 'Equipo Alfa', actividad_id: 100, seccion_id: 10, calificado: false, nota_total: null,
+  criterios_calificados: 0, criterios_totales: 5,
   miembros: [{ id: 7, nombre_completo: 'Ana Pérez', codigo_estudiante: '2210001', seccion_id: 10 }],
 };
 
@@ -324,5 +325,68 @@ describe('ProjectsPage — editar equipo', () => {
     expect(tarjeta.textContent).toContain('2 miembros');
     expect(tarjeta.textContent).toContain('Andrés Gómez');
     expect(equiposApi.list).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ProjectsPage — avance de la calificación', () => {
+  const integrante = (id: number, nombre: string) =>
+    ({ id, nombre_completo: nombre, codigo_estudiante: String(2210000 + id), seccion_id: 10 });
+  const CUATRO = [integrante(1, 'Ana'), integrante(2, 'Beto'), integrante(3, 'Caro'), integrante(4, 'Dani')];
+
+  const tarjeta = async (nombre: RegExp) => (await screen.findByRole('button', { name: nombre })).textContent ?? '';
+
+  it('un equipo de 4 integrantes sin calificaciones muestra 0% y Pendiente, no 80%', async () => {
+    vi.mocked(equiposApi.list).mockResolvedValue([
+      { ...EQUIPO, nombre: 'Equipo Grande', miembros: CUATRO, criterios_calificados: 0, criterios_totales: 5 },
+    ]);
+    renderConRutas();
+
+    const texto = await tarjeta(/equipo grande/i);
+    expect(texto).toContain('0%');
+    expect(texto).not.toContain('80%');
+    expect(texto).toContain('Pendiente');
+  });
+
+  it('el avance sale de los criterios calificados, no del tamaño del equipo', async () => {
+    // 1 integrante y 2 de 5 criterios: la fórmula anterior daba 25 %
+    vi.mocked(equiposApi.list).mockResolvedValue([
+      { ...EQUIPO, nombre: 'Equipo Chico', criterios_calificados: 2, criterios_totales: 5 },
+    ]);
+    renderConRutas();
+
+    const texto = await tarjeta(/equipo chico/i);
+    expect(texto).toContain('40%');
+    expect(texto).toContain('En evaluación');
+  });
+
+  it('un solo criterio calificado ya cuenta como "En evaluación" (también en el filtro)', async () => {
+    vi.mocked(equiposApi.list).mockResolvedValue([
+      { ...EQUIPO, id: 51, nombre: 'Empezado', criterios_calificados: 1, criterios_totales: 5 },
+      { ...EQUIPO, id: 52, nombre: 'Sin empezar', criterios_calificados: 0, criterios_totales: 5 },
+    ]);
+    const user = userEvent.setup();
+    renderConRutas();
+
+    expect(await tarjeta(/empezado/i)).toContain('20%');
+    await user.selectOptions(screen.getByLabelText('Estado'), 'en-evaluacion');
+
+    expect(screen.getByRole('button', { name: /^empezado/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /sin empezar/i })).toBeNull();
+  });
+
+  it('una actividad sin rúbrica muestra "Sin rúbrica" en la tarjeta y en el detalle, no un porcentaje', async () => {
+    vi.mocked(equiposApi.list).mockResolvedValue([
+      { ...EQUIPO, miembros: CUATRO, criterios_calificados: 0, criterios_totales: 0 },
+    ]);
+    const user = userEvent.setup();
+    renderConRutas();
+
+    const card = await screen.findByRole('button', { name: /equipo alfa/i });
+    expect(card.textContent).toContain('Sin rúbrica');
+    expect(card.textContent).not.toMatch(/\d+%/);
+
+    await user.click(card);
+    const detalle = screen.getByRole('dialog', { name: 'Detalle del Proyecto' });
+    expect(within(detalle).getByText('Sin rúbrica')).toBeTruthy();
   });
 });

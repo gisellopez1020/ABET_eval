@@ -105,6 +105,10 @@ export interface EquipoTrabajo {
   miembros: Estudiante[];
   calificado: boolean;
   nota_total: number | null;
+  /** Criterios de la rúbrica que el equipo tiene calificados (avance real). */
+  criterios_calificados: number;
+  /** Criterios de la rúbrica de la actividad; 0 si aún no tiene rúbrica. */
+  criterios_totales: number;
 }
 
 export interface ModoCalificacionItem {

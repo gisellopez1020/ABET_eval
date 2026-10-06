@@ -28,6 +28,7 @@ import {
 import { ProjectCard } from './components/ProjectCard';
 import { CreateProjectModal } from '../Proyects/components/CreateProjectModal';
 import { EditProjectModal } from './components/EditProjectModal';
+import { ESTADO_BADGE, ESTADO_LABEL, projectEstado } from './projectEstado';
 
 export interface ProjectRow {
   id: number;
@@ -41,7 +42,9 @@ export interface ProjectRow {
   miembros: string[];
   /** Para precargar la edición del equipo con sus integrantes actuales. */
   miembroIds: number[];
+  /** Porcentaje de criterios calificados (0 si la actividad aún no tiene rúbrica). */
   avance: number;
+  criteriosTotales: number;
   calificado: boolean;
   notaTotal: number | null;
 }
@@ -63,12 +66,10 @@ function toProjectRow(
     (member) => member.nombre_completo
   );
 
-  const avance = team.calificado
-    ? 100
-    : Math.max(
-        25,
-        Math.min(90, members.length * 20)
-      );
+  // Proporción real de criterios calificados; sin rúbrica no hay nada que calificar todavía
+  const avance = team.criterios_totales > 0
+    ? Math.min(100, Math.round((team.criterios_calificados / team.criterios_totales) * 100))
+    : 0;
 
   return {
     id: team.id,
@@ -83,6 +84,7 @@ function toProjectRow(
     miembros: members,
     miembroIds: team.miembros.map((member) => member.id),
     avance,
+    criteriosTotales: team.criterios_totales,
     calificado: team.calificado,
     notaTotal: team.nota_total,
   };
@@ -249,13 +251,7 @@ export function ProjectsPage() {
         value.toLowerCase().includes(normalizedSearch)
       );
 
-      const estado = project.calificado
-        ? 'evaluado'
-        : project.avance >= 50
-          ? 'en-evaluacion'
-          : 'pendiente';
-
-      const matchesStatus = statusFilter === 'all' || estado === statusFilter;
+      const matchesStatus = statusFilter === 'all' || projectEstado(project) === statusFilter;
       const matchesSection = sectionFilter === null || project.seccionId === sectionFilter;
 
       return matchesSearch && matchesStatus && matchesSection;
@@ -597,19 +593,17 @@ export function ProjectsPage() {
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <span
               className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] ${
-                selectedProject.calificado
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : selectedProject.avance >= 50
-                    ? 'border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border-red-200 bg-red-50 text-red-700'
+                ESTADO_BADGE[projectEstado(selectedProject)]
               }`}
             >
-              {selectedProject.calificado
-                ? 'Evaluado'
-                : selectedProject.avance >= 50
-                  ? 'En evaluación'
-                  : 'Pendiente'}
+              {ESTADO_LABEL[projectEstado(selectedProject)]}
             </span>
+
+            {selectedProject.criteriosTotales === 0 && (
+              <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">
+                Sin rúbrica
+              </span>
+            )}
 
             <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-700">
               {selectedProject.seccionNombre}

@@ -1,6 +1,7 @@
 import { FolderKanban, Users, CheckCircle2 } from 'lucide-react';
 
 import { ProjectRow } from '../ProjectsPage';
+import { ESTADO_BADGE, ESTADO_LABEL, projectEstado } from '../projectEstado';
 
 interface ProjectCardProps {
   project: ProjectRow;
@@ -42,20 +43,15 @@ export function ProjectCard({ project, onOpenDetails }: ProjectCardProps) {
         <div className="flex items-center gap-3">
           <span
             className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] ${
-              project.calificado
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : project.avance >= 50
-                  ? 'border-amber-200 bg-amber-50 text-amber-700'
-                  : 'border-red-200 bg-red-50 text-red-700'
+              ESTADO_BADGE[projectEstado(project)]
             }`}
           >
-            {project.calificado
-              ? 'Evaluado'
-              : project.avance >= 50
-                ? 'En evaluación'
-                : 'Pendiente'}
+            {ESTADO_LABEL[projectEstado(project)]}
           </span>
-          <span className="text-sm font-semibold text-gray-700">{project.avance}%</span>
+          {/* Sin rúbrica no hay avance que medir: "0%" sugeriría que falta calificar */}
+          <span className="text-sm font-semibold text-gray-700">
+            {project.criteriosTotales === 0 ? 'Sin rúbrica' : `${project.avance}%`}
+          </span>
         </div>
       </div>
 
