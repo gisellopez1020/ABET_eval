@@ -103,21 +103,23 @@ export function GradingTemplatePage() {
     };
   }, [actId, iid]);
 
-  const goTo = (index: number) => {
-    if (index < 0 || index >= items.length) return;
-    const item = items[index];
+  // La lista de la sesión vive solo en location.state: quien la cambia (guardar) pasa la
+  // nueva aquí, porque `items` es la del render actual y no se actualiza hasta navegar
+  const goTo = (index: number, list: ModoCalificacionItem[] = items) => {
+    if (index < 0 || index >= list.length) return;
+    const item = list[index];
     navigate(`/actividades/${actId}/calificar/${secId}/${item.id}`, {
-      state: { items, currentIndex: index, tipo },
+      state: { items: list, currentIndex: index, tipo },
       replace: true,
     });
   };
 
-  const goNextPending = () => {
-    const nextPending = items.findIndex((item, i) => i > currentIndex && !item.calificado);
+  const goNextPending = (list: ModoCalificacionItem[]) => {
+    const nextPending = list.findIndex((item, i) => i > currentIndex && !item.calificado);
     if (nextPending !== -1) {
-      goTo(nextPending);
-    } else if (currentIndex < items.length - 1) {
-      goTo(currentIndex + 1);
+      goTo(nextPending, list);
+    } else if (currentIndex < list.length - 1) {
+      goTo(currentIndex + 1, list);
     } else {
       navigate(`/actividades/${actId}/calificar/${secId}`, { state: null });
     }
@@ -136,14 +138,11 @@ export function GradingTemplatePage() {
         ? { actividad_id: actId, criterios, equipo_id: iid }
         : { actividad_id: actId, criterios, estudiante_id: iid };
       await calificacionesApi.save(body);
-      // Marcar como calificado en la lista local
-      if (state) {
-        const updated = items.map((item) =>
-          item.id === iid ? { ...item, calificado: true, nota_total: notaTotal } : item
-        );
-        state.items = updated;
-      }
-      goNextPending();
+      // Marcar como calificado en la lista que viaja al siguiente ítem (sin mutar location.state)
+      const updated = items.map((item) =>
+        item.id === iid ? { ...item, calificado: true, nota_total: notaTotal } : item
+      );
+      goNextPending(updated);
     } catch (e: any) {
       setSaveError(e?.response?.data?.detail || 'Error al guardar la calificación');
     } finally {
