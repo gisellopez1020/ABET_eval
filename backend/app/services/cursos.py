@@ -78,7 +78,11 @@ class CursoService:
                 actividad_id=f.actividad_id,
                 actividad_nombre=f.actividad_nombre,
                 tipo="equipo" if f.equipo_id is not None else "estudiante",
-                nombre=equipos[f.equipo_id] if f.equipo_id is not None else estudiantes[f.estudiante_id],
+                # Un id sin nombre (p. ej. borrado entre las dos consultas) no tumba la lista
+                nombre=(
+                    equipos.get(f.equipo_id, "Equipo eliminado") if f.equipo_id is not None
+                    else estudiantes.get(f.estudiante_id, "Estudiante eliminado")
+                ),
                 updated_at=f.ultimo,
             )
             for f in filas

@@ -5,6 +5,9 @@ Actividad reciente del curso: últimos guardados de calificaciones agrupados por
 Reutiliza las fixtures y utilidades de test_reportes (SQLite en memoria).
 """
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+
+from sqlalchemy import text
 
 from app.models import Calificacion, Curso, EquipoTrabajo
 from app.models.actividad import TipoActividad
@@ -123,3 +126,48 @@ def test_no_incluye_calificaciones_de_otros_cursos(client, db_session, curso):
     _calificar(db_session, crits, [1], estudiante=_estudiante(db_session, curso, "Ana"))
 
     assert client.get(_url(otro.id)).json() == []
+
+
+# ── Equipo o estudiante que ya no existe ─────────────────────────────────────
+
+def _sin_fk(db_session):
+    """
+    Desactiva las FK de SQLite para insertar una calificación cuyo equipo o estudiante
+    no existe: simula un id que nombres_por_id no resuelve (p. ej. borrado entre las dos
+    consultas de actividad_reciente), sin buscar un camino real en la API.
+    """
+    db_session.commit()
+    db_session.execute(text("PRAGMA foreign_keys=OFF"))
+    assert db_session.execute(text("PRAGMA foreign_keys")).scalar() == 0
+
+
+def test_equipo_inexistente_no_rompe_la_lista(client, db_session, curso):
+    grp, [crits] = _actividad(db_session, curso, [("4.1.1", [100])], tipo=TipoActividad.grupal)
+    ind, [crits_ind] = _actividad(db_session, curso, [("2.1.1", [100])])
+    ana = _estudiante(db_session, curso, "Ana")
+    _calificar(db_session, crits_ind, [1], estudiante=ana)
+    _sin_fk(db_session)
+    _calificar(db_session, crits, [1], equipo=SimpleNamespace(id=99999))
+
+    resp = client.get(_url(curso.id))
+
+    assert resp.status_code == 200
+    por_tipo = {i["tipo"]: i for i in resp.json()}
+    assert por_tipo["equipo"]["nombre"] == "Equipo eliminado"
+    assert por_tipo["equipo"]["actividad_id"] == grp.id
+    # La fila sin nombre no oculta las demás
+    assert por_tipo["estudiante"]["nombre"] == "Ana"
+
+
+def test_estudiante_inexistente_no_rompe_la_lista(client, db_session, curso):
+    act, [crits] = _actividad(db_session, curso, [("2.1.1", [100])])
+    beto = _estudiante(db_session, curso, "Beto")
+    _calificar(db_session, crits, [0], estudiante=beto)
+    _sin_fk(db_session)
+    _calificar(db_session, crits, [1], estudiante=SimpleNamespace(id=99999))
+
+    resp = client.get(_url(curso.id))
+
+    assert resp.status_code == 200
+    assert sorted(i["nombre"] for i in resp.json()) == ["Beto", "Estudiante eliminado"]
+    assert all(i["tipo"] == "estudiante" and i["actividad_id"] == act.id for i in resp.json())
