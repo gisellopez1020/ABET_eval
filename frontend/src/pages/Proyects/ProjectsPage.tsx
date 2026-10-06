@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Filter,
   FolderKanban,
+  Pencil,
   Plus,
   Search,
   X,
@@ -20,11 +21,13 @@ import { useCourseStore } from '../../store/courseStore';
 import {
   Actividad,
   Curso,
+  EquipoTrabajo,
   Seccion,
 } from '../../types';
 
 import { ProjectCard } from './components/ProjectCard';
 import { CreateProjectModal } from '../Proyects/components/CreateProjectModal';
+import { EditProjectModal } from './components/EditProjectModal';
 
 export interface ProjectRow {
   id: number;
@@ -36,6 +39,8 @@ export interface ProjectRow {
   actividadId: number;
   actividadNombre: string;
   miembros: string[];
+  /** Para precargar la edición del equipo con sus integrantes actuales. */
+  miembroIds: number[];
   avance: number;
   calificado: boolean;
   notaTotal: number | null;
@@ -46,6 +51,41 @@ interface CreateProjectPayload {
   seccionId: number;
   actividadId: number;
   estudianteIds: number[];
+}
+
+// Fila de la lista a partir de un equipo: la usan la carga y la edición, así el avance
+// se calcula igual en ambas
+function toProjectRow(
+  team: EquipoTrabajo,
+  context: Pick<ProjectRow, 'cursoId' | 'cursoNombre' | 'seccionId' | 'seccionNombre' | 'actividadId' | 'actividadNombre'>
+): ProjectRow {
+  const members = team.miembros.map(
+    (member) => member.nombre_completo
+  );
+
+  const avance = team.calificado
+    ? 100
+    : Math.max(
+        25,
+        Math.min(90, members.length * 20)
+      );
+
+  return {
+    id: team.id,
+    nombre: team.nombre,
+    // Campo a campo: al editar, context es la fila anterior y no debe pisar nada más
+    cursoId: context.cursoId,
+    cursoNombre: context.cursoNombre,
+    seccionId: context.seccionId,
+    seccionNombre: context.seccionNombre,
+    actividadId: context.actividadId,
+    actividadNombre: context.actividadNombre,
+    miembros: members,
+    miembroIds: team.miembros.map((member) => member.id),
+    avance,
+    calificado: team.calificado,
+    notaTotal: team.nota_total,
+  };
 }
 
 export function ProjectsPage() {
@@ -60,6 +100,8 @@ export function ProjectsPage() {
   const [activities, setActivities] = useState<Actividad[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null);
+  // Se abre sobre el detalle: al cerrarse, el detalle sigue ahí con los datos nuevos
+  const [editingProject, setEditingProject] = useState<ProjectRow | null>(null);
   const detalleTitleId = useId();
 
   const [search, setSearch] = useState('');
@@ -125,35 +167,16 @@ export function ProjectsPage() {
           );
 
           for (const team of teams) {
-            const members = team.miembros.map(
-              (member) => member.nombre_completo
+            projectResults.push(
+              toProjectRow(team, {
+                cursoId: courseId,
+                cursoNombre: currentCourse?.nombre ?? 'Asignatura',
+                seccionId: section.id,
+                seccionNombre: section.nombre,
+                actividadId: activity.id,
+                actividadNombre: activity.nombre,
+              })
             );
-
-            const avance = team.calificado
-              ? 100
-              : Math.max(
-                  25,
-                  Math.min(90, members.length * 20)
-                );
-
-            projectResults.push({
-              id: team.id,
-              nombre: team.nombre,
-
-              cursoId: courseId,
-              cursoNombre: currentCourse?.nombre ?? 'Asignatura',
-
-              seccionId: section.id,
-              seccionNombre: section.nombre,
-
-              actividadId: activity.id,
-              actividadNombre: activity.nombre,
-
-              miembros: members,
-              avance,
-              calificado: team.calificado,
-              notaTotal: team.nota_total,
-            });
           }
         }
       }
@@ -265,6 +288,25 @@ export function ProjectsPage() {
     setCreateModalOpen(false);
   };
 
+  const handleEditProject = async (
+    project: ProjectRow,
+    payload: { nombre: string; estudianteIds: number[] }
+  ) => {
+    // Los errores se propagan: EditProjectModal los muestra y no se cierra
+    const team = await equiposApi.update(project.id, {
+      nombre: payload.nombre,
+      estudiante_ids: payload.estudianteIds,
+    });
+
+    // Solo cambia esta fila: no hace falta recargar todos los equipos
+    const updated = toProjectRow(team, project);
+    setProjects((current) =>
+      current.map((item) => (item.id === updated.id ? updated : item))
+    );
+    setSelectedProject((current) =>
+      current?.id === updated.id ? updated : current
+    );
+  };
 
   const openProjectModal = (project: ProjectRow) => {
     setSelectedProject(project);
@@ -611,6 +653,10 @@ export function ProjectsPage() {
             <Button variant="secondary" onClick={() => setSelectedProject(null)}>
               Cerrar
             </Button>
+            <Button variant="outline" onClick={() => setEditingProject(selectedProject)}>
+              <Pencil size={16} />
+              Editar equipo
+            </Button>
             <Button variant="primary" onClick={() => {
               setSelectedProject(null);
               handleEvaluateProject(selectedProject);
@@ -619,6 +665,15 @@ export function ProjectsPage() {
             </Button>
           </div>
         </Dialog>
+      )}
+
+      {/* Modal de edición (sobre el detalle) */}
+      {editingProject && (
+        <EditProjectModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onSave={(payload) => handleEditProject(editingProject, payload)}
+        />
       )}
 
       {/* Modal de creación */}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ReactNode } from 'react';
@@ -19,7 +19,7 @@ vi.mock('../../components/Layout/AppLayout', () => ({
 vi.mock('../../api/cursos', () => ({ cursosApi: { list: vi.fn() } }));
 vi.mock('../../api/secciones', () => ({ seccionesApi: { list: vi.fn() } }));
 vi.mock('../../api/actividades', () => ({ actividadesApi: { list: vi.fn(), get: vi.fn() } }));
-vi.mock('../../api/equipos', () => ({ equiposApi: { list: vi.fn(), create: vi.fn() } }));
+vi.mock('../../api/equipos', () => ({ equiposApi: { list: vi.fn(), create: vi.fn(), update: vi.fn() } }));
 vi.mock('../../api/estudiantes', () => ({ estudiantesApi: { list: vi.fn() } }));
 
 const DETALLE_400 = "El estudiante Ana Pérez ya está en el equipo 'Equipo 1' de esta actividad";
@@ -236,5 +236,93 @@ describe('ProjectsPage — crear proyecto (buscador de integrantes)', () => {
     expect(screen.getByText('Ningún estudiante coincide con "zzz".')).toBeTruthy();
     expect(screen.queryByText(/no hay estudiantes disponibles/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /ana pérez/i })).toBeNull();
+  });
+});
+
+describe('ProjectsPage — editar equipo', () => {
+  const ANA = { id: 7, nombre_completo: 'Ana Pérez', codigo_estudiante: '2210001', seccion_id: 10 };
+  const ANDRES = { id: 8, nombre_completo: 'Andrés Gómez', codigo_estudiante: '2210002', seccion_id: 10 };
+  const DETALLE_OTRO_EQUIPO = "El estudiante Andrés Gómez ya está en el equipo 'Equipo Beta' de esta actividad";
+
+  beforeEach(() => {
+    vi.mocked(equiposApi.list).mockResolvedValue([EQUIPO]);
+    vi.mocked(estudiantesApi.list).mockResolvedValue([ANA, ANDRES]);
+  });
+
+  // Desde la tarjeta: detalle → "Editar equipo", con la lista de la sección ya cargada
+  const abrirEdicion = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', { name: /equipo alfa/i }));
+    await user.click(screen.getByRole('button', { name: /editar equipo/i }));
+    await screen.findByRole('button', { name: /andrés gómez/i });
+    return screen.getByRole('dialog', { name: 'Editar equipo' });
+  };
+
+  it('se precarga con el nombre y los integrantes actuales del equipo', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    const dialog = await abrirEdicion(user);
+
+    expect((within(dialog).getByPlaceholderText('Ej: Sistema de inventarios') as HTMLInputElement).value).toBe('Equipo Alfa');
+    expect(within(dialog).getByRole('button', { name: /ana pérez/i }).textContent).toContain('Selec.');
+    expect(within(dialog).getByRole('button', { name: /andrés gómez/i }).textContent).not.toContain('Selec.');
+    expect(estudiantesApi.list).toHaveBeenCalledWith(10);
+  });
+
+  it('guardar sin cambios envía los integrantes actuales (el backend no los cuenta como de otro equipo)', async () => {
+    vi.mocked(equiposApi.update).mockResolvedValue(EQUIPO);
+    const user = userEvent.setup();
+    renderConRutas();
+    await abrirEdicion(user);
+
+    await user.click(screen.getByRole('button', { name: /guardar cambios/i }));
+
+    expect(equiposApi.update).toHaveBeenCalledWith(50, { nombre: 'Equipo Alfa', estudiante_ids: [7] });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar equipo' })).toBeNull());
+  });
+
+  it('si el backend responde 400, muestra su mensaje tal cual dentro del modal sin cerrarlo', async () => {
+    vi.mocked(equiposApi.update).mockRejectedValue({ response: { status: 400, data: { detail: DETALLE_OTRO_EQUIPO } } });
+    const user = userEvent.setup();
+    renderConRutas();
+    const dialog = await abrirEdicion(user);
+
+    const nombre = within(dialog).getByPlaceholderText('Ej: Sistema de inventarios');
+    await user.clear(nombre);
+    await user.type(nombre, 'Equipo Omega');
+    await user.click(within(dialog).getByRole('button', { name: /andrés gómez/i }));
+    await user.click(within(dialog).getByRole('button', { name: /guardar cambios/i }));
+
+    expect(await within(dialog).findByText(DETALLE_OTRO_EQUIPO)).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Editar equipo' })).toBeTruthy();
+    expect((nombre as HTMLInputElement).value).toBe('Equipo Omega');
+    expect(equiposApi.update).toHaveBeenCalledWith(50, { nombre: 'Equipo Omega', estudiante_ids: [7, 8] });
+    // La tarjeta no cambió
+    expect(screen.queryByText('Equipo Omega')).toBeNull();
+  });
+
+  it('al guardar con éxito actualiza la tarjeta y el detalle sin recargar la lista', async () => {
+    vi.mocked(equiposApi.update).mockResolvedValue({ ...EQUIPO, nombre: 'Equipo Omega', miembros: [ANA, ANDRES] });
+    const user = userEvent.setup();
+    renderConRutas();
+    const dialog = await abrirEdicion(user);
+
+    const nombre = within(dialog).getByPlaceholderText('Ej: Sistema de inventarios');
+    await user.clear(nombre);
+    await user.type(nombre, 'Equipo Omega');
+    await user.click(within(dialog).getByRole('button', { name: /andrés gómez/i }));
+    await user.click(within(dialog).getByRole('button', { name: /guardar cambios/i }));
+
+    // Se cierra la edición y el detalle (que sigue abierto) muestra los datos nuevos
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Editar equipo' })).toBeNull());
+    const detalle = screen.getByRole('dialog', { name: 'Detalle del Proyecto' });
+    expect(within(detalle).getByRole('heading', { name: 'Equipo Omega' })).toBeTruthy();
+    expect(within(detalle).getByText('Andrés Gómez')).toBeTruthy();
+
+    // La tarjeta también, y la lista de equipos solo se pidió en la carga inicial
+    await user.keyboard('{Escape}');
+    const tarjeta = screen.getByRole('button', { name: /equipo omega/i });
+    expect(tarjeta.textContent).toContain('2 miembros');
+    expect(tarjeta.textContent).toContain('Andrés Gómez');
+    expect(equiposApi.list).toHaveBeenCalledTimes(1);
   });
 });
