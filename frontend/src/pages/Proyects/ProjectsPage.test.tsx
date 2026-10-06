@@ -19,7 +19,7 @@ vi.mock('../../components/Layout/AppLayout', () => ({
 vi.mock('../../api/cursos', () => ({ cursosApi: { list: vi.fn() } }));
 vi.mock('../../api/secciones', () => ({ seccionesApi: { list: vi.fn() } }));
 vi.mock('../../api/actividades', () => ({ actividadesApi: { list: vi.fn(), get: vi.fn() } }));
-vi.mock('../../api/equipos', () => ({ equiposApi: { list: vi.fn(), create: vi.fn(), update: vi.fn() } }));
+vi.mock('../../api/equipos', () => ({ equiposApi: { list: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../api/estudiantes', () => ({ estudiantesApi: { list: vi.fn() } }));
 
 const DETALLE_400 = "El estudiante Ana Pérez ya está en el equipo 'Equipo 1' de esta actividad";
@@ -388,5 +388,58 @@ describe('ProjectsPage — avance de la calificación', () => {
     await user.click(card);
     const detalle = screen.getByRole('dialog', { name: 'Detalle del Proyecto' });
     expect(within(detalle).getByText('Sin rúbrica')).toBeTruthy();
+  });
+});
+
+describe('ProjectsPage — eliminar equipo', () => {
+  const DETALLE_409 = "No se puede eliminar el equipo 'Equipo Alfa' porque ya tiene calificaciones registradas.";
+
+  beforeEach(() => {
+    vi.mocked(equiposApi.list).mockResolvedValue([
+      EQUIPO,
+      { ...EQUIPO, id: 51, nombre: 'Equipo Beta', miembros: [] },
+    ]);
+  });
+
+  // Desde la tarjeta: detalle → "Eliminar equipo" → confirmación
+  const abrirConfirmacion = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', { name: /equipo alfa/i }));
+    await user.click(screen.getByRole('button', { name: /eliminar equipo/i }));
+    return screen.getByRole('dialog', { name: 'Eliminar equipo' });
+  };
+
+  it('al confirmar, quita la tarjeta y cierra el detalle sin recargar la lista', async () => {
+    vi.mocked(equiposApi.delete).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderConRutas();
+    const confirmacion = await abrirConfirmacion(user);
+
+    expect(confirmacion.textContent).toContain('Sus integrantes no se eliminan');
+    await user.click(within(confirmacion).getByRole('button', { name: 'Eliminar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(equiposApi.delete).toHaveBeenCalledWith(50);
+    expect(screen.queryByRole('button', { name: /equipo alfa/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /equipo beta/i })).toBeTruthy();
+    expect(equiposApi.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('si el backend responde 409, muestra su mensaje en la confirmación y la tarjeta sigue', async () => {
+    vi.mocked(equiposApi.delete).mockRejectedValue({ response: { status: 409, data: { detail: DETALLE_409 } } });
+    const user = userEvent.setup();
+    renderConRutas();
+    const confirmacion = await abrirConfirmacion(user);
+
+    await user.click(within(confirmacion).getByRole('button', { name: 'Eliminar' }));
+
+    expect(await within(confirmacion).findByText(DETALLE_409)).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Eliminar equipo' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Detalle del Proyecto' })).toBeTruthy();
+
+    // Al cancelar vuelve al detalle y la tarjeta sigue en la lista
+    await user.click(within(confirmacion).getByRole('button', { name: 'Cancelar' }));
+    expect(screen.queryByRole('dialog', { name: 'Eliminar equipo' })).toBeNull();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: /equipo alfa/i })).toBeTruthy();
   });
 });
