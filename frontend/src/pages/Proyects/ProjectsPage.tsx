@@ -1,97 +1,24 @@
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Filter,
-  FolderKanban,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-  X,
-} from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
-import { Button } from '../../components/ui/Button';
-import { Dialog } from '../../components/ui/Dialog';
-import { Modal } from '../../components/ui/Modal';
 import { cursosApi } from '../../api/cursos';
-import { seccionesApi } from '../../api/secciones';
 import { actividadesApi } from '../../api/actividades';
 import { equiposApi } from '../../api/equipos';
 import { apiErrorMessage } from '../../api/errors';
 import { useCourseStore } from '../../store/courseStore';
-import {
-  Actividad,
-  Curso,
-  EquipoTrabajo,
-  Seccion,
-} from '../../types';
+import { Curso } from '../../types';
 
-import { ProjectCard } from './components/ProjectCard';
 import { CreateProjectModal } from '../Proyects/components/CreateProjectModal';
+import { DeleteProjectModal } from './components/DeleteProjectModal';
 import { EditProjectModal } from './components/EditProjectModal';
-import { ESTADO_BADGE, ESTADO_LABEL, projectEstado } from './projectEstado';
-
-export interface ProjectRow {
-  id: number;
-  nombre: string;
-  cursoId: number;
-  cursoNombre: string;
-  seccionId: number;
-  seccionNombre: string;
-  actividadId: number;
-  actividadNombre: string;
-  miembros: string[];
-  /** Para precargar la edición del equipo con sus integrantes actuales. */
-  miembroIds: number[];
-  /** Porcentaje de criterios calificados (0 si la actividad aún no tiene rúbrica). */
-  avance: number;
-  criteriosTotales: number;
-  calificado: boolean;
-  notaTotal: number | null;
-}
-
-interface CreateProjectPayload {
-  nombre: string;
-  seccionId: number;
-  actividadId: number;
-  estudianteIds: number[];
-}
-
-// Fila de la lista a partir de un equipo: la usan la carga y la edición, así el avance
-// se calcula igual en ambas
-function toProjectRow(
-  team: EquipoTrabajo,
-  context: Pick<ProjectRow, 'cursoId' | 'cursoNombre' | 'seccionId' | 'seccionNombre' | 'actividadId' | 'actividadNombre'>
-): ProjectRow {
-  const members = team.miembros.map(
-    (member) => member.nombre_completo
-  );
-
-  // Proporción real de criterios calificados; sin rúbrica no hay nada que calificar todavía
-  const avance = team.criterios_totales > 0
-    ? Math.min(100, Math.round((team.criterios_calificados / team.criterios_totales) * 100))
-    : 0;
-
-  return {
-    id: team.id,
-    nombre: team.nombre,
-    // Campo a campo: al editar, context es la fila anterior y no debe pisar nada más
-    cursoId: context.cursoId,
-    cursoNombre: context.cursoNombre,
-    seccionId: context.seccionId,
-    seccionNombre: context.seccionNombre,
-    actividadId: context.actividadId,
-    actividadNombre: context.actividadNombre,
-    miembros: members,
-    miembroIds: team.miembros.map((member) => member.id),
-    avance,
-    criteriosTotales: team.criterios_totales,
-    calificado: team.calificado,
-    notaTotal: team.nota_total,
-  };
-}
+import { ProjectDetailDialog } from './components/ProjectDetailDialog';
+import { ProjectsList } from './components/ProjectsList';
+import { ProjectsToolbar } from './components/ProjectsToolbar';
+import { useProjects } from './hooks/useProjects';
+import { projectEstado } from './projectEstado';
+import { CreateProjectPayload, ProjectRow, ProjectStatusFilter, toProjectRow } from './types';
 
 export function ProjectsPage() {
 
@@ -101,9 +28,6 @@ export function ProjectsPage() {
   const [searchParams] = useSearchParams();
   const actividadIdParam = Number(searchParams.get('actividadId')) || null;
 
-  const [sections, setSections] = useState<Seccion[]>([]);
-  const [activities, setActivities] = useState<Actividad[]>([]);
-  const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null);
   // Se abre sobre el detalle: al cerrarse, el detalle sigue ahí con los datos nuevos
   const [editingProject, setEditingProject] = useState<ProjectRow | null>(null);
@@ -111,99 +35,16 @@ export function ProjectsPage() {
   const [deletingProject, setDeletingProject] = useState<ProjectRow | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  const detalleTitleId = useId();
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pendiente' | 'en-evaluacion' | 'evaluado'>('all');
-  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<ProjectStatusFilter>('all');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   // Selección propia de esta pantalla: no escribe en el store del Dashboard
   const [courses, setCourses] = useState<Curso[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<number | null>(null);
   const [sectionFilter, setSectionFilter] = useState<number | null>(null); // null = Todas
 
-  // Solo la última carga escribe el estado: si se cambia de asignatura mientras otra
-  // carga sigue en curso, su respuesta (más lenta) se descarta.
-  const loadRequest = useRef(0);
-
-  const loadProjects = async (courseId: number | null) => {
-    const request = ++loadRequest.current;
-    const isStale = () => request !== loadRequest.current;
-
-    if (!courseId) {
-      setProjects([]);
-      setSections([]);
-      setActivities([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const [courseList, courseSections, courseActivities] =
-        await Promise.all([
-          cursosApi.list(),
-          seccionesApi.list(courseId),
-          actividadesApi.list(courseId),
-        ]);
-
-      if (isStale()) return;
-
-      const groupedActivities = courseActivities.filter(
-        (activity) => activity.tipo === 'grupal'
-      );
-
-      const currentCourse = courseList.find(
-        (course) => course.id === courseId
-      );
-
-      setSections(courseSections);
-      setActivities(groupedActivities);
-
-      if (groupedActivities.length === 0) {
-        setProjects([]);
-        return;
-      }
-
-      const projectResults: ProjectRow[] = [];
-
-      for (const activity of groupedActivities) {
-        for (const section of courseSections) {
-          const teams = await equiposApi.list(
-            activity.id,
-            section.id
-          );
-
-          for (const team of teams) {
-            projectResults.push(
-              toProjectRow(team, {
-                cursoId: courseId,
-                cursoNombre: currentCourse?.nombre ?? 'Asignatura',
-                seccionId: section.id,
-                seccionNombre: section.nombre,
-                actividadId: activity.id,
-                actividadNombre: activity.nombre,
-              })
-            );
-          }
-        }
-      }
-
-      if (isStale()) return;
-
-      setProjects(projectResults);
-    } catch (error) {
-      if (isStale()) return;
-      console.error('Error cargando proyectos:', error);
-
-      setProjects([]);
-      setSections([]);
-      setActivities([]);
-    } finally {
-      if (!isStale()) setLoading(false);
-    }
-  };
+  const { sections, activities, projects, setProjects, loading, setLoading, loadProjects } = useProjects();
 
   useEffect(() => {
     const loadInitialCourse = async () => {
@@ -352,9 +193,6 @@ export function ProjectsPage() {
     navigate(`/evaluaciones?${params.toString()}`);
   };
 
-  const noProjects =
-    !loading && filteredProjects.length === 0;
-
   return (
     <AppLayout>
       <div className="p-6">
@@ -374,335 +212,43 @@ export function ProjectsPage() {
 
 
         {/* Barra de herramientas */}
-        <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center">
-        {/* Búsqueda */}
-        <div className="relative flex-1">
-            <Search
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-
-            <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar proyecto..."
-            className="
-                w-full rounded-xl border border-gray-200
-                bg-white py-2.5 pl-10 pr-4
-                text-sm text-gray-700 shadow-sm
-                outline-none transition
-                focus:border-[#9E0B0F]
-                focus:ring-2 focus:ring-[#9E0B0F]/10
-            "
-            />
-        </div>
-
-        {/* Filtros */}
-        <div className="flex flex-col gap-3 sm:flex-row">
-            {/* Asignatura */}
-            <div
-            className="
-                flex h-10 min-w-[220px] items-center gap-2
-                rounded-xl border border-gray-200
-                bg-white px-3
-                text-sm text-gray-700 shadow-sm
-                transition
-                hover:border-[#9E0B0F]
-                focus-within:border-[#9E0B0F]
-                focus-within:ring-2
-                focus-within:ring-[#9E0B0F]/10
-            "
-            >
-            <label
-                htmlFor="course-select"
-                className="shrink-0 text-gray-500"
-            >
-                Asignatura
-            </label>
-
-            <select
-                id="course-select"
-                value={selectedCourse ?? ''}
-                onChange={(event) => handleCourseChange(event.target.value)}
-                className="
-                min-w-0 flex-1
-                bg-transparent
-                text-sm text-gray-700
-                outline-none
-                "
-            >
-                {courses.length === 0 && <option value="">Sin asignaturas</option>}
-                {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                    {course.nombre} ({course.codigo} · {course.periodo})
-                </option>
-                ))}
-            </select>
-            </div>
-
-            {/* Sección */}
-            <div
-            className="
-                flex h-10 min-w-[220px] items-center gap-2
-                rounded-xl border border-gray-200
-                bg-white px-3
-                text-sm text-gray-700 shadow-sm
-                transition
-                hover:border-[#9E0B0F]
-                focus-within:border-[#9E0B0F]
-                focus-within:ring-2
-                focus-within:ring-[#9E0B0F]/10
-            "
-            >
-            <label
-                htmlFor="section-select"
-                className="shrink-0 text-gray-500"
-            >
-                Sección
-            </label>
-
-            <select
-                id="section-select"
-                value={sectionFilter ?? ''}
-                onChange={(event) =>
-                setSectionFilter(event.target.value ? Number(event.target.value) : null)
-                }
-                className="
-                min-w-0 flex-1
-                bg-transparent
-                text-sm text-gray-700
-                outline-none
-                "
-            >
-                <option value="">Todas las secciones</option>
-                {sections.map((section) => (
-                <option key={section.id} value={section.id}>
-                    {section.nombre}
-                </option>
-                ))}
-            </select>
-            </div>
-
-            {/* Estado */}
-            <div
-            className="
-                flex h-10 min-w-[220px] items-center gap-2
-                rounded-xl border border-gray-200
-                bg-white px-3
-                text-sm text-gray-700 shadow-sm
-                transition
-                hover:border-[#9E0B0F]
-                focus-within:border-[#9E0B0F]
-                focus-within:ring-2
-                focus-within:ring-[#9E0B0F]/10
-            "
-            >
-            <label
-                htmlFor="status-select"
-                className="shrink-0 text-gray-500"
-            >
-                Estado
-            </label>
-
-            <select
-                id="status-select"
-                value={statusFilter}
-                onChange={(event) =>
-                setStatusFilter(event.target.value as 'all' | 'pendiente' | 'en-evaluacion' | 'evaluado')
-                }
-                className="
-                min-w-0 flex-1
-                bg-transparent
-                text-sm text-gray-700
-                outline-none
-                "
-            >
-                <option value="all">Todos</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="en-evaluacion">En evaluación</option>
-                <option value="evaluado">Evaluado</option>
-            </select>
-            </div>
-
-            {/* Filtrar */}
-            <Button
-            variant="outline"
-            size="md"
-            className="rounded-xl"
-            >
-            <Filter size={16} />
-            Filtrar
-            </Button>
-
-            {/* Nuevo proyecto */}
-            <Button
-            variant="primary"
-            size="md"
-            onClick={() => setCreateModalOpen(true)}
-            className="rounded-xl whitespace-nowrap"
-            >
-            <Plus size={16} />
-            Nuevo proyecto
-            </Button>
-        </div>
-        </div>
+        <ProjectsToolbar
+          search={search}
+          onSearch={setSearch}
+          courses={courses}
+          selectedCourse={selectedCourse}
+          onCourseChange={handleCourseChange}
+          sections={sections}
+          sectionFilter={sectionFilter}
+          onSectionFilter={setSectionFilter}
+          statusFilter={statusFilter}
+          onStatusFilter={setStatusFilter}
+          onNew={() => setCreateModalOpen(true)}
+        />
 
 
         {/* Contenido */}
-        {loading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div
-                key={index}
-                className="
-                  rounded-2xl border border-gray-200
-                  bg-white p-5 shadow-sm
-                "
-              >
-                <div className="h-4 w-48 animate-pulse rounded bg-gray-200" />
-
-                <div className="mt-4 h-3 w-full animate-pulse rounded bg-gray-100" />
-
-                <div className="mt-3 h-3 w-4/5 animate-pulse rounded bg-gray-100" />
-              </div>
-            ))}
-          </div>
-        ) : noProjects ? (
-          <div
-            className="
-              rounded-2xl border 
-              border-gray-300 bg-white
-              p-10 text-center shadow-sm
-            "
-          >
-            <FolderKanban
-              size={42}
-              className="mx-auto mb-3 text-gray-300"
-            />
-
-            <p className="text-base font-semibold text-gray-700">
-              No hay proyectos disponibles
-            </p>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Crea un equipo o una actividad grupal para ver
-              los proyectos aquí.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onOpenDetails={openProjectModal}
-              />
-            ))}
-          </div>
-        )}
+        <ProjectsList
+          loading={loading}
+          filteredProjects={filteredProjects}
+          openProjectModal={openProjectModal}
+        />
       </div>
 
       {selectedProject && (
-        <Dialog
-          open
+        <ProjectDetailDialog
+          project={selectedProject}
           onClose={() => setSelectedProject(null)}
-          labelledBy={detalleTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          panelClassName="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"
-        >
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <h3 id={detalleTitleId} className="text-2xl font-semibold text-gray-900">Detalle del Proyecto</h3>
-            <button
-              type="button"
-              onClick={() => setSelectedProject(null)}
-              className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
-              aria-label="Cerrar modal"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] ${
-                ESTADO_BADGE[projectEstado(selectedProject)]
-              }`}
-            >
-              {ESTADO_LABEL[projectEstado(selectedProject)]}
-            </span>
-
-            {selectedProject.criteriosTotales === 0 && (
-              <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-500">
-                Sin rúbrica
-              </span>
-            )}
-
-            <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-700">
-              {selectedProject.seccionNombre}
-            </span>
-          </div>
-
-          <h4 className="mb-3 text-3xl font-bold leading-tight text-gray-900">
-            {selectedProject.nombre}
-          </h4>
-
-          <p className="mb-5 text-base text-gray-700">
-            Curso: {selectedProject.cursoNombre} · Actividad: {selectedProject.actividadNombre}
-          </p>
-
-          <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <h5 className="mb-3 text-lg font-semibold text-gray-800">Integrantes del grupo</h5>
-            <div className="space-y-2">
-              {selectedProject.miembros.length > 0 ? (
-                selectedProject.miembros.map((member, index) => (
-                  <div
-                    key={`${member}-${index}`}
-                    className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
-                  >
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#9E0B0F] text-xs font-bold text-white">
-                      {member
-                        .split(' ')
-                        .slice(0, 2)
-                        .map((part) => part[0]?.toUpperCase() ?? '')
-                        .join('') || 'U'}
-                    </span>
-                    <span className="text-base font-medium text-gray-800">{member}</span>
-                  </div>
-                ))
-              ) : (
-                <span className="text-sm text-gray-500">Sin miembros asociados</span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap justify-end gap-3">
-            <Button
-              variant="danger"
-              className="sm:mr-auto"
-              onClick={() => {
-                setDeleteError('');
-                setDeletingProject(selectedProject);
-              }}
-            >
-              <Trash2 size={16} />
-              Eliminar equipo
-            </Button>
-            <Button variant="secondary" onClick={() => setSelectedProject(null)}>
-              Cerrar
-            </Button>
-            <Button variant="outline" onClick={() => setEditingProject(selectedProject)}>
-              <Pencil size={16} />
-              Editar equipo
-            </Button>
-            <Button variant="primary" onClick={() => {
-              setSelectedProject(null);
-              handleEvaluateProject(selectedProject);
-            }}>
-              Evaluar Proyecto
-            </Button>
-          </div>
-        </Dialog>
+          onDelete={() => {
+            setDeleteError('');
+            setDeletingProject(selectedProject);
+          }}
+          onEdit={() => setEditingProject(selectedProject)}
+          onEvaluate={() => {
+            setSelectedProject(null);
+            handleEvaluateProject(selectedProject);
+          }}
+        />
       )}
 
       {/* Modal de edición (sobre el detalle) */}
@@ -715,27 +261,13 @@ export function ProjectsPage() {
       )}
 
       {/* Confirmación de eliminar (sobre el detalle) */}
-      <Modal open={deletingProject !== null} onClose={closeDeleteModal} title="Eliminar equipo">
-        {deletingProject && (
-          <div className="space-y-4">
-            <p className="whitespace-pre-line text-sm text-gray-700">
-              {`¿Deseas eliminar el equipo "${deletingProject.nombre}"?
-
-` +
-                'Sus integrantes no se eliminan: quedan libres para formar parte de otro equipo de esta actividad. Esta acción no se puede deshacer.'}
-            </p>
-            {deleteError && <p className="text-sm text-uao-accent">{deleteError}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={closeDeleteModal} disabled={deleteLoading}>
-                Cancelar
-              </Button>
-              <Button variant="danger" onClick={confirmDeleteProject} loading={deleteLoading}>
-                Eliminar
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <DeleteProjectModal
+        project={deletingProject}
+        error={deleteError}
+        loading={deleteLoading}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDeleteProject}
+      />
 
       {/* Modal de creación */}
       <CreateProjectModal
