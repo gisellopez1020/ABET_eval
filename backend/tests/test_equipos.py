@@ -181,6 +181,47 @@ class TestListarEquipos:
         assert por_nombre["Parcial"]["nota_total"] is None
 
 
+# ── Avance de la calificación ────────────────────────────────────────────────
+
+class TestAvanceCalificacion:
+    """criterios_calificados/criterios_totales: el avance real, en las tres respuestas de equipo."""
+
+    @pytest.fixture()
+    def cinco_criterios(self, db_session, curso):
+        act, [crits] = _actividad(db_session, curso, [(None, [20, 20, 20, 20, 20])], tipo=TipoActividad.grupal)
+        return act, crits
+
+    def _dos_de_cinco(self, client, db_session, curso, cinco_criterios, alumnos):
+        act, crits = cinco_criterios
+        s1 = _seccion(db_session, curso)
+        [equipo] = _crear(client, act, s1, ("E1", alumnos[:2])).json()
+        _calificar(db_session, crits[:2], [1, 1], equipo=db_session.get(EquipoTrabajo, equipo["id"]))
+        return act, s1, equipo
+
+    def test_crear_trae_el_total_de_criterios_y_ninguno_calificado(self, client, db_session, curso, cinco_criterios, alumnos):
+        act, _ = cinco_criterios
+        [equipo] = _crear(client, act, _seccion(db_session, curso), ("E1", alumnos[:2])).json()
+        assert (equipo["criterios_calificados"], equipo["criterios_totales"]) == (0, 5)
+
+    def test_listar_con_dos_de_cinco(self, client, db_session, curso, cinco_criterios, alumnos):
+        act, s1, _ = self._dos_de_cinco(client, db_session, curso, cinco_criterios, alumnos)
+        [equipo] = client.get(_url(act, s1)).json()
+        assert (equipo["criterios_calificados"], equipo["criterios_totales"]) == (2, 5)
+        assert equipo["calificado"] is False
+
+    def test_editar_con_dos_de_cinco(self, client, db_session, curso, cinco_criterios, alumnos):
+        _, _, equipo = self._dos_de_cinco(client, db_session, curso, cinco_criterios, alumnos)
+        resp = client.put(f"/equipos/{equipo['id']}", json={"nombre": "Renombrado"})
+        assert resp.status_code == 200
+        assert (resp.json()["criterios_calificados"], resp.json()["criterios_totales"]) == (2, 5)
+
+    def test_actividad_sin_rubrica_tiene_cero_criterios(self, client, db_session, curso, alumnos):
+        act, _ = _actividad(db_session, curso, [], tipo=TipoActividad.grupal)
+        [equipo] = _crear(client, act, _seccion(db_session, curso), ("E1", alumnos[:1])).json()
+        assert (equipo["criterios_calificados"], equipo["criterios_totales"]) == (0, 0)
+        assert equipo["calificado"] is False
+
+
 # ── Modo de calificación ─────────────────────────────────────────────────────
 
 def _modo(client, actividad, seccion):

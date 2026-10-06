@@ -28,6 +28,9 @@ class EquipoOut(BaseModel):
     miembros: List[EstudianteOut] = []
     calificado: bool = False
     nota_total: Optional[Decimal] = None
+    # Avance real de la calificación: calificado equivale a calificados >= totales > 0
+    criterios_calificados: int = 0
+    criterios_totales: int = 0
 
 
 class ModoCalificacionItem(BaseModel):

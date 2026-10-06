@@ -190,7 +190,7 @@ class EquipoService:
             raise EstudianteYaEnOtroEquipo(choque[0], choque[1])
 
     def _equipo_out(self, equipo: EquipoTrabajo, actividad_id: int) -> EquipoOut:
-        """El equipo con sus integrantes y su estado: calificado si tiene todos los criterios."""
+        """El equipo con sus integrantes y su estado: calificado si tiene todos los criterios, y cuántos lleva."""
         calificaciones = CalificacionRepository(self.db)
         total_criterios = RubricaRepository(self.db).contar_criterios(actividad_id)
         calificados = calificaciones.contar_de_equipo(equipo.id, actividad_id)
@@ -204,4 +204,6 @@ class EquipoService:
             miembros=[EstudianteOut.model_validate(m.estudiante) for m in equipo.miembros],
             calificado=calificado,
             nota_total=nota,
+            criterios_calificados=calificados,
+            criterios_totales=total_criterios,
         )
