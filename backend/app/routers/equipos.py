@@ -71,6 +71,23 @@ def editar_equipo(
     return EquipoService(db).editar(equipo_id, usuario["email"], body.nombre, body.estudiante_ids)
 
 
+@router.delete(
+    "/equipos/{equipo_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar equipo de trabajo",
+)
+def eliminar_equipo(
+    equipo_id: int,
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(get_current_user),
+):
+    """
+    Elimina el equipo y sus membresías (los estudiantes no se eliminan).
+    409 si el equipo ya tiene calificaciones, 404 si no existe, 403 si es de otro docente.
+    """
+    EquipoService(db).eliminar(equipo_id, usuario["email"])
+
+
 @router.get(
     "/actividades/{actividad_id}/modo-calificacion/{seccion_id}",
     response_model=ModoCalificacionResponse,

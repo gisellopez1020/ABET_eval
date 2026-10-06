@@ -1,7 +1,7 @@
 """
-Mensajes exactos de los errores de routers/equipos.py vistos por HTTP: lo que
-test_equipos solo comprueba por código o por subcadena. test_equipos.py (incluidos los
-tests del estudiante repetido en el mismo equipo) no se modifica.
+Mensajes exactos de los errores de routers/equipos.py vistos por HTTP (crear, editar y
+eliminar): lo que test_equipos.py solo comprueba por código o por subcadena. Allí se
+prueba el comportamiento; aquí, el texto exacto de cada error.
 
 Reutiliza las fixtures de test_equipos y test_reportes (SQLite en memoria).
 """
@@ -12,7 +12,7 @@ from app.models.actividad import TipoActividad
 from tests.test_calificaciones_lectura import _curso_ajeno
 from tests.test_catalogo_ra_abet import client, db_session  # noqa: F401 (fixtures)
 from tests.test_equipos import _crear, _url, alumnos, grupal  # noqa: F401 (fixtures)
-from tests.test_reportes import _actividad, _estudiante, _seccion, curso  # noqa: F401
+from tests.test_reportes import _actividad, _calificar, _estudiante, _seccion, curso  # noqa: F401
 
 
 def _detalle(resp):
@@ -126,3 +126,34 @@ class TestEditar:
         resp = client.put(f"/equipos/{equipo['id']}", json={"nombre": "Nuevo", "estudiante_ids": [ana.id, ana.id]})
         assert _detalle(resp) == (400, "El estudiante Ana está repetido en el equipo 'Nuevo'")
         assert self._miembros(db_session, equipo["id"]) == antes
+
+
+# ── Eliminar ─────────────────────────────────────────────────────────────────
+
+class TestEliminar:
+    def test_inexistente(self, client):
+        assert _detalle(client.delete("/equipos/99999")) == (404, "Equipo no encontrado")
+
+    def test_de_otro_docente_no_se_elimina(self, client, db_session):
+        ajeno = _curso_ajeno(db_session)
+        act, _ = _actividad(db_session, ajeno, [(None, [100])], tipo=TipoActividad.grupal)
+        equipo = EquipoTrabajo(nombre="Ajeno", actividad_id=act.id, seccion_id=_seccion(db_session, ajeno).id)
+        db_session.add(equipo)
+        db_session.commit()
+        assert _detalle(client.delete(f"/equipos/{equipo.id}")) == (403, "No tiene permiso sobre este equipo")
+        db_session.expire_all()
+        assert db_session.get(EquipoTrabajo, equipo.id) is not None
+
+    @pytest.mark.parametrize("criterios_calificados", [1, 2], ids=["parcial", "completo"])
+    def test_con_calificaciones_409_y_queda_intacto(self, client, db_session, curso, grupal, alumnos, criterios_calificados):
+        act, crits = grupal
+        [equipo] = _crear(client, act, _seccion(db_session, curso), ("E1", alumnos[:2])).json()
+        _calificar(db_session, crits[:criterios_calificados], [1] * criterios_calificados,
+                   equipo=db_session.get(EquipoTrabajo, equipo["id"]))
+
+        resp = client.delete(f"/equipos/{equipo['id']}")
+
+        assert _detalle(resp) == (409, "No se puede eliminar el equipo 'E1' porque ya tiene calificaciones registradas.")
+        db_session.expire_all()
+        assert db_session.get(EquipoTrabajo, equipo["id"]) is not None
+        assert db_session.query(MiembroEquipo).filter_by(equipo_id=equipo["id"]).count() == 2

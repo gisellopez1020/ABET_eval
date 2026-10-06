@@ -8,7 +8,7 @@ Reutiliza las fixtures y utilidades de test_reportes (SQLite en memoria).
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import EquipoTrabajo, MiembroEquipo
+from app.models import EquipoTrabajo, Estudiante, MiembroEquipo
 from app.models.actividad import TipoActividad
 from tests.test_catalogo_ra_abet import MOCK_USER, client, db_session  # noqa: F401 (fixtures)
 from tests.test_reportes import _actividad, _calificar, _estudiante, _seccion, curso  # noqa: F401
@@ -150,6 +150,63 @@ class TestEditarEquipo:
         # Falla antes de tocar los integrantes: el equipo conserva los que tenía
         miembros = db_session.query(MiembroEquipo.estudiante_id).filter_by(equipo_id=equipo["id"]).all()
         assert sorted(eid for (eid,) in miembros) == sorted(_ids_miembros(equipo))
+
+
+# ── Eliminar un estudiante que está en un equipo ─────────────────────────────
+
+class TestEliminarEstudianteDeEquipo:
+    def test_el_equipo_sigue_con_los_demas_integrantes(self, client, db_session, curso, grupal, alumnos):
+        act, crits = grupal
+        ana, beto, _ = alumnos
+        s1 = _seccion(db_session, curso)
+        [equipo] = _crear(client, act, s1, ("E1", [ana, beto])).json()
+        _calificar(db_session, crits, [1, 1], equipo=db_session.get(EquipoTrabajo, equipo["id"]))
+
+        assert client.delete(f"/estudiantes/{ana.id}").status_code == 204
+
+        [restante] = client.get(_url(act, s1)).json()
+        assert (restante["id"], restante["nombre"]) == (equipo["id"], "E1")
+        assert _ids_miembros(restante) == [beto.id]
+        # Las calificaciones son del equipo, no de Ana: se conservan
+        assert restante["calificado"] is True
+
+    def test_el_ultimo_integrante_deja_el_equipo_vacio_y_se_puede_eliminar(self, client, db_session, curso, grupal, alumnos):
+        """El equipo no se borra solo: queda vacío y el docente decide (DELETE /equipos/{id})."""
+        act, _ = grupal
+        ana = alumnos[0]
+        s1 = _seccion(db_session, curso)
+        _crear(client, act, s1, ("Solo Ana", [ana]))
+
+        assert client.delete(f"/estudiantes/{ana.id}").status_code == 204
+
+        [vacio] = client.get(_url(act, s1)).json()
+        assert (vacio["nombre"], vacio["miembros"]) == ("Solo Ana", [])
+
+        assert client.delete(f"/equipos/{vacio['id']}").status_code == 204
+        assert client.get(_url(act, s1)).json() == []
+
+
+# ── Eliminar ─────────────────────────────────────────────────────────────────
+
+class TestEliminarEquipo:
+    def test_elimina_el_equipo_y_sus_membresias_pero_no_a_los_estudiantes(self, client, db_session, curso, grupal, alumnos):
+        act, _ = grupal
+        s1 = _seccion(db_session, curso)
+        borrar, conservar = _crear(client, act, s1, ("Borrar", alumnos[:2]), ("Conservar", [alumnos[2]])).json()
+
+        resp = client.delete(f"/equipos/{borrar['id']}")
+
+        assert resp.status_code == 204
+        assert [e["nombre"] for e in client.get(_url(act, s1)).json()] == ["Conservar"]
+        assert db_session.query(MiembroEquipo).filter_by(equipo_id=borrar["id"]).count() == 0
+        assert all(db_session.get(Estudiante, a.id) is not None for a in alumnos)
+
+    def test_sus_integrantes_quedan_libres_para_otro_equipo(self, client, db_session, curso, grupal, alumnos):
+        act, _ = grupal
+        s1 = _seccion(db_session, curso)
+        [equipo] = _crear(client, act, s1, ("E1", alumnos[:1])).json()
+        client.delete(f"/equipos/{equipo['id']}")
+        assert _crear(client, act, s1, ("E2", alumnos[:1])).status_code == 201
 
 
 # ── Listar ───────────────────────────────────────────────────────────────────

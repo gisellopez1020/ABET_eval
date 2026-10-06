@@ -78,6 +78,10 @@ class EquipoRepository:
         self.db.add(miembro)
         return miembro
 
+    def eliminar(self, equipo: EquipoTrabajo) -> None:
+        """Elimina el equipo y, en cascada, sus membresías (no a los estudiantes)."""
+        self.db.delete(equipo)
+
     def eliminar_miembros(self, equipo: EquipoTrabajo) -> None:
         """Quita a todos los integrantes del equipo y hace flush."""
         for miembro in equipo.miembros:

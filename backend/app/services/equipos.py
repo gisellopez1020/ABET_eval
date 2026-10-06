@@ -23,7 +23,7 @@ from app.schemas.equipo import EquipoCreate, EquipoOut, ModoCalificacionItem, Mo
 from app.schemas.estudiante import EstudianteOut
 from app.services.acceso import actividad_del_docente, seccion_del_curso
 from app.services.errores import (
-    ActividadNoGrupal, EquipoNoEncontrado, EstudianteEnDosEquipos, EstudianteFueraDeSeccion,
+    ActividadNoGrupal, EquipoConCalificaciones, EquipoNoEncontrado, EstudianteEnDosEquipos, EstudianteFueraDeSeccion,
     EstudianteRepetidoEnEquipo, EstudianteYaEnOtroEquipo, SinPermiso,
 )
 
@@ -116,6 +116,17 @@ class EquipoService:
         self.db.commit()
         self.db.refresh(equipo)
         return self._equipo_out(equipo, equipo.actividad_id)
+
+    def eliminar(self, equipo_id: int, docente_email: str) -> None:
+        """
+        Elimina el equipo y sus membresías; los estudiantes no se tocan. Como la actividad y
+        la rúbrica, un equipo con calificaciones no se elimina (se borrarían en cascada).
+        """
+        equipo = self._equipo_del_docente(equipo_id, docente_email)
+        if CalificacionRepository(self.db).contar_de_equipo(equipo.id, equipo.actividad_id) > 0:
+            raise EquipoConCalificaciones(equipo.nombre)
+        self.equipos.eliminar(equipo)
+        self.db.commit()
 
     def modo_calificacion(self, actividad_id: int, seccion_id: int, docente_email: str) -> ModoCalificacionResponse:
         """
