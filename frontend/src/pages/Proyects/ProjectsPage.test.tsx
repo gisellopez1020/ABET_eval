@@ -173,3 +173,68 @@ describe('ProjectsPage — crear proyecto (CreateProjectModal como diálogo)', (
     expect(screen.getByRole('dialog', { name: 'Nuevo proyecto' })).toBeTruthy();
   });
 });
+
+describe('ProjectsPage — crear proyecto (buscador de integrantes)', () => {
+  beforeEach(() => {
+    vi.mocked(estudiantesApi.list).mockResolvedValue([
+      { id: 7, nombre_completo: 'Ana Pérez', codigo_estudiante: '2210001', seccion_id: 10 },
+      { id: 8, nombre_completo: 'Andrés Gómez', codigo_estudiante: '2210002', seccion_id: 10 },
+      { id: 9, nombre_completo: 'Carlos Ruiz', codigo_estudiante: '2210003', seccion_id: 10 },
+    ]);
+  });
+
+  const abrirModal = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole('button', { name: /nuevo proyecto/i }));
+    await screen.findByRole('button', { name: /carlos ruiz/i });
+  };
+
+  it('filtra la lista por nombre sin distinguir mayúsculas ni tildes', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await abrirModal(user);
+
+    await user.type(screen.getByPlaceholderText('Buscar estudiante...'), 'PEREZ');
+
+    expect(screen.getByRole('button', { name: /ana pérez/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /andrés gómez/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /carlos ruiz/i })).toBeNull();
+  });
+
+  it('un estudiante seleccionado sigue seleccionado aunque el filtro lo oculte', async () => {
+    vi.mocked(equiposApi.create).mockResolvedValue(undefined as never);
+    const user = userEvent.setup();
+    renderConRutas();
+    await abrirModal(user);
+
+    await user.type(screen.getByPlaceholderText('Ej: Sistema de inventarios'), 'Equipo Alfa');
+    const buscador = screen.getByPlaceholderText('Buscar estudiante...');
+    await user.type(buscador, 'ana');
+    await user.click(screen.getByRole('button', { name: /ana pérez/i }));
+
+    // Con otro filtro Ana queda oculta…
+    await user.clear(buscador);
+    await user.type(buscador, 'carlos');
+    expect(screen.queryByRole('button', { name: /ana pérez/i })).toBeNull();
+
+    // …y al borrar la búsqueda sigue marcada
+    await user.clear(buscador);
+    expect(screen.getByRole('button', { name: /ana pérez/i }).textContent).toContain('Selec.');
+
+    // Se envía aunque esté oculta en el momento de crear
+    await user.type(buscador, 'carlos');
+    await user.click(screen.getByRole('button', { name: /crear proyecto/i }));
+    expect(equiposApi.create).toHaveBeenCalledWith(100, 10, [{ nombre: 'Equipo Alfa', estudiante_ids: [7] }]);
+  });
+
+  it('si la búsqueda no encuentra a nadie, lo dice en vez de "No hay estudiantes disponibles"', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await abrirModal(user);
+
+    await user.type(screen.getByPlaceholderText('Buscar estudiante...'), 'zzz');
+
+    expect(screen.getByText('Ningún estudiante coincide con "zzz".')).toBeTruthy();
+    expect(screen.queryByText(/no hay estudiantes disponibles/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /ana pérez/i })).toBeNull();
+  });
+});
