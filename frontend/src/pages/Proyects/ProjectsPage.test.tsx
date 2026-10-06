@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ReactNode } from 'react';
 
 import { ProjectsPage } from './ProjectsPage';
@@ -443,3 +443,190 @@ describe('ProjectsPage — eliminar equipo', () => {
     expect(screen.getByRole('button', { name: /equipo alfa/i })).toBeTruthy();
   });
 });
+
+// ── Línea base antes de dividir ProjectsPage ─────────────────────────────────
+
+describe('ProjectsPage — búsqueda y filtros', () => {
+  beforeEach(() => {
+    vi.mocked(seccionesApi.list).mockResolvedValue([
+      { id: 10, nombre: 'Grupo A', curso_id: 1, activo: true },
+      { id: 11, nombre: 'Grupo B', curso_id: 1, activo: true },
+    ]);
+    vi.mocked(equiposApi.list).mockImplementation(async (_actividadId, seccionId) =>
+      seccionId === 10
+        ? [{ ...EQUIPO, id: 50, nombre: 'Equipo Alfa' }]
+        : [{ ...EQUIPO, id: 60, nombre: 'Equipo Gamma', seccion_id: 11 }]
+    );
+  });
+
+  const tarjetas = () =>
+    screen.queryAllByRole('button').filter((b) => b.tagName === 'ARTICLE').map((b) => b.querySelector('h2')?.textContent);
+
+  it('la búsqueda filtra por nombre del equipo, actividad o sección; sin resultados lo dice', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo gamma/i });
+    const buscador = screen.getByPlaceholderText('Buscar proyecto...');
+
+    await user.type(buscador, 'GAMMA');
+    expect(tarjetas()).toEqual(['Equipo Gamma']);
+
+    await user.clear(buscador);
+    await user.type(buscador, 'grupo a');
+    expect(tarjetas()).toEqual(['Equipo Alfa']);
+
+    await user.clear(buscador);
+    await user.type(buscador, 'proyecto final');
+    expect(tarjetas()).toEqual(['Equipo Alfa', 'Equipo Gamma']);
+
+    await user.clear(buscador);
+    await user.type(buscador, 'zzz');
+    expect(tarjetas()).toEqual([]);
+    expect(screen.getByText('No hay proyectos disponibles')).toBeTruthy();
+  });
+
+  it('el filtro de sección muestra solo los equipos de esa sección', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo gamma/i });
+
+    await user.selectOptions(screen.getByLabelText('Sección'), '11');
+    expect(tarjetas()).toEqual(['Equipo Gamma']);
+
+    await user.selectOptions(screen.getByLabelText('Sección'), '');
+    expect(tarjetas()).toEqual(['Equipo Alfa', 'Equipo Gamma']);
+  });
+});
+
+describe('ProjectsPage — asignatura y parámetros de la URL', () => {
+  const CURSO_2 = {
+    id: 2, nombre: 'Bases de Datos', codigo: 'BD1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+    ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01',
+  };
+
+  beforeEach(() => {
+    vi.mocked(cursosApi.list).mockResolvedValue([
+      { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+        ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
+      CURSO_2,
+    ]);
+    vi.mocked(seccionesApi.list).mockImplementation(async (cursoId) =>
+      cursoId === 1
+        ? [{ id: 10, nombre: 'Grupo A', curso_id: 1, activo: true }]
+        : [{ id: 20, nombre: 'Grupo BD', curso_id: 2, activo: true }]
+    );
+    vi.mocked(actividadesApi.list).mockImplementation(async (cursoId) =>
+      cursoId === 1
+        ? [{ id: 100, nombre: 'Proyecto final', tipo: 'grupal', peso_nota_final: 30, curso_id: 1,
+             created_at: '2026-01-01', total_peso_criterios: '100.00' }]
+        : [
+            { id: 200, nombre: 'Taller BD', tipo: 'grupal', peso_nota_final: 20, curso_id: 2,
+              created_at: '2026-01-01', total_peso_criterios: '100.00' },
+            { id: 201, nombre: 'Proyecto BD', tipo: 'grupal', peso_nota_final: 30, curso_id: 2,
+              created_at: '2026-01-01', total_peso_criterios: '100.00' },
+          ]
+    );
+    vi.mocked(equiposApi.list).mockImplementation(async (actividadId) =>
+      actividadId === 100 ? [EQUIPO] : actividadId === 200 ? [{ ...EQUIPO, id: 70, nombre: 'Equipo BD', actividad_id: 200, seccion_id: 20 }] : []
+    );
+  });
+
+  it('cambiar de asignatura recarga los equipos y vuelve a "Todas las secciones"', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo alfa/i });
+    await user.selectOptions(screen.getByLabelText('Sección'), '10');
+
+    await user.selectOptions(screen.getByLabelText('Asignatura'), '2');
+
+    expect(await screen.findByRole('button', { name: /equipo bd/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /equipo alfa/i })).toBeNull();
+    expect((screen.getByLabelText('Sección') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByRole('option', { name: 'Grupo BD' })).toBeTruthy();
+  });
+
+  it('una respuesta lenta de la asignatura anterior no pisa los equipos de la nueva', async () => {
+    let resolverViejo: (equipos: typeof EQUIPO[]) => void = () => {};
+    vi.mocked(equiposApi.list).mockImplementation((actividadId) =>
+      actividadId === 100
+        ? new Promise((resolve) => { resolverViejo = resolve; })
+        : Promise.resolve(actividadId === 200 ? [{ ...EQUIPO, id: 70, nombre: 'Equipo BD', actividad_id: 200, seccion_id: 20 }] : [])
+    );
+    const user = userEvent.setup();
+    renderConRutas();
+    await waitFor(() => expect(equiposApi.list).toHaveBeenCalledWith(100, 10));
+
+    await user.selectOptions(screen.getByLabelText('Asignatura'), '2');
+    expect(await screen.findByRole('button', { name: /equipo bd/i })).toBeTruthy();
+
+    resolverViejo([EQUIPO]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByRole('button', { name: /equipo alfa/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /equipo bd/i })).toBeTruthy();
+  });
+
+  it('?actividadId usa la asignatura de esa actividad y la preselecciona al crear', async () => {
+    vi.mocked(actividadesApi.get).mockResolvedValue({
+      id: 201, nombre: 'Proyecto BD', tipo: 'grupal', peso_nota_final: 30, curso_id: 2,
+      created_at: '2026-01-01', total_peso_criterios: '100.00',
+    });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/proyectos?actividadId=201']}>
+        <Routes>
+          <Route path="/proyectos" element={<ProjectsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('button', { name: /equipo bd/i })).toBeTruthy();
+    expect((screen.getByLabelText('Asignatura') as HTMLSelectElement).value).toBe('2');
+
+    await user.click(screen.getByRole('button', { name: /nuevo proyecto/i }));
+    const dialog = screen.getByRole('dialog', { name: 'Nuevo proyecto' });
+    const actividad = within(dialog).getAllByRole('combobox')[1] as HTMLSelectElement;
+    expect(actividad.value).toBe('201');
+  });
+
+  it('crear con éxito recarga los equipos de la asignatura y cierra el modal', async () => {
+    vi.mocked(equiposApi.create).mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo alfa/i });
+    expect(equiposApi.list).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: /nuevo proyecto/i }));
+    await user.type(screen.getByPlaceholderText('Ej: Sistema de inventarios'), 'Equipo Nuevo');
+    // La tarjeta de Equipo Alfa también nombra a Ana: se busca dentro del diálogo
+    const dialog = screen.getByRole('dialog', { name: 'Nuevo proyecto' });
+    await user.click(await within(dialog).findByRole('button', { name: /ana pérez/i }));
+    await user.click(screen.getByRole('button', { name: /crear proyecto/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(equiposApi.create).toHaveBeenCalledWith(100, 10, [{ nombre: 'Equipo Nuevo', estudiante_ids: [7] }]);
+    expect(equiposApi.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('"Evaluar Proyecto" lleva a evaluaciones con curso, actividad, sección y equipo en la URL', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/proyectos']}>
+        <Routes>
+          <Route path="/proyectos" element={<ProjectsPage />} />
+          <Route path="/evaluaciones" element={<UbicacionEvaluaciones />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: /equipo alfa/i }));
+    await user.click(screen.getByRole('button', { name: 'Evaluar Proyecto' }));
+
+    expect((await screen.findByTestId('ubicacion')).textContent)
+      .toBe('/evaluaciones?cursoId=1&actividadId=100&seccionId=10&projectId=50');
+  });
+});
+
+function UbicacionEvaluaciones() {
+  const location = useLocation();
+  return <p data-testid="ubicacion">{location.pathname + location.search}</p>;
+}
