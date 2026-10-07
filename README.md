@@ -5,7 +5,7 @@ Sistema de evaluación por criterios ABET para la Universidad Autónoma de Occid
 ## Funcionalidades principales
 
 - Gestión de asignaturas, secciones y estudiantes, con importación masiva de estudiantes por CSV.
-- Rúbricas de evaluación con aspectos y criterios ponderados (el peso de una actividad debe sumar exactamente 100%), construidas manualmente o importadas por CSV.
+- Rúbricas de evaluación con aspectos y criterios ponderados (el peso de una actividad debe sumar exactamente 100%), construidas manualmente o importadas por CSV o Excel.
 - Catálogo institucional de **Student Outcomes ABET**, con jerarquía de dos niveles (Resultado de Aprendizaje → Criterio de Evaluación), editable o importable por CSV.
 - Vinculación opcional de cada aspecto de una rúbrica a un Criterio de Evaluación del catálogo, incluso en actividades que ya tienen calificaciones.
 - Calificación individual o grupal, con gestión de equipos de trabajo por actividad.
