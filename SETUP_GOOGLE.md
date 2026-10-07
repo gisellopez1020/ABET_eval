@@ -2,8 +2,12 @@
 
 Esta guía explica cómo configurar el login real con Google (Authorization Code
 flow) y la sincronización con Google Drive para el backend de ABET Eval.
-Con `SKIP_AUTH=true` (valor por defecto) no es necesario nada de esto, ya que la app
-usa un usuario simulado y no llama a Google.
+Con `SKIP_AUTH=true` (el valor de `.env.example` y `docker-compose.yml`) no es necesario
+nada de esto, ya que la app usa un usuario simulado y no llama a Google. Ese modo es solo
+para desarrollo local: cualquiera con acceso a la API entraría como ese usuario, así que
+**el backend no arranca** con `SKIP_AUTH=true` si `GOOGLE_REDIRECT_URI`, `FRONTEND_URL` o
+algún origen de `FRONTEND_ORIGINS` apunta a un dominio real (cuentan como locales
+`localhost`, `127.0.0.1`, `::1`, `*.localhost` y los nombres sin punto, como `frontend`).
 
 ## 1. Crear un proyecto en Google Cloud Console
 
@@ -70,12 +74,15 @@ FRONTEND_ORIGINS=http://localhost:5173
 
 GOOGLE_DRIVE_FOLDER_NAME=ABET_Eval
 
+# Obligatorio en un despliegue: con true y URLs de un dominio real el backend no arranca
 SKIP_AUTH=false
 ```
 
 Si al arrancar el backend falla con un error sobre `JWT_SECRET_KEY`, vuelve al
 paso 4: la clave no está configurada o no es lo bastante larga. Si el error es
-sobre `FRONTEND_ORIGINS`, la lista está vacía o contiene `*`.
+sobre `FRONTEND_ORIGINS`, la lista está vacía o contiene `*`. Si el error empieza con
+`SKIP_AUTH=true desactiva el login`, quedó `SKIP_AUTH=true` en un `.env` con URLs de un
+dominio real: cámbialo a `SKIP_AUTH=false`.
 
 ## 6. Flujo de login y sesión
 
