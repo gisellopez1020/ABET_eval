@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.errores_http import registrar_manejadores
 from app.routers import auth, cursos, secciones, estudiantes, actividades
-from app.routers import criterios, equipos, calificaciones, reportes, drive, catalogo
+from app.routers import criterios, equipos, calificaciones, reportes, catalogo
 
 app = FastAPI(
     title="ABET Eval API",
@@ -33,7 +33,6 @@ app.include_router(criterios.router)
 app.include_router(equipos.router)
 app.include_router(calificaciones.router)
 app.include_router(reportes.router)
-app.include_router(drive.router)
 app.include_router(catalogo.router)
 
 

@@ -86,5 +86,6 @@ paso 4: la clave no está configurada o no es lo bastante larga.
 
 El `access_token` y `refresh_token` de Google obtenidos durante el login se
 guardan en el backend asociados al email del docente, y se usan para subir
-los resúmenes de calificaciones a una carpeta llamada
-`GOOGLE_DRIVE_FOLDER_NAME` en el Google Drive del docente autenticado.
+el detalle ABET (el Excel que se exporta desde "Estadísticas ABET") a una
+carpeta llamada `GOOGLE_DRIVE_FOLDER_NAME` en el Google Drive del docente
+autenticado.
