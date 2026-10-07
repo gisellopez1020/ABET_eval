@@ -3,6 +3,11 @@ export interface Docente {
   nombre: string;
 }
 
+/** Respuesta de GET /auth/me: el docente y el token CSRF de su sesión (null en modo SKIP_AUTH). */
+export interface Sesion extends Docente {
+  csrf_token: string | null;
+}
+
 /** Rango del reporte ABET: intervalo cerrado [minimo, maximo] en la escala 0-5. */
 export interface RangoCalificacion {
   etiqueta: string;
