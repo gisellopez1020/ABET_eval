@@ -23,6 +23,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.schemas.reporte import RangoReporte, ReporteCriterioItem
+from app.utils.excel_seguro import escribir_texto, texto_seguro_para_excel
 
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -125,6 +126,7 @@ def _escribir_conteo(ws: Worksheet, rangos: Sequence[RangoReporte], criterios: S
     for i in range(2, ultima_col + 1):
         ws.column_dimensions[get_column_letter(i)].width = 14
     for celda in ws[1]:
+        texto_seguro_para_excel(celda)   # etiquetas de rango del docente
         celda.font = Font(bold=True)
         celda.fill = _FONDO_ENCABEZADO
     _estilo(ws, f"A1:{get_column_letter(ultima_col)}{len(criterios) + 1}", _CENTRADO)
@@ -149,8 +151,10 @@ def _escribir_conteo(ws: Worksheet, rangos: Sequence[RangoReporte], criterios: S
         ws.add_chart(torta, f"{ancla}{1 + i * 16}")
 
 
-def _combinar(ws: Worksheet, columna: str, inicio: int, fin: int, valor) -> None:
+def _combinar(ws: Worksheet, columna: str, inicio: int, fin: int, valor, texto_usuario: bool = False) -> None:
     ws[f"{columna}{inicio}"] = valor
+    if texto_usuario:
+        texto_seguro_para_excel(ws[f"{columna}{inicio}"])
     if fin > inicio:
         ws.merge_cells(f"{columna}{inicio}:{columna}{fin}")
 
@@ -171,7 +175,7 @@ def _escribir_detalle(ws: Worksheet, hoja: HojaDetalle) -> None:
     for aspecto in hoja.aspectos:
         inicio = fila
         for texto, cumple in aspecto.criterios:
-            ws[f"C{fila}"] = texto
+            escribir_texto(ws, f"C{fila}", texto)
             ws[f"D{fila}"] = cumple
             fila += 1
         tramos.append((aspecto, inicio, fila - 1))
@@ -179,7 +183,7 @@ def _escribir_detalle(ws: Worksheet, hoja: HojaDetalle) -> None:
 
     # B: un aspecto; A: aspectos seguidos con el mismo código; E: aspectos seguidos del mismo bloque
     for aspecto, inicio, fin in tramos:
-        _combinar(ws, "B", inicio, fin, aspecto.nombre)
+        _combinar(ws, "B", inicio, fin, aspecto.nombre, texto_usuario=True)
     for codigo, grupo in groupby(tramos, key=lambda t: t[0].codigo_abet):
         grupo = list(grupo)
         _combinar(ws, "A", grupo[0][1], grupo[-1][2], f"ABET {codigo}" if codigo else None)
@@ -199,7 +203,7 @@ def _escribir_detalle(ws: Worksheet, hoja: HojaDetalle) -> None:
 
     # Integrantes debajo de la tabla, dejando una fila libre
     for i, integrante in enumerate(hoja.integrantes):
-        ws[f"C{ultima + 2 + i}"] = integrante
+        escribir_texto(ws, f"C{ultima + 2 + i}", integrante)
 
 
 def _guardar(wb: Workbook) -> bytes:
