@@ -1,6 +1,5 @@
 import secrets
 from typing import Optional
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -21,6 +20,7 @@ from app.services.google_auth import (
     guardar_tokens_drive,
     verify_id_token,
 )
+from app.utils.urls import es_localhost
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -36,17 +36,13 @@ class DocenteOut(BaseModel):
     csrf_token: Optional[str] = None
 
 
-def _es_localhost(url: str) -> bool:
-    return (urlparse(url).hostname or "") in ("localhost", "127.0.0.1")
-
-
 def _atributos_cookie_sesion() -> dict:
     """Atributos de la cookie de sesión; borrarla exige repetir los mismos."""
     return {
         "httponly": True,
         "samesite": "lax",
         # La cookie la pone el host del callback de Google (GOOGLE_REDIRECT_URI)
-        "secure": not _es_localhost(settings.google_redirect_uri),
+        "secure": not es_localhost(settings.google_redirect_uri),
         # "/" porque el frontend llama a la API con el prefijo /api del proxy
         "path": "/",
     }
@@ -63,7 +59,7 @@ def login():
         httponly=True,
         samesite="lax",
         max_age=STATE_COOKIE_MAX_AGE,
-        secure=not _es_localhost(settings.google_redirect_uri),
+        secure=not es_localhost(settings.google_redirect_uri),
         path="/auth",
     )
     return response

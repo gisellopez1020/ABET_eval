@@ -51,7 +51,7 @@ docker-compose exec backend alembic upgrade head
 
 El catálogo de Resultados de Aprendizaje y Criterios de Evaluación **no se carga por migración** — se administra desde la propia aplicación, para que cualquier programa académico pueda mantener el suyo. El script de datos de ejemplo del paso 5 depende de que este catálogo ya exista, así que hay que cargarlo primero:
 
-1. Abre http://localhost:5173. Con `SKIP_AUTH=true` (valor por defecto), el botón "Iniciar sesión con Google" entra directo, sin credenciales reales.
+1. Abre http://localhost:5173. Con `SKIP_AUTH=true` (el valor de `.env.example` y `docker-compose.yml`), el botón "Iniciar sesión con Google" entra directo, sin credenciales reales. Ese modo es solo para localhost: el backend no arranca con `SKIP_AUTH=true` si `GOOGLE_REDIRECT_URI`, `FRONTEND_URL` o `FRONTEND_ORIGINS` apuntan a un dominio real.
 2. Ve a **Student Outcomes** en el menú lateral.
 3. Pulsa **Importar CSV** y sube [`backend/scripts/student_outcomes_ingenieria_informatica.csv`](./backend/scripts/student_outcomes_ingenieria_informatica.csv), incluido en el repositorio. Contiene los 8 Resultados de Aprendizaje y 17 Criterios de Evaluación del programa de Ingeniería Informática de la UAO.
 
@@ -77,7 +77,7 @@ Para configurar el login real con Google y la sincronización con Google Drive (
 | Campo | Valor |
 |-------|-------|
 | Usuario mock | `profesor.test@uao.edu.co` |
-| `SKIP_AUTH` | `true` |
+| `SKIP_AUTH` | `true` (solo localhost; en un despliegue, `false`) |
 | BD host | `localhost:5432` |
 | BD nombre | `abet_eval` |
 | BD usuario | `abet` |
