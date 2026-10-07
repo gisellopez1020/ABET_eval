@@ -16,6 +16,8 @@ from typing import Optional, Sequence
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
+from app.utils.excel_seguro import texto_seguro_para_excel
+
 ENCABEZADOS = ["Nombre", "Apellido(s)", "Número de ID", "Dirección de correo", "Grupo"]
 COLUMNA_ASIGNATURA = "Asignatura"
 ANCHOS = [24, 28, 16, 34, 12, 36]
@@ -83,6 +85,8 @@ def libro_estudiantes(filas: Sequence[FilaEstudiante]) -> bytes:
         if con_asignatura:
             valores.append(f.asignatura)
         ws.append(valores)
+        for celda in ws[ws.max_row]:
+            texto_seguro_para_excel(celda)
 
     for i, ancho in enumerate(ANCHOS[: len(encabezados)]):
         ws.column_dimensions[chr(ord("A") + i)].width = ancho
