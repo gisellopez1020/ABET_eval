@@ -49,5 +49,8 @@ class TestCallbackCSRF:
 
             mock_exchange.assert_called_once()
             assert resp.status_code in (302, 307)
-            assert "jwt-app" in resp.headers["location"]
+            # El JWT ya no viaja en la URL: va en la cookie httpOnly de sesión
+            assert resp.headers["location"].endswith("/auth/callback")
+            assert "jwt-app" not in resp.headers["location"]
+            assert resp.cookies.get("session") == "jwt-app"
         client.cookies.clear()

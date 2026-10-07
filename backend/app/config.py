@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
     frontend_url: str = "http://localhost:5173"
+    # Orígenes permitidos por CORS, separados por comas. Texto (no list[str])
+    # para que se pueda escribir sin JSON en la variable de entorno.
+    frontend_origins: str = "http://localhost:5173,http://frontend:5173"
     google_drive_folder_name: str = "ABET_Eval"
     skip_auth: bool = False
 
@@ -47,6 +50,28 @@ class Settings(BaseSettings):
                 'python -c "import secrets; print(secrets.token_urlsafe(32))" '
                 "y configúrala en la variable de entorno JWT_SECRET_KEY, o usa "
                 "SKIP_AUTH=true para el modo demo/desarrollo."
+            )
+        return self
+
+    @property
+    def lista_frontend_origins(self) -> list[str]:
+        return [o.strip() for o in self.frontend_origins.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def validar_frontend_origins(self) -> "Settings":
+        """Los orígenes de CORS deben ser explícitos.
+
+        Con allow_credentials=True, Starlette responde a "*" devolviendo el
+        Origin de quien pregunte cuando la petición trae cookies: cualquier
+        sitio podría usar la sesión del docente. Por eso no se acepta.
+        """
+        origenes = self.lista_frontend_origins
+        if not origenes or "*" in origenes:
+            raise ValueError(
+                "FRONTEND_ORIGINS debe ser una lista de orígenes explícitos separados "
+                "por comas (p. ej. 'https://abet.uao.edu.co'); no puede estar vacía ni "
+                "contener '*', porque la API usa cookies de sesión y con '*' cualquier "
+                "sitio podría hacer peticiones autenticadas en nombre del docente."
             )
         return self
 
