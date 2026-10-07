@@ -3,6 +3,7 @@ Servicio de autenticación OAuth 2.0 con Google (Authorization Code flow).
 Intercambia el code de autorización por tokens y valida el id_token.
 """
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -25,7 +26,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive.file",
 ]
 
-# Tokens de Google Drive por docente (email → {"access_token", "refresh_token"}).
+# Tokens de Google Drive por docente
+# (email → {"access_token", "refresh_token", "expires_at"}).
 # Permite que el servicio de Google Drive actúe en nombre del docente sin
 # depender de que el frontend reenvíe un token adicional en cada llamada.
 _google_tokens: dict[str, dict] = {}
@@ -92,12 +94,33 @@ def verify_id_token(id_token_str: str) -> dict:
     return {"email": email, "nombre": nombre}
 
 
+def _utcnow() -> datetime:
+    # UTC sin tzinfo: es el formato que google-auth espera en Credentials.expiry
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def guardar_tokens_drive(email: str, tokens: dict) -> None:
     """Guarda el access_token/refresh_token de Google Drive del docente en memoria."""
+    expires_in = tokens.get("expires_in")
     _google_tokens[email] = {
         "access_token": tokens.get("access_token"),
         "refresh_token": tokens.get("refresh_token"),
+        "expires_at": _utcnow() + timedelta(seconds=int(expires_in)) if expires_in else None,
     }
+
+
+def actualizar_access_token_drive(email: str, access_token: str, expires_at: Optional[datetime]) -> None:
+    """Guarda el access_token renovado con el refresh_token, conservando este último."""
+    tokens = _google_tokens.get(email)
+    if tokens is None:
+        return
+    tokens["access_token"] = access_token
+    tokens["expires_at"] = expires_at
+
+
+def descartar_tokens_drive(email: str) -> None:
+    """Olvida los tokens del docente (p. ej. cuando Google revocó el acceso)."""
+    _google_tokens.pop(email, None)
 
 
 def obtener_tokens_drive(email: str) -> Optional[dict]:
