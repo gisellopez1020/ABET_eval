@@ -15,7 +15,6 @@ import { ModoCalificacionItem } from '../../../types';
 vi.mock('../../../components/Layout/AppLayout', () => ({
   AppLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock('../../../components/Layout/Header', () => ({ Header: () => null }));
 vi.mock('../../../api/actividades', () => ({ actividadesApi: { get: vi.fn() } }));
 vi.mock('../../../api/criterios', () => ({ criteriosApi: { get: vi.fn() } }));
 vi.mock('../../../api/calificaciones', () => ({
