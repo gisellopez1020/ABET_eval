@@ -1,10 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Header } from '../../components/Layout/Header';
 import { Button } from '../../components/ui/Button';
-import { Modal } from '../../components/ui/Modal';
-import { Input } from '../../components/ui/Input';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
@@ -12,6 +10,11 @@ import { estudiantesApi } from '../../api/estudiantes';
 import { apiErrorMessage } from '../../api/errors';
 import { descargarBlob } from '../../utils/descarga';
 import { Curso, Seccion, Estudiante } from '../../types';
+import { DeleteStudentModal } from './components/DeleteStudentModal';
+import { ImportStudentsModal } from './components/ImportStudentsModal';
+import { StudentFormModal } from './components/StudentFormModal';
+import { StudentsTable } from './components/StudentsTable';
+import { useImportarEstudiantes } from './hooks/useImportarEstudiantes';
 
 export function SectionPage() {
   const { cursoId, seccionId } = useParams<{ cursoId: string; seccionId: string }>();
@@ -34,14 +37,20 @@ export function SectionPage() {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
 
-  const [csvModal, setCsvModal] = useState(false);
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [csvPreview, setCsvPreview] = useState<{ nombre: string; codigo: string; email?: string | null }[]>([]);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
-  const [csvLoading, setCsvLoading] = useState(false);
-  const [csvError, setCsvError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
+
+  const {
+    csvModal,
+    setCsvModal,
+    csvFile,
+    csvPreview,
+    csvLoading,
+    csvError,
+    fileRef,
+    handleCsvSelect,
+    handleCsvImport,
+  } = useImportarEstudiantes(sid, setEstudiantes);
 
   const [deleting, setDeleting] = useState<Estudiante | null>(null);
   const [deleteError, setDeleteError] = useState('');
@@ -176,30 +185,6 @@ export function SectionPage() {
     }
   };
 
-  // La vista previa (CSV y Excel) la calcula el backend con la misma lectura que la
-  // importación: muestra el nombre ya combinado con los apellidos, y los avisos
-  // (correo no válido, Grupo distinto de la sección) se ven antes de importar
-  const previewSeq = useRef(0);
-
-  const previewArchivo = async (file: File) => {
-    const seq = ++previewSeq.current;
-    try {
-      const { estudiantes: filas, errores } = await estudiantesApi.vistaPrevia(sid, file);
-      if (seq !== previewSeq.current) return;
-      setCsvPreview(filas);
-      if (errores.length > 0) setCsvError(errores.join(' · '));
-    } catch (e: any) {
-      if (seq === previewSeq.current) setCsvError(apiErrorMessage(e, 'No se pudo leer el archivo'));
-    }
-  };
-
-  const handleCsvSelect = (file: File) => {
-    setCsvFile(file);
-    setCsvPreview([]);
-    setCsvError('');
-    previewArchivo(file);
-  };
-
   const handleExport = async () => {
     setExporting(true);
     setExportError('');
@@ -210,27 +195,6 @@ export function SectionPage() {
       setExportError(apiErrorMessage(e, 'No se pudo exportar la lista de estudiantes'));
     } finally {
       setExporting(false);
-    }
-  };
-
-  const handleCsvImport = async () => {
-    if (!csvFile) return;
-    setCsvLoading(true);
-    setCsvError('');
-    try {
-      const result = await estudiantesApi.importCsv(sid, csvFile);
-      setEstudiantes(await estudiantesApi.list(sid));
-      if (result.errores.length > 0) {
-        setCsvError(`Importados: ${result.importados}. ${result.errores.join(' · ')}`);
-        return;
-      }
-      setCsvModal(false);
-      setCsvFile(null);
-      setCsvPreview([]);
-    } catch (e: any) {
-      setCsvError(apiErrorMessage(e, 'Error al importar el archivo'));
-    } finally {
-      setCsvLoading(false);
     }
   };
 
@@ -284,157 +248,48 @@ export function SectionPage() {
           </div>
           {exportError && <p className="px-5 pt-3 text-sm text-uao-accent">{exportError}</p>}
 
-          {estudiantes.length === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-gray-400">
-              No hay estudiantes. Agrégalos manualmente o importa un CSV o Excel.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">#</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Nombre</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Código</th>
-                    <th className="text-left px-4 py-3 font-medium text-gray-600">Correo</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {estudiantes.map((e, i) => (
-                    <tr key={e.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                      <td className="px-4 py-3 text-gray-400">{i + 1}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{e.nombre_completo}</td>
-                      <td className="px-4 py-3 text-gray-600">{e.codigo_estudiante}</td>
-                      <td className="px-4 py-3 text-gray-600" title={e.email ? undefined : 'Sin correo registrado'}>
-                        {e.email ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <Button variant="ghost" size="sm" onClick={() => openEditModal(e)}>
-                          Editar
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(e)}
-                          className="text-uao-accent hover:bg-red-50"
-                        >
-                          Eliminar
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <StudentsTable estudiantes={estudiantes} onEdit={openEditModal} onDelete={handleDelete} />
         </div>
       </div>
 
       {/* Modal agregar */}
-      <Modal open={addModal} onClose={closeAddModal} title={editing ? 'Editar estudiante' : 'Agregar estudiante'}>
-        <div className="space-y-4">
-          <Input
-            label="Nombre completo"
-            value={addNombre}
-            onChange={(e) => setAddNombre(e.target.value)}
-            placeholder="OSCAR EVELIO PRADA CEBALLOS"
-          />
-          <Input
-            label="Código"
-            value={addCodigo}
-            onChange={(e) => setAddCodigo(e.target.value)}
-            placeholder="2021001"
-          />
-          <Input
-            label="Correo (opcional)"
-            type="email"
-            value={addEmail}
-            onChange={(e) => setAddEmail(e.target.value)}
-            placeholder="oscar.prada@uao.edu.co"
-          />
-          {addAviso && <p className="text-sm text-amber-700">{addAviso}</p>}
-          {addError && <p className="text-sm text-uao-accent">{addError}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={closeAddModal}>{editing && addAviso ? 'Cerrar' : 'Cancelar'}</Button>
-            <Button onClick={handleAdd} loading={addLoading}>{editing ? 'Guardar cambios' : 'Agregar'}</Button>
-          </div>
-        </div>
-      </Modal>
+      <StudentFormModal
+        open={addModal}
+        editing={editing !== null}
+        nombre={addNombre}
+        onNombre={setAddNombre}
+        codigo={addCodigo}
+        onCodigo={setAddCodigo}
+        email={addEmail}
+        onEmail={setAddEmail}
+        aviso={addAviso}
+        error={addError}
+        loading={addLoading}
+        onClose={closeAddModal}
+        onSubmit={handleAdd}
+      />
 
       {/* Modal CSV */}
-      <Modal open={csvModal} onClose={() => setCsvModal(false)} title="Importar estudiantes desde CSV o Excel">
-        <div className="space-y-4">
-          <div
-            className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-uao-mid transition-colors"
-            onClick={() => fileRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const f = e.dataTransfer.files[0];
-              if (f) handleCsvSelect(f);
-            }}
-          >
-            <p className="text-sm text-gray-500">
-              {csvFile ? csvFile.name : 'Arrastra un CSV o Excel (.xlsx) aquí o haz clic para seleccionar'}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              Formato: columnas Nombre y Codigo (o Código), con encabezado. En Excel, en la primera hoja.
-              Opcional: una columna Email (o Correo). También sirve la lista institucional: Nombre,
-              Apellido(s), Número de ID, Dirección de correo y Grupo (la que descarga "Exportar Excel").
-            </p>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv,.xlsx"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvSelect(f); }}
-            />
-          </div>
-
-          {csvPreview.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">
-                Vista previa ({csvPreview.length} estudiante{csvPreview.length !== 1 ? 's' : ''})
-              </p>
-              <div className="max-h-40 overflow-y-auto border rounded-lg divide-y text-xs">
-                {csvPreview.map((r, i) => (
-                  <div key={i} className="flex gap-4 px-3 py-2">
-                    <span className="font-medium">{r.nombre}</span>
-                    <span className="text-gray-500">{r.codigo}</span>
-                    {r.email && <span className="text-gray-500">{r.email}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {csvError && <p className="text-sm text-uao-accent">{csvError}</p>}
-
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setCsvModal(false)}>Cancelar</Button>
-            <Button onClick={handleCsvImport} loading={csvLoading} disabled={!csvFile}>
-              Importar
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <ImportStudentsModal
+        open={csvModal}
+        onClose={() => setCsvModal(false)}
+        file={csvFile}
+        onFile={handleCsvSelect}
+        fileRef={fileRef}
+        preview={csvPreview}
+        error={csvError}
+        loading={csvLoading}
+        onImport={handleCsvImport}
+      />
 
       {/* Modal eliminar */}
-      <Modal open={deleting !== null} onClose={closeDeleteModal} title="Eliminar estudiante">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-700">¿Eliminar este estudiante?</p>
-          {deleteError && <p className="text-sm text-uao-accent">{deleteError}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={closeDeleteModal} disabled={deleteLoading}>
-              Cancelar
-            </Button>
-            <Button variant="danger" onClick={confirmDelete} loading={deleteLoading}>
-              Eliminar
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <DeleteStudentModal
+        open={deleting !== null}
+        error={deleteError}
+        loading={deleteLoading}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDelete}
+      />
     </AppLayout>
   );
 }

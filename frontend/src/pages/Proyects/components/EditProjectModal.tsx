@@ -7,7 +7,7 @@ import { Input } from '../../../components/ui/Input';
 import { Estudiante } from '../../../types';
 import { estudiantesApi } from '../../../api/estudiantes';
 import { apiErrorMessage } from '../../../api/errors';
-import { ProjectRow } from '../ProjectsPage';
+import { ProjectRow } from '../types';
 import { StudentPicker } from './StudentPicker';
 
 interface EditProjectModalProps {

@@ -4,21 +4,18 @@ import { Pencil } from 'lucide-react';
 import { AppLayout } from '../../components/Layout/AppLayout';
 import { Header } from '../../components/Layout/Header';
 import { Button } from '../../components/ui/Button';
-import { Badge } from '../../components/ui/Badge';
-import { Modal } from '../../components/ui/Modal';
-import { Input } from '../../components/ui/Input';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
 import { actividadesApi, ActividadCreate } from '../../api/actividades';
 import { estudiantesApi } from '../../api/estudiantes';
-import { Curso, Seccion, Actividad, rubricaCompleta } from '../../types';
+import { Curso, Seccion, Actividad } from '../../types';
+import { ActividadesPanel } from './components/ActividadesPanel';
 import { CourseFormModal } from './components/CourseFormModal';
+import { NuevaActividadModal } from './components/NuevaActividadModal';
+import { NuevaSeccionModal } from './components/NuevaSeccionModal';
+import { SeccionesPanel } from './components/SeccionesPanel';
 import { apiErrorMessage } from '../../api/errors';
-
-function estadoActividad(a: Actividad): { label: string; variant: 'neutral' | 'warning' | 'info' | 'success' } {
-  return { label: a.tipo === 'grupal' ? 'Grupal' : 'Individual', variant: 'info' };
-}
 
 export function CoursePage() {
   const { cursoId } = useParams<{ cursoId: string }>();
@@ -141,164 +138,46 @@ export function CoursePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Secciones */}
-          <div className="bg-white rounded-xl border border-gray-200">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold text-gray-900">Secciones</h3>
-              <Button size="sm" variant="secondary" onClick={() => { setSeccionError(''); setNewSeccionModal(true); }}>
-                + Nueva sección
-              </Button>
-            </div>
-            <div className="divide-y">
-              {secciones.length === 0 && (
-                <p className="px-5 py-8 text-sm text-center text-gray-400">
-                  No hay secciones. Crea la primera.
-                </p>
-              )}
-              {secciones.map((s) => (
-                <div
-                  key={s.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedSeccion(s.id)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedSeccion(s.id); } }}
-                  className={`cursor-pointer w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors ${selectedSeccion === s.id ? 'bg-red-100 border-l-4 border-[#9E0B0F]' : ''}`}
-                >
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">{s.nombre}</p>
-                    <p className="text-xs text-gray-500">
-                      {estudiantesCount[s.id] ?? 0} estudiante{(estudiantesCount[s.id] ?? 0) !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => { e.stopPropagation(); navigate(`/cursos/${id}/secciones/${s.id}`); }}
-                    >
-                      Gestionar
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <SeccionesPanel
+            id={id}
+            secciones={secciones}
+            estudiantesCount={estudiantesCount}
+            selectedSeccion={selectedSeccion}
+            setSelectedSeccion={setSelectedSeccion}
+            setSeccionError={setSeccionError}
+            setNewSeccionModal={setNewSeccionModal}
+          />
 
           {/* Actividades */}
-          <div className="bg-white rounded-xl border border-gray-200">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold text-gray-900">Actividades</h3>
-              <Button size="sm" variant="secondary" onClick={() => setNewActModal(true)}>
-                + Nueva actividad
-              </Button>
-            </div>
-            <div className="divide-y">
-              {actividades.length === 0 && (
-                <p className="px-5 py-8 text-sm text-center text-gray-400">
-                  No hay actividades. Crea la primera.
-                </p>
-              )}
-              {actividades.map((a) => {
-                const { label, variant } = estadoActividad(a);
-                const tieneRubrica = rubricaCompleta(a);
-                return (
-                  <div
-                    key={a.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(`/actividades/${a.id}`)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/actividades/${a.id}`); } }}
-                    className="cursor-pointer w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900 text-sm">{a.nombre}</p>
-                      <p className="text-xs text-gray-500">Peso: {Number(a.peso_nota_final)}%</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!tieneRubrica && <Badge variant="warning">Sin rúbrica</Badge>}
-                      <Badge variant={variant}>{label}</Badge>
-                      {selectedSeccion && (
-                        <span
-                          onClick={(e) => e.stopPropagation()}
-                          title={tieneRubrica ? undefined : 'Define la rúbrica (100%) antes de calificar'}
-                        >
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={!tieneRubrica}
-                            onClick={() => navigate(`/actividades/${a.id}/calificar/${selectedSeccion}`)}
-                          >
-                            Calificar
-                          </Button>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <ActividadesPanel
+            actividades={actividades}
+            selectedSeccion={selectedSeccion}
+            setNewActModal={setNewActModal}
+          />
         </div>
       </div>
 
       {/* Modal nueva sección */}
-      <Modal open={newSeccionModal} onClose={() => setNewSeccionModal(false)} title="Nueva sección">
-        <div className="space-y-4">
-          <Input
-            label="Nombre de la sección"
-            value={newSeccionNombre}
-            onChange={(e) => setNewSeccionNombre(e.target.value)}
-            placeholder="Ej: Grupo A"
-            onKeyDown={(e) => e.key === 'Enter' && handleCreateSeccion()}
-          />
-          {seccionError && <p className="text-sm text-uao-accent">{seccionError}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setNewSeccionModal(false)}>Cancelar</Button>
-            <Button onClick={handleCreateSeccion} loading={newSeccionLoading}>Crear</Button>
-          </div>
-        </div>
-      </Modal>
+      <NuevaSeccionModal
+        newSeccionModal={newSeccionModal}
+        setNewSeccionModal={setNewSeccionModal}
+        newSeccionNombre={newSeccionNombre}
+        setNewSeccionNombre={setNewSeccionNombre}
+        seccionError={seccionError}
+        newSeccionLoading={newSeccionLoading}
+        handleCreateSeccion={handleCreateSeccion}
+      />
 
       {/* Modal nueva actividad */}
-      <Modal open={newActModal} onClose={() => setNewActModal(false)} title="Nueva actividad">
-        <div className="space-y-4">
-          <Input
-            label="Nombre"
-            value={newAct.nombre}
-            onChange={(e) => setNewAct((f) => ({ ...f, nombre: e.target.value }))}
-            placeholder="Ej: Lab1: Cálculo de subredes"
-          />
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-2">Tipo</label>
-            <div className="flex gap-4">
-              {(['individual', 'grupal'] as const).map((t) => (
-                <label key={t} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    value={t}
-                    checked={newAct.tipo === t}
-                    onChange={() => setNewAct((f) => ({ ...f, tipo: t }))}
-                    className="accent-[#9E0B0F]"
-                  />
-                  <span className="text-sm capitalize">{t}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <Input
-            label="Peso en nota final (%)"
-            type="number"
-            min={1}
-            max={100}
-            value={newAct.peso_nota_final}
-            onChange={(e) => setNewAct((f) => ({ ...f, peso_nota_final: Number(e.target.value) }))}
-          />
-          {actError && <p className="text-sm text-uao-accent">{actError}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setNewActModal(false)}>Cancelar</Button>
-            <Button onClick={handleCreateActividad} loading={newActLoading}>Crear</Button>
-          </div>
-        </div>
-      </Modal>
+      <NuevaActividadModal
+        newActModal={newActModal}
+        setNewActModal={setNewActModal}
+        newAct={newAct}
+        setNewAct={setNewAct}
+        actError={actError}
+        newActLoading={newActLoading}
+        handleCreateActividad={handleCreateActividad}
+      />
 
       <CourseFormModal
         open={editModal}

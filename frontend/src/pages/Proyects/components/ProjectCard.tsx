@@ -1,6 +1,6 @@
 import { FolderKanban, Users, CheckCircle2 } from 'lucide-react';
 
-import { ProjectRow } from '../ProjectsPage';
+import { ProjectRow } from '../types';
 import { ESTADO_BADGE, ESTADO_LABEL, projectEstado } from '../projectEstado';
 
 interface ProjectCardProps {

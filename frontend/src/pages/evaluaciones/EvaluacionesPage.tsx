@@ -1,168 +1,43 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCheck, CircleCheck, CircleDashed, CircleX, PencilLine, Save } from 'lucide-react';
+import { CheckCheck, PencilLine } from 'lucide-react';
 
 import { AppLayout } from '../../components/Layout/AppLayout';
-import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { actividadesApi } from '../../api/actividades';
-import { calificacionesApi } from '../../api/calificaciones';
 import { cursosApi } from '../../api/cursos';
-import { criteriosApi } from '../../api/criterios';
-import { equiposApi } from '../../api/equipos';
-import { seccionesApi } from '../../api/secciones';
 import { useCourseStore } from '../../store/courseStore';
-import { Actividad, Aspecto, Curso, Seccion } from '../../types';
-
-interface ProjectOption {
-  id: number;
-  nombre: string;
-  cursoId: number;
-  cursoNombre: string;
-  actividadId: number;
-  actividadNombre: string;
-  seccionId: number;
-  seccionNombre: string;
-  miembros: string[];
-  calificado: boolean;
-  notaTotal: number | null;
-}
-
-// Mismo patrón que RubricaPage: letra del aspecto + posición del criterio dentro de él (A.1, A.2, B.1)
-const letraAspecto = (aspectoIndex: number) => String.fromCharCode(65 + aspectoIndex);
-const codigoCriterio = (aspectoIndex: number, criterioIndex: number) =>
-  `${letraAspecto(aspectoIndex)}.${criterioIndex + 1}`;
-
-const SELECT_CLASS =
-  'w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-10 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50';
-
-const RADIO_ANILLO = 46;
-const CIRCUNFERENCIA = 2 * Math.PI * RADIO_ANILLO;
+import { EvaluacionVacia } from './components/EvaluacionVacia';
+import { ResumenEquipo } from './components/ResumenEquipo';
+import { RubricaEquipo } from './components/RubricaEquipo';
+import { SelectoresEvaluacion } from './components/SelectoresEvaluacion';
+import { useSeleccionEvaluacion } from './hooks/useSeleccionEvaluacion';
 
 export default function EvaluacionesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { selectedCourseId } = useCourseStore();
 
-  // Selección propia de esta pantalla: no escribe en el store del Dashboard
-  const [courses, setCourses] = useState<Curso[]>([]);
-  const [curso, setCurso] = useState<Curso | null>(null);
-  const [sections, setSections] = useState<Seccion[]>([]);
-  const [activities, setActivities] = useState<Actividad[]>([]); // solo grupales
-  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null);
-  const [projects, setProjects] = useState<ProjectOption[]>([]); // equipos de la actividad elegida
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [loadingCourses, setLoadingCourses] = useState(true);
-  const [loadingCourse, setLoadingCourse] = useState(false);
-  const [loadingProjects, setLoadingProjects] = useState(false);
-  const [loadError, setLoadError] = useState('');
-  const loading = loadingCourses || loadingCourse || loadingProjects;
-
-  // Solo la última carga de cada nivel escribe el estado: si se cambia de asignatura o
-  // de actividad mientras otra carga sigue en curso, su respuesta se descarta.
-  const courseRequest = useRef(0);
-  const activityRequest = useRef(0);
-  const [aspectos, setAspectos] = useState<Aspecto[]>([]);
-  // {criterio_id: valor} de las calificaciones guardadas del equipo; sin clave = sin calificar
-  const [valores, setValores] = useState<Record<number, 0 | 1>>({});
-
-  // Equipos de una actividad (todas las secciones en paralelo). preferProjectId: el de la URL, si aplica.
-  const selectActivity = async (
-    cursoActual: Curso,
-    actividad: Actividad | null,
-    secciones: Seccion[],
-    preferProjectId?: number
-  ) => {
-    const request = ++activityRequest.current;
-    const isStale = () => request !== activityRequest.current;
-
-    setSelectedActivityId(actividad?.id ?? null);
-    setProjects([]);
-    setSelectedProjectId(null);
-    if (!actividad) {
-      setLoadingProjects(false);
-      return;
-    }
-
-    setLoadingProjects(true);
-    try {
-      const porSeccion = await Promise.all(
-        secciones.map(async (seccion) => {
-          const equipos = await equiposApi.list(actividad.id, seccion.id);
-          return equipos.map((equipo): ProjectOption => ({
-            id: equipo.id,
-            nombre: equipo.nombre,
-            cursoId: cursoActual.id,
-            cursoNombre: cursoActual.nombre,
-            actividadId: actividad.id,
-            actividadNombre: actividad.nombre,
-            seccionId: seccion.id,
-            seccionNombre: seccion.nombre,
-            miembros: equipo.miembros.map((m) => m.nombre_completo),
-            calificado: equipo.calificado,
-            notaTotal: equipo.nota_total,
-          }));
-        })
-      );
-      if (isStale()) return;
-
-      const resultados = porSeccion.flat();
-      setProjects(resultados);
-      const inicial = resultados.find((project) => project.id === preferProjectId) ?? resultados[0] ?? null;
-      setSelectedProjectId(inicial?.id ?? null);
-    } catch (error) {
-      if (isStale()) return;
-      console.error('Error cargando equipos de la actividad:', error);
-      setLoadError('No se pudieron cargar los equipos de esta actividad.');
-    } finally {
-      if (!isStale()) setLoadingProjects(false);
-    }
-  };
-
-  // Secciones y actividades grupales de una asignatura; luego los equipos de la actividad inicial.
-  const selectCourse = async (
-    cursoActual: Curso | null,
-    prefer: { actividadId?: number; projectId?: number } = {}
-  ) => {
-    const request = ++courseRequest.current;
-    const isStale = () => request !== courseRequest.current;
-    activityRequest.current++; // invalida la carga de equipos de la asignatura anterior
-
-    setCurso(cursoActual);
-    setLoadError('');
-    setSections([]);
-    setActivities([]);
-    setSelectedActivityId(null);
-    setProjects([]);
-    setSelectedProjectId(null);
-    setLoadingProjects(false);
-    if (!cursoActual) {
-      setLoadingCourse(false);
-      return;
-    }
-
-    setLoadingCourse(true);
-    try {
-      const [secciones, actividades] = await Promise.all([
-        seccionesApi.list(cursoActual.id),
-        actividadesApi.list(cursoActual.id),
-      ]);
-      if (isStale()) return;
-
-      const grupales = actividades.filter((actividad) => actividad.tipo === 'grupal');
-      setSections(secciones);
-      setActivities(grupales);
-      setLoadingCourse(false);
-
-      const inicial = grupales.find((actividad) => actividad.id === prefer.actividadId) ?? grupales[0] ?? null;
-      void selectActivity(cursoActual, inicial, secciones, prefer.projectId);
-    } catch (error) {
-      if (isStale()) return;
-      console.error('Error cargando la asignatura:', error);
-      setLoadError('No se pudieron cargar las actividades de esta asignatura.');
-      setLoadingCourse(false);
-    }
-  };
+  const {
+    courses,
+    setCourses,
+    curso,
+    activities,
+    selectedActivityId,
+    projects,
+    selectedProjectId,
+    setSelectedProjectId,
+    loadingCourses,
+    setLoadingCourses,
+    loadingCourse,
+    loading,
+    loadError,
+    setLoadError,
+    aspectos,
+    valores,
+    selectCourse,
+    handleCourseChange,
+    handleActivityChange,
+  } = useSeleccionEvaluacion();
 
   // Carga inicial: ?cursoId, si no la asignatura activa del Dashboard, si no la primera.
   // ?actividadId y ?projectId (desde "Evaluar Proyecto" en ProjectsPage) solo aplican aquí.
@@ -203,61 +78,10 @@ export default function EvaluacionesPage() {
     };
   }, [searchParams, selectedCourseId]);
 
-  const handleCourseChange = (value: string) => {
-    const nuevo = courses.find((c) => c.id === Number(value)) ?? null;
-    void selectCourse(nuevo);
-  };
-
-  const handleActivityChange = (value: string) => {
-    if (!curso) return;
-    const actividad = activities.find((a) => a.id === Number(value)) ?? null;
-    setLoadError('');
-    void selectActivity(curso, actividad, sections);
-  };
-
-  useEffect(() => {
-    const selectedProject = projects.find((project) => project.id === selectedProjectId);
-    setAspectos([]);
-    setValores({});
-    if (!selectedProject) {
-      return;
-    }
-
-    // Si se cambia de proyecto antes de que responda, la respuesta anterior se descarta
-    let cancelado = false;
-
-    const loadCriterios = async () => {
-      try {
-        const [resp, calificaciones] = await Promise.all([
-          criteriosApi.get(selectedProject.actividadId),
-          calificacionesApi.equipo(selectedProject.actividadId, selectedProject.id),
-        ]);
-        if (cancelado) return;
-        setAspectos(resp.aspectos);
-        setValores(Object.fromEntries(calificaciones.map((c) => [c.criterio_id, c.valor])));
-      } catch (error) {
-        console.error('Error cargando rubrica del proyecto:', error);
-      }
-    };
-
-    void loadCriterios();
-
-    return () => {
-      cancelado = true;
-    };
-  }, [projects, selectedProjectId]);
-
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId]
   );
-
-  const totalCriterios = aspectos.reduce((total, aspecto) => total + aspecto.criterios.length, 0);
-  const criteriosCalificados = aspectos.reduce(
-    (total, aspecto) => total + aspecto.criterios.filter((criterio) => criterio.id in valores).length,
-    0
-  );
-  const progreso = totalCriterios > 0 ? Math.round((criteriosCalificados / totalCriterios) * 100) : 0;
 
   return (
     <AppLayout>
@@ -280,73 +104,20 @@ export default function EvaluacionesPage() {
               </Button>
             </div>
 
-            <div className="mb-5 grid gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm md:grid-cols-3">
-              <label className="w-full text-sm text-gray-700">
-                <span className="mb-1 block text-gray-800">Asignatura</span>
-                <select
-                  value={curso?.id ?? ''}
-                  onChange={(event) => handleCourseChange(event.target.value)}
-                  className={SELECT_CLASS}
-                  disabled={loadingCourses || courses.length === 0}
-                >
-                  {loadingCourses ? (
-                    <option value="">Cargando…</option>
-                  ) : courses.length === 0 ? (
-                    <option value="">Sin asignaturas</option>
-                  ) : (
-                    courses.map((course) => (
-                      <option key={course.id} value={course.id}>
-                        {course.nombre} ({course.codigo} · {course.periodo})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-
-              <label className="w-full text-sm text-gray-700">
-                <span className="mb-1 block text-gray-800">Actividad</span>
-                <select
-                  value={selectedActivityId ?? ''}
-                  onChange={(event) => handleActivityChange(event.target.value)}
-                  className={SELECT_CLASS}
-                  disabled={loadingCourses || loadingCourse || activities.length === 0}
-                >
-                  {loadingCourses || loadingCourse ? (
-                    <option value="">Cargando…</option>
-                  ) : activities.length === 0 ? (
-                    <option value="">Sin actividades grupales</option>
-                  ) : (
-                    activities.map((actividad) => (
-                      <option key={actividad.id} value={actividad.id}>
-                        {actividad.nombre}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-
-              <label className="w-full text-sm text-gray-700">
-                <span className="mb-1 block text-gray-800">Proyecto a evaluar</span>
-                <select
-                  value={selectedProjectId ?? ''}
-                  onChange={(event) => setSelectedProjectId(Number(event.target.value) || null)}
-                  className={SELECT_CLASS}
-                  disabled={loading || projects.length === 0}
-                >
-                  {loading ? (
-                    <option value="">Cargando…</option>
-                  ) : projects.length === 0 ? (
-                    <option value="">Sin equipos</option>
-                  ) : (
-                    projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.nombre} · {project.seccionNombre}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-            </div>
+            <SelectoresEvaluacion
+              courses={courses}
+              curso={curso}
+              onCourseChange={handleCourseChange}
+              activities={activities}
+              selectedActivityId={selectedActivityId}
+              onActivityChange={handleActivityChange}
+              projects={projects}
+              selectedProjectId={selectedProjectId}
+              onProjectChange={setSelectedProjectId}
+              loadingCourses={loadingCourses}
+              loadingCourse={loadingCourse}
+              loading={loading}
+            />
 
             {!loading && selectedProject && (
               <>
@@ -375,172 +146,29 @@ export default function EvaluacionesPage() {
                 </div>
 
                 <div className="grid gap-6 xl:grid-cols-[1.6fr_0.7fr]">
-                  <div className="space-y-5">
-                    {aspectos.length === 0 ? (
-                      <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
-                        No hay criterios definidos para esta actividad todavía.
-                      </div>
-                    ) : (
-                      aspectos.map((aspecto, index) => (
-                        <section key={aspecto.id} className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm">
-                          <div className="flex items-center justify-between border-b border-[#e5e7eb] bg-[#fafafa] px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="rounded-md bg-[#9E0B0F]/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9E0B0F]">
-                                {letraAspecto(index)}
-                              </div>
-                              <span className="text-[15px] font-semibold text-gray-800">{aspecto.nombre}</span>
-                            </div>
+                  <RubricaEquipo aspectos={aspectos} valores={valores} />
 
-                            <Badge variant="neutral">{aspecto.criterios.length} criterios</Badge>
-                          </div>
-
-                          <div className="divide-y divide-[#e5e7eb]">
-                            {aspecto.criterios.map((criterio, criterioIndex) => {
-                              const valor = valores[criterio.id];
-                              const calificado = valor !== undefined;
-                              return (
-                                <div
-                                  key={criterio.id}
-                                  className={`flex items-center gap-4 px-4 py-3 ${calificado ? '' : 'bg-gray-50/60'}`}
-                                >
-                                  <div className="flex min-w-[60px] items-center gap-2 text-sm font-medium text-gray-800">
-                                    <span>{codigoCriterio(index, criterioIndex)}</span>
-                                  </div>
-
-                                  <div className="flex-1 text-sm text-gray-800">{criterio.texto}</div>
-
-                                  <div
-                                    className={`flex w-[110px] items-center gap-1.5 text-xs font-medium ${
-                                      !calificado ? 'text-gray-400' : valor === 1 ? 'text-green-700' : 'text-red-600'
-                                    }`}
-                                  >
-                                    {!calificado ? (
-                                      <CircleDashed size={15} />
-                                    ) : valor === 1 ? (
-                                      <CircleCheck size={15} />
-                                    ) : (
-                                      <CircleX size={15} />
-                                    )}
-                                    {!calificado ? 'Sin calificar' : valor === 1 ? 'Cumple' : 'No cumple'}
-                                  </div>
-
-                                  <div
-                                    className="w-[60px] text-right text-xs font-medium text-gray-600"
-                                    title={`${Number(criterio.peso_porcentaje)}%`}
-                                  >
-                                    {Number(criterio.peso_porcentaje).toFixed(1)}%
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      ))
-                    )}
-                  </div>
-
-                  <aside className="space-y-5">
-                    <div className="rounded-xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
-                      <div className="mb-3 flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-700">Resumen del proyecto</span>
-                      </div>
-
-                      <div className="mb-5 flex flex-col items-center justify-center">
-                        {/* % de criterios de la rúbrica con calificación guardada para este equipo */}
-                        <div className="relative h-28 w-28">
-                          <svg viewBox="0 0 112 112" className="h-full w-full -rotate-90">
-                            <circle cx="56" cy="56" r={RADIO_ANILLO} fill="none" stroke="#f6d4d4" strokeWidth="10" />
-                            <circle
-                              cx="56"
-                              cy="56"
-                              r={RADIO_ANILLO}
-                              fill="none"
-                              stroke="#9E0B0F"
-                              strokeWidth="10"
-                              strokeLinecap={progreso > 0 ? 'round' : 'butt'}
-                              strokeDasharray={CIRCUNFERENCIA}
-                              strokeDashoffset={CIRCUNFERENCIA * (1 - progreso / 100)}
-                            />
-                          </svg>
-                          <span className="absolute inset-0 flex items-center justify-center text-[1.75rem] font-bold text-[#9E0B0F]">
-                            {progreso}%
-                          </span>
-                        </div>
-                        <span className="mt-2 text-[11px] text-gray-500">
-                          {criteriosCalificados} de {totalCriterios} criterios calificados
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-lg bg-green-50 p-3 text-center">
-                          <div className="text-2xl font-bold text-green-700">{selectedProject.calificado ? 'Sí' : 'No'}</div>
-                          <div className="text-[11px] font-medium text-green-700">Este equipo</div>
-                        </div>
-                        <div className="rounded-lg bg-red-50 p-3 text-center">
-                          <div className="text-2xl font-bold text-red-700">{totalCriterios}</div>
-                          <div className="text-[11px] font-medium text-red-700">Criterios</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
-                      <div className="mb-3 flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-700">Equipo</span>
-                        <Badge variant="neutral">{selectedProject.miembros.length} miembros</Badge>
-                      </div>
-
-                      <div className="space-y-2">
-                        {selectedProject.miembros.map((member, index) => (
-                          <div key={`${member}-${index}`} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                            {member}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
-                      <Button
-                        variant="primary"
-                        className="w-full justify-center rounded-lg bg-[#9E0B0F] py-3 font-semibold text-white hover:bg-[#82090d]"
-                        onClick={() =>
-                          navigate(
-                            `/actividades/${selectedProject.actividadId}/calificar/${selectedProject.seccionId}`
-                          )
-                        }
-                      >
-                        <Save size={16} />
-                        Ir a calificar
-                      </Button>
-                    </div>
-                  </aside>
+                  <ResumenEquipo
+                    project={selectedProject}
+                    aspectos={aspectos}
+                    valores={valores}
+                    onIrACalificar={() =>
+                      navigate(
+                        `/actividades/${selectedProject.actividadId}/calificar/${selectedProject.seccionId}`
+                      )
+                    }
+                  />
                 </div>
               </>
             )}
 
             {!loading && !selectedProject && (
-              <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-                {loadError ? (
-                  <p className="text-red-700">{loadError}</p>
-                ) : courses.length === 0 ? (
-                  <p>No tienes asignaturas registradas.</p>
-                ) : activities.length === 0 ? (
-                  <p>
-                    Esta asignatura no tiene actividades grupales. La evaluación por equipos solo aplica a
-                    actividades grupales.
-                  </p>
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <p>Esta actividad no tiene equipos todavía.</p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => navigate(`/proyectos?actividadId=${selectedActivityId}`)}
-                    >
-                      Crear equipos
-                    </Button>
-                  </div>
-                )}
-              </div>
+              <EvaluacionVacia
+                loadError={loadError}
+                sinAsignaturas={courses.length === 0}
+                sinActividades={activities.length === 0}
+                onCrearEquipos={() => navigate(`/proyectos?actividadId=${selectedActivityId}`)}
+              />
             )}
           </div>
         </div>
