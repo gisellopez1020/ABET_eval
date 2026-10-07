@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '../../../components/Layout/AppLayout';
-import { Header } from '../../../components/Layout/Header';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { ProgressBar } from '../../../components/ui/ProgressBar';
@@ -103,8 +102,7 @@ export function GradingSelectionPage() {
 
   if (loading) {
     return (
-      <AppLayout>
-        <Header crumbs={[{ label: 'Mis cursos', to: '/dashboard' }, { label: '…' }]} />
+      <AppLayout crumbs={[{ label: 'Mis cursos', to: '/dashboard' }, { label: '…' }]}>
         <div className="p-6 space-y-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
@@ -116,15 +114,14 @@ export function GradingSelectionPage() {
   const sinCalificar = items.filter((i) => !i.calificado).length;
 
   return (
-    <AppLayout>
-      <Header
-        crumbs={[
-          { label: 'Mis cursos', to: '/dashboard' },
-          { label: cursoNombre, to: `/cursos/${actividad?.curso_id}` },
-          { label: actividad?.nombre || '' },
-          { label: seccionNombre },
-        ]}
-      />
+    <AppLayout
+      crumbs={[
+        { label: 'Mis cursos', to: '/dashboard' },
+        { label: cursoNombre, to: `/cursos/${actividad?.curso_id}` },
+        { label: actividad?.nombre || '' },
+        { label: seccionNombre },
+      ]}
+    >
       <div className="p-6">
         <div className="mb-6 flex items-start justify-between">
           <div>

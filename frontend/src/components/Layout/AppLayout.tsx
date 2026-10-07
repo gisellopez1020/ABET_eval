@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react';
+import { ComponentProps, ReactNode, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 
 import { Sidebar } from './Sidebar';
@@ -10,9 +10,11 @@ import { useLayoutStore } from '../../store/layoutStore';
 
 interface AppLayoutProps {
   children: ReactNode;
+  // Migas del único Header de la página: las páginas no dibujan uno propio
+  crumbs?: ComponentProps<typeof Header>['crumbs'];
 }
 
-export function AppLayout({ children }: AppLayoutProps) {
+export function AppLayout({ children, crumbs }: AppLayoutProps) {
   const { isAuthenticated, user, csrfToken } = useAuthStore();
   const { sidebarCollapsed, toggleSidebar } = useLayoutStore();
 
@@ -41,6 +43,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
       {/* HEADER */}
       <Header
+        crumbs={crumbs}
         sidebarCollapsed={sidebarCollapsed}
         userName={user?.nombre || 'Usuario'}
       />
