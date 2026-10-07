@@ -1,13 +1,20 @@
 import { create } from 'zustand';
-import { Docente } from '../types';
+import { Docente, Sesion } from '../types';
 
+// La autenticación vive en la cookie httpOnly que pone el backend: aquí solo se
+// guarda el docente (para no perderlo visualmente al recargar) y, en memoria,
+// el token CSRF que devuelve /auth/me. Ningún token se guarda en localStorage.
 interface AuthState {
   user: Docente | null;
-  token: string | null;
-  setAuth: (user: Docente, token: string) => void;
+  csrfToken: string | null;
+  setSesion: (sesion: Sesion) => void;
   clearAuth: () => void;
   isAuthenticated: () => boolean;
 }
+
+const USER_KEY = 'auth_user';
+// Clave de la versión anterior (JWT en localStorage); se borra si quedó guardada.
+const LEGACY_TOKEN_KEY = 'auth_token';
 
 const demoUser: Docente = {
   email: 'docente@demo.edu.co',
@@ -16,34 +23,20 @@ const demoUser: Docente = {
 
 const skipAuth = import.meta.env.VITE_SKIP_AUTH === 'true';
 
-const getInitialUser = () => {
+const getInitialUser = (): Docente | null => {
   if (skipAuth) {
     return demoUser;
   }
 
   if (typeof window !== 'undefined') {
-    const storedUser = window.localStorage.getItem('auth_user');
+    window.localStorage.removeItem(LEGACY_TOKEN_KEY);
+    const storedUser = window.localStorage.getItem(USER_KEY);
     if (storedUser) {
       try {
         return JSON.parse(storedUser);
       } catch {
-        window.localStorage.removeItem('auth_user');
+        window.localStorage.removeItem(USER_KEY);
       }
-    }
-  }
-
-  return null;
-};
-
-const getInitialToken = () => {
-  if (skipAuth) {
-    return 'mock-token';
-  }
-
-  if (typeof window !== 'undefined') {
-    const storedToken = window.localStorage.getItem('auth_token');
-    if (storedToken) {
-      return storedToken;
     }
   }
 
@@ -52,20 +45,18 @@ const getInitialToken = () => {
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: getInitialUser(),
-  token: getInitialToken(),
-  setAuth: (user, token) => {
-    localStorage.setItem('auth_user', JSON.stringify(user));
-    localStorage.setItem('auth_token', token);
-    set({ user, token });
+  csrfToken: null,
+  setSesion: ({ email, nombre, csrf_token }) => {
+    const user = { email, nombre };
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    set({ user, csrfToken: csrf_token });
   },
   clearAuth: () => {
-    localStorage.removeItem('auth_user');
-    localStorage.removeItem('auth_token');
-    set({ user: null, token: null });
+    localStorage.removeItem(USER_KEY);
+    set({ user: null, csrfToken: null });
   },
   isAuthenticated: () => {
     if (skipAuth) return true;
-    const { user, token } = get();
-    return !!user && !!token;
+    return !!get().user;
   },
 }));

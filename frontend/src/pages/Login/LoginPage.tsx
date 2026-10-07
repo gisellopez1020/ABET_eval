@@ -5,7 +5,7 @@ import { useAuthStore } from '../../store/authStore';
 const SKIP_AUTH = import.meta.env.VITE_SKIP_AUTH === 'true';
 
 export function LoginPage() {
-  const { setAuth, isAuthenticated } = useAuthStore();
+  const { setSesion, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +18,7 @@ export function LoginPage() {
     try {
       if (SKIP_AUTH) {
         const demoUser = { email: 'docente@demo.edu.co', nombre: 'Docente demo' };
-        setAuth(demoUser, 'mock-token');
+        setSesion({ ...demoUser, csrf_token: null });
         navigate('/dashboard');
         return;
       }

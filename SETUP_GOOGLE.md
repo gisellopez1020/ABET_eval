@@ -28,7 +28,8 @@ usa un usuario simulado y no llama a Google.
 2. Tipo de aplicación: **Aplicación web**.
 3. En **URIs de redirección autorizados**, agrega la URL del callback del backend:
    - Desarrollo: `http://localhost:8000/auth/callback`
-   - Producción: `https://<tu-dominio-backend>/auth/callback`
+   - Producción: `https://<tu-dominio>/api/auth/callback` (mismo host que el
+     frontend; ver la nota del paso 6)
 4. Guarda el **Client ID** y el **Client Secret** generados.
 
 ## 4. Generar `JWT_SECRET_KEY` (obligatorio con `SKIP_AUTH=false`)
@@ -63,24 +64,52 @@ JWT_SECRET_KEY=<clave-generada-en-el-paso-4>
 # URL del frontend a la que se redirige tras un login exitoso
 FRONTEND_URL=http://localhost:5173
 
+# Orígenes que CORS acepta, separados por comas. No se permite "*": la sesión
+# viaja en una cookie y con "*" cualquier sitio podría usarla.
+FRONTEND_ORIGINS=http://localhost:5173
+
 GOOGLE_DRIVE_FOLDER_NAME=ABET_Eval
 
 SKIP_AUTH=false
 ```
 
 Si al arrancar el backend falla con un error sobre `JWT_SECRET_KEY`, vuelve al
-paso 4: la clave no está configurada o no es lo bastante larga.
+paso 4: la clave no está configurada o no es lo bastante larga. Si el error es
+sobre `FRONTEND_ORIGINS`, la lista está vacía o contiene `*`.
 
-## 6. Flujo de login
+## 6. Flujo de login y sesión
 
 1. El frontend redirige al usuario a `GET /auth/login` del backend.
 2. El backend redirige a la pantalla de consentimiento de Google.
 3. Google redirige de vuelta a `GET /auth/callback?code=...`.
 4. El backend intercambia el `code` por tokens de Google, valida el
    `id_token` y emite su propio JWT (firmado con `JWT_SECRET_KEY`).
-5. El backend redirige al frontend (`FRONTEND_URL/auth/callback?token=...`)
-   con el JWT propio de la app, que el frontend debe guardar y enviar como
-   `Authorization: Bearer <token>` en las siguientes peticiones.
+5. El backend guarda ese JWT en la cookie `session` (`HttpOnly`,
+   `SameSite=Lax`, `Path=/`, y `Secure` cuando `GOOGLE_REDIRECT_URI` no es
+   localhost) y redirige a `FRONTEND_URL/auth/callback`. El token nunca viaja
+   en la URL y el JavaScript del frontend no puede leerlo.
+6. El frontend llama a `GET /auth/me`, que confirma la sesión y devuelve el
+   docente y un `csrf_token`. El navegador adjunta la cookie solo.
+7. En cada `POST`/`PUT`/`PATCH`/`DELETE` el frontend envía ese valor en el
+   header `X-CSRF-Token`; si falta o no coincide con el de la sesión, el
+   backend responde 403. Así otro sitio no puede modificar datos aprovechando
+   la cookie del docente.
+8. Para cerrar sesión, el frontend llama a `POST /auth/logout`, que borra la
+   cookie (el frontend no puede hacerlo porque es `HttpOnly`).
+
+**El callback y el frontend deben compartir host.** La cookie la pone el host
+de `GOOGLE_REDIRECT_URI`, y el navegador solo la envía a ese mismo host. En
+desarrollo funciona sin más: el callback es `localhost:8000`, el frontend
+`localhost:5173` llama a la API por su proxy `/api`, y las cookies no
+distinguen puertos. En producción, sirve la API bajo el dominio del frontend
+(un proxy inverso que reenvíe `/api` al backend) y usa
+`GOOGLE_REDIRECT_URI=https://<tu-dominio>/api/auth/callback` y
+`VITE_API_URL=https://<tu-dominio>/api`. Si el backend vive en otro dominio, la
+cookie no llegaría a las peticiones del frontend.
+
+El JWT no tiene estado en el servidor: cerrar sesión borra la cookie del
+navegador, pero una copia del token seguiría siendo válida hasta su
+vencimiento (`JWT_EXPIRE_MINUTES`, 24 h por defecto).
 
 ## 7. Sincronización con Google Drive
 

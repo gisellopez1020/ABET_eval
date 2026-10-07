@@ -28,6 +28,7 @@ services:
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/callback}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-PLACEHOLDER}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:5173,http://frontend:5173}
       GOOGLE_DRIVE_FOLDER_NAME: ${GOOGLE_DRIVE_FOLDER_NAME:-ABET_Eval}
       SKIP_AUTH: ${SKIP_AUTH:-true}
     ports:

@@ -1,11 +1,19 @@
 import secrets
-from urllib.parse import urlencode, urlparse
+from typing import Optional
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from app.auth.dependencies import create_access_token, get_current_user
+from app.auth.dependencies import (
+    CSRF_HEADER,
+    SESSION_COOKIE_NAME,
+    create_access_token,
+    decodificar_sesion,
+    get_current_user,
+    verificar_csrf,
+)
 from app.config import settings
 from app.services.google_auth import (
     build_authorization_url,
@@ -23,10 +31,25 @@ STATE_COOKIE_MAX_AGE = 300
 class DocenteOut(BaseModel):
     email: str
     nombre: str
+    # Token que el frontend debe reenviar en el header X-CSRF-Token en las
+    # peticiones que modifican datos. None en modo SKIP_AUTH.
+    csrf_token: Optional[str] = None
 
 
 def _es_localhost(url: str) -> bool:
     return (urlparse(url).hostname or "") in ("localhost", "127.0.0.1")
+
+
+def _atributos_cookie_sesion() -> dict:
+    """Atributos de la cookie de sesión; borrarla exige repetir los mismos."""
+    return {
+        "httponly": True,
+        "samesite": "lax",
+        # La cookie la pone el host del callback de Google (GOOGLE_REDIRECT_URI)
+        "secure": not _es_localhost(settings.google_redirect_uri),
+        # "/" porque el frontend llama a la API con el prefijo /api del proxy
+        "path": "/",
+    }
 
 
 @router.get("/login", summary="Redirige a la pantalla de consentimiento de Google")
@@ -54,8 +77,8 @@ async def callback(
 ):
     """
     Recibe el authorization code de Google, lo intercambia por tokens,
-    valida el id_token y emite el JWT propio de la app. Redirige al
-    frontend con el JWT como parámetro de consulta.
+    valida el id_token y emite el JWT propio de la app en una cookie httpOnly
+    de sesión. Redirige al frontend, que confirma la sesión con GET /auth/me.
 
     Antes de nada, valida el parámetro `state` contra la cookie `oauth_state`
     (protección CSRF) — si no coincide, no se llega a intercambiar el code.
@@ -79,13 +102,56 @@ async def callback(
     guardar_tokens_drive(usuario["email"], tokens)
 
     app_token = create_access_token(usuario["email"], usuario["nombre"])
-    redirect_url = f"{settings.frontend_url}/auth/callback?{urlencode({'token': app_token})}"
-    response = RedirectResponse(url=redirect_url)
+    response = RedirectResponse(url=f"{settings.frontend_url}/auth/callback")
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=app_token,
+        max_age=settings.jwt_expire_minutes * 60,
+        **_atributos_cookie_sesion(),
+    )
     response.delete_cookie(STATE_COOKIE_NAME, path="/auth")
     return response
 
 
 @router.get("/me", response_model=DocenteOut, summary="Datos del docente autenticado")
 def get_me(usuario: dict = Depends(get_current_user)):
-    """Devuelve el email y nombre del docente autenticado a partir del JWT de la app."""
-    return DocenteOut(email=usuario["email"], nombre=usuario["nombre"])
+    """
+    Devuelve el email y nombre del docente autenticado a partir de la cookie de
+    sesión, junto con el token CSRF que el frontend debe reenviar en el header
+    X-CSRF-Token al modificar datos.
+    """
+    return DocenteOut(
+        email=usuario["email"],
+        nombre=usuario["nombre"],
+        csrf_token=usuario.get("csrf_token"),
+    )
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cierra la sesión borrando la cookie",
+)
+def logout(
+    request: Request,
+    session: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    csrf_header: Optional[str] = Header(default=None, alias=CSRF_HEADER),
+):
+    """
+    Borra la cookie de sesión (el frontend no puede: es httpOnly).
+
+    Con una sesión válida exige el header CSRF, como cualquier POST, para que
+    otro sitio no pueda cerrar la sesión del docente. Si la sesión ya venció o
+    no existe, la borra igual: siempre debe poder cerrarse sesión.
+    """
+    if not settings.skip_auth and session:
+        try:
+            usuario = decodificar_sesion(session)
+        except HTTPException:
+            usuario = None
+        if usuario:
+            verificar_csrf(request, usuario, csrf_header)
+
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(SESSION_COOKIE_NAME, **_atributos_cookie_sesion())
+    return response

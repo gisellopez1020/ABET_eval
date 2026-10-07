@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth.dependencies import CSRF_HEADER
+from app.config import settings
 from app.errores_http import registrar_manejadores
 from app.routers import auth, cursos, secciones, estudiantes, actividades
 from app.routers import criterios, equipos, calificaciones, reportes, catalogo
@@ -15,10 +17,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://frontend:5173"],
+    # Orígenes desde FRONTEND_ORIGINS (nunca "*": la sesión viaja en cookie)
+    allow_origins=settings.lista_frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", CSRF_HEADER],
 )
 
 # Errores de negocio de los servicios -> respuestas HTTP (404, 403, 409)
