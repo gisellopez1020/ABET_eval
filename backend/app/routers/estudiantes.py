@@ -4,6 +4,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Query, Response, UploadFile, File, status
 from sqlalchemy.orm import Session
 
+from app.archivos import leer_archivo_limitado
 from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.schemas import EstudianteCreate, EstudianteListadoOut, EstudianteOut, ImportacionCSVResultado
@@ -90,7 +91,7 @@ async def importar_csv(
     se puede leer o le faltan las columnas obligatorias.
     """
     resultado = EstudianteService(db).importar(
-        seccion_id, usuario["email"], await archivo.read(), archivo.filename, archivo.content_type,
+        seccion_id, usuario["email"], await leer_archivo_limitado(archivo), archivo.filename, archivo.content_type,
     )
     return ImportacionCSVResultado(importados=resultado.importados, errores=resultado.avisos)
 
@@ -112,7 +113,7 @@ async def vista_previa_estudiantes(
     (la de un CSV se sigue calculando en el navegador). Mismos errores que la importación.
     """
     return EstudianteService(db).vista_previa(
-        seccion_id, usuario["email"], await archivo.read(), archivo.filename, archivo.content_type,
+        seccion_id, usuario["email"], await leer_archivo_limitado(archivo), archivo.filename, archivo.content_type,
     )
 
 
