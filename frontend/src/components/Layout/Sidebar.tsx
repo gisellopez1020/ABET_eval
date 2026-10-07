@@ -14,7 +14,7 @@ import {
   SquarePen,
 } from 'lucide-react';
 
-import { useAuthStore } from '../../store/authStore';
+import { authApi } from '../../api/auth';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -65,11 +65,10 @@ const navItems = [
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
-  const { clearAuth } = useAuthStore();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    clearAuth();
+  const handleLogout = async () => {
+    await authApi.logout();
     navigate('/login');
   };
 

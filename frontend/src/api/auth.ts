@@ -1,6 +1,12 @@
-import apiClient from './client';
-import { Docente } from '../types';
+import apiClient, { confirmarSesion } from './client';
+import { useAuthStore } from '../store/authStore';
 
 export const authApi = {
-  getMe: () => apiClient.get<Docente>('/auth/me').then((r) => r.data),
+  getMe: confirmarSesion,
+  /** Pide al backend borrar la cookie de sesión; el estado local se limpia aunque falle. */
+  logout: () =>
+    apiClient
+      .post('/auth/logout')
+      .catch(() => undefined)
+      .finally(() => useAuthStore.getState().clearAuth()),
 };
