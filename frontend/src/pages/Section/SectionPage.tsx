@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '../../components/Layout/AppLayout';
-import { Header } from '../../components/Layout/Header';
 import { Button } from '../../components/ui/Button';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { cursosApi } from '../../api/cursos';
@@ -200,8 +199,7 @@ export function SectionPage() {
 
   if (loading) {
     return (
-      <AppLayout>
-        <Header crumbs={[{ label: 'Mis cursos', to: '/dashboard' }, { label: '…' }]} />
+      <AppLayout crumbs={[{ label: 'Mis cursos', to: '/dashboard' }, { label: '…' }]}>
         <div className="p-6 space-y-4">
           <Skeleton className="h-8 w-64" />
         </div>
@@ -210,14 +208,13 @@ export function SectionPage() {
   }
 
   return (
-    <AppLayout>
-      <Header
-        crumbs={[
-          { label: 'Mis cursos', to: '/dashboard' },
-          { label: curso?.nombre || '', to: `/cursos/${cid}` },
-          { label: seccion?.nombre || '' },
-        ]}
-      />
+    <AppLayout
+      crumbs={[
+        { label: 'Mis cursos', to: '/dashboard' },
+        { label: curso?.nombre || '', to: `/cursos/${cid}` },
+        { label: seccion?.nombre || '' },
+      ]}
+    >
       <div className="p-6">
         <div className="mb-6 flex items-center justify-between">
           <div>

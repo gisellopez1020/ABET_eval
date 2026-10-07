@@ -18,7 +18,6 @@ import { RANGOS_CALIFICACION_DEFAULT } from '../../utils/rangos';
 vi.mock('../../components/Layout/AppLayout', () => ({
   AppLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock('../../components/Layout/Header', () => ({ Header: () => null }));
 vi.mock('../../api/cursos', () => ({ cursosApi: { get: vi.fn(), update: vi.fn() } }));
 vi.mock('../../api/secciones', () => ({ seccionesApi: { list: vi.fn(), create: vi.fn() } }));
 vi.mock('../../api/actividades', () => ({ actividadesApi: { list: vi.fn(), create: vi.fn() } }));

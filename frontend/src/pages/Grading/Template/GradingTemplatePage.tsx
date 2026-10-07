@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AppLayout } from '../../../components/Layout/AppLayout';
-import { Header } from '../../../components/Layout/Header';
 import { Button } from '../../../components/ui/Button';
 import { Skeleton } from '../../../components/ui/Skeleton';
 import { actividadesApi } from '../../../api/actividades';
@@ -155,8 +154,7 @@ export function GradingTemplatePage() {
 
   if (loading) {
     return (
-      <AppLayout>
-        <Header crumbs={[{ label: 'Calificando…' }]} />
+      <AppLayout crumbs={[{ label: 'Calificando…' }]}>
         <div className="p-6 space-y-4">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-64 rounded-xl" />
@@ -167,8 +165,7 @@ export function GradingTemplatePage() {
 
   if (!actividad) {
     return loadError ? (
-      <AppLayout>
-        <Header crumbs={[{ label: 'Calificar' }]} />
+      <AppLayout crumbs={[{ label: 'Calificar' }]}>
         <div className="p-6">
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-uao-accent">
             {loadError}
@@ -179,14 +176,13 @@ export function GradingTemplatePage() {
   }
 
   return (
-    <AppLayout>
-      <Header
-        crumbs={[
-          { label: 'Mis cursos', to: '/dashboard' },
-          { label: actividad.nombre, to: `/cursos/${actividad.curso_id}` },
-          { label: currentItem?.nombre ?? `Item ${iid}` },
-        ]}
-      />
+    <AppLayout
+      crumbs={[
+        { label: 'Mis cursos', to: '/dashboard' },
+        { label: actividad.nombre, to: `/cursos/${actividad.curso_id}` },
+        { label: currentItem?.nombre ?? `Item ${iid}` },
+      ]}
+    >
       <div className="p-6 max-w-4xl mx-auto">
         {/* Encabezado */}
         <EncabezadoItem

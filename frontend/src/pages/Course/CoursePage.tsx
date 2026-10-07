@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Pencil } from 'lucide-react';
 import { AppLayout } from '../../components/Layout/AppLayout';
-import { Header } from '../../components/Layout/Header';
 import { Button } from '../../components/ui/Button';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { cursosApi } from '../../api/cursos';
@@ -100,8 +99,7 @@ export function CoursePage() {
 
   if (loading) {
     return (
-      <AppLayout>
-        <Header crumbs={[{ label: 'Mis cursos', to: '/dashboard' }, { label: '…' }]} />
+      <AppLayout crumbs={[{ label: 'Mis cursos', to: '/dashboard' }, { label: '…' }]}>
         <div className="p-6 space-y-4">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-4 w-40" />
@@ -113,13 +111,12 @@ export function CoursePage() {
   if (!curso) return null;
 
   return (
-    <AppLayout>
-      <Header
-        crumbs={[
-          { label: 'Mis cursos', to: '/dashboard' },
-          { label: curso.nombre },
-        ]}
-      />
+    <AppLayout
+      crumbs={[
+        { label: 'Mis cursos', to: '/dashboard' },
+        { label: curso.nombre },
+      ]}
+    >
       <div className="p-6">
         <div className="mb-6 flex items-start justify-between">
           <div>
