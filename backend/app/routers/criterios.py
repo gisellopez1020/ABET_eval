@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
+from app.archivos import leer_archivo_limitado
 from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.schemas.criterio import (
@@ -76,7 +77,7 @@ async def importar_excel_criterios(
     el formato esperado o los pesos no suman 100%. Los aspectos llegan sin codigo_abet.
     404 si la actividad no existe, 403 si es de otro docente.
     """
-    return CriterioService(db).leer_excel(actividad_id, usuario["email"], await archivo.read())
+    return CriterioService(db).leer_excel(actividad_id, usuario["email"], await leer_archivo_limitado(archivo))
 
 
 @router.patch(

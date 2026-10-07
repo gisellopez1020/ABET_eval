@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.dependencies import CSRF_HEADER
 from app.config import settings
+from app.archivos import LimiteCuerpoSubidas
 from app.errores_http import registrar_manejadores
 from app.routers import auth, cursos, secciones, estudiantes, actividades
 from app.routers import criterios, equipos, calificaciones, reportes, catalogo
@@ -23,6 +24,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["Content-Type", CSRF_HEADER],
 )
+
+# Corta las subidas de archivos demasiado grandes antes de que lleguen al disco
+app.add_middleware(LimiteCuerpoSubidas)
 
 # Errores de negocio de los servicios -> respuestas HTTP (404, 403, 409)
 registrar_manejadores(app)
