@@ -1,6 +1,8 @@
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
+from app.utils.urls import es_host_local
+
 JWT_SECRET_MIN_LENGTH = 32
 
 
@@ -72,6 +74,37 @@ class Settings(BaseSettings):
                 "por comas (p. ej. 'https://abet.uao.edu.co'); no puede estar vacía ni "
                 "contener '*', porque la API usa cookies de sesión y con '*' cualquier "
                 "sitio podría hacer peticiones autenticadas en nombre del docente."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validar_skip_auth_solo_local(self) -> "Settings":
+        """SKIP_AUTH=true solo con URLs locales.
+
+        En ese modo get_current_user devuelve siempre el usuario simulado sin
+        cookie ni CSRF: desplegado en un dominio real, cualquiera entraría como
+        ese docente. Va después de los otros validadores para no tapar sus mensajes.
+        """
+        if not self.skip_auth:
+            return self
+        no_locales = [
+            nombre
+            for nombre, urls in (
+                ("GOOGLE_REDIRECT_URI", [self.google_redirect_uri]),
+                ("FRONTEND_URL", [self.frontend_url]),
+                ("FRONTEND_ORIGINS", self.lista_frontend_origins),
+            )
+            if not all(es_host_local(url) for url in urls)
+        ]
+        if no_locales:
+            raise ValueError(
+                "SKIP_AUTH=true desactiva el login: cualquiera con acceso de red a la "
+                "API entra sin iniciar sesión, sin cookie ni CSRF, como el usuario "
+                "simulado profesor.test@uao.edu.co. Ese modo es solo para desarrollo "
+                f"local, pero {', '.join(no_locales)} apunta a un dominio que no es "
+                "local. En un despliegue real configura SKIP_AUTH=false y el login con "
+                "Google (ver SETUP_GOOGLE.md); si es desarrollo, usa localhost o "
+                "127.0.0.1 en esas URLs."
             )
         return self
 
