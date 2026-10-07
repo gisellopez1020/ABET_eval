@@ -241,7 +241,10 @@ def test_toda_ruta_que_modifica_datos_pasa_por_get_current_user():
 
 class TestCORS:
     def test_lista_desde_texto_separado_por_comas(self):
-        s = Settings(_env_file=None, skip_auth=True, frontend_origins=" https://a.edu.co , https://b.edu.co ,")
+        s = Settings(
+            _env_file=None, skip_auth=False, jwt_secret_key="a" * 32,
+            frontend_origins=" https://a.edu.co , https://b.edu.co ,",
+        )
         assert s.lista_frontend_origins == ["https://a.edu.co", "https://b.edu.co"]
 
     def test_valor_por_defecto(self):
@@ -262,7 +265,10 @@ class TestCORS:
             "m = next(m for m in main.app.user_middleware if m.cls is CORSMiddleware)\n"
             "print(m.kwargs['allow_origins'])\n"
         )
-        env = {**os.environ, "SKIP_AUTH": "true", "FRONTEND_ORIGINS": "https://abet.uao.edu.co"}
+        env = {
+            **os.environ, "SKIP_AUTH": "false", "JWT_SECRET_KEY": "a" * 32,
+            "FRONTEND_ORIGINS": "https://abet.uao.edu.co",
+        }
         salida = subprocess.run(
             [sys.executable, "-c", codigo], cwd=backend, env=env,
             capture_output=True, text=True, check=True,
