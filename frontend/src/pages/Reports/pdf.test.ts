@@ -3,51 +3,79 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { cargarLogo, conTextoAlineado } from './pdf';
 
-/** PNG mínimo: firma + cabecera IHDR con el ancho y alto dados (no hace falta que sea dibujable). */
-function png(ancho: number, alto: number): ArrayBuffer {
-  const bytes = new Uint8Array(33);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const vista = new DataView(bytes.buffer);
-  vista.setUint32(8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12); // IHDR
-  vista.setUint32(16, ancho);
-  vista.setUint32(20, alto);
-  return bytes.buffer;
+/**
+ * jsdom no decodifica imágenes: este Image dispara onload con unas medidas fijas (u onerror si
+ * la ruta contiene "no-existe"). La decodificación real y que jsPDF acepte el canvas no se
+ * prueban aquí; el bug del decodificador de jsPDF queda fijado en pdf.jspdf.test.ts.
+ */
+class ImagenFalsa {
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  naturalWidth = 0;
+  naturalHeight = 0;
+  constructor(private medidas: { ancho: number; alto: number }) {}
+  set src(ruta: string) {
+    queueMicrotask(() => {
+      if (ruta.includes('no-existe')) return this.onerror?.();
+      this.naturalWidth = this.medidas.ancho;
+      this.naturalHeight = this.medidas.alto;
+      this.onload?.();
+    });
+  }
 }
 
 describe('cargarLogo', () => {
+  let imagenes: ImagenFalsa[];
+  let drawImage: ReturnType<typeof vi.fn>;
+
+  const usarImagen = (ancho: number, alto: number) => {
+    vi.stubGlobal('Image', class extends ImagenFalsa {
+      constructor() {
+        super({ ancho, alto });
+        imagenes.push(this);
+      }
+    });
+  };
+
   beforeEach(() => {
+    imagenes = [];
+    drawImage = vi.fn();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
+    usarImagen(514, 213);
   });
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it('devuelve los bytes y las medidas del PNG', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(png(514, 213))));
+  it('dibuja el logo en un canvas de su tamaño natural', async () => {
     const logo = await cargarLogo('/logo-uao.png');
     expect(logo).toMatchObject({ ancho: 514, alto: 213 });
-    expect(logo!.datos.length).toBe(33);
-    expect(fetch).toHaveBeenCalledWith('/logo-uao.png');
+    expect(logo!.canvas).toBeInstanceOf(HTMLCanvasElement);
+    expect([logo!.canvas.width, logo!.canvas.height]).toEqual([514, 213]);
+    expect(drawImage).toHaveBeenCalledWith(imagenes[0], 0, 0);
     expect(console.warn).not.toHaveBeenCalled();
   });
 
-  it('sin archivo (404) devuelve null y solo avisa por consola', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 404 })));
+  it('si la imagen no carga (404, red, HTML de respaldo) devuelve null y solo avisa', async () => {
+    expect(await cargarLogo('/no-existe.png')).toBeNull();
+    expect(drawImage).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledOnce();
+  });
+
+  it('sin contexto 2D devuelve null', async () => {
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
     expect(await cargarLogo()).toBeNull();
     expect(console.warn).toHaveBeenCalledOnce();
   });
 
-  it('error de red: devuelve null', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+  it('una imagen sin dimensiones devuelve null', async () => {
+    usarImagen(0, 0);
     expect(await cargarLogo()).toBeNull();
+    expect(drawImage).not.toHaveBeenCalled();
     expect(console.warn).toHaveBeenCalledOnce();
-  });
-
-  it('el index.html que el servidor devuelve para rutas desconocidas no cuenta como logo', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<!doctype html><html></html>')));
-    expect(await cargarLogo()).toBeNull();
   });
 });
 

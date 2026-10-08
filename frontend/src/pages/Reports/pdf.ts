@@ -15,26 +15,38 @@ export const COLOR_METADATOS: RGB = [75, 85, 99];
 export const RUTA_LOGO = `${import.meta.env.BASE_URL}logo-uao.png`;
 
 export interface LogoPDF {
-  datos: Uint8Array;
+  canvas: HTMLCanvasElement;
   ancho: number;
   alto: number;
 }
 
-const FIRMA_PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-
 /**
- * Descarga el logo y lee sus medidas de la cabecera PNG. Si no está (404, error de red o
- * una respuesta que no es PNG, como el index.html que devuelve el servidor para rutas
- * desconocidas) devuelve null y el PDF se genera sin logo.
+ * Carga el logo con el navegador y lo dibuja en un canvas, que es lo que recibe addImage.
+ * No se le pasan a jsPDF los bytes del archivo: su decodificador PNG falla (RangeError) con
+ * paletas de 1/2/4 bits con transparencia parcial, que es justo el formato de logo-uao.png
+ * (ver pdf.jspdf.test.ts). Si no carga (404, error de red o el index.html que devuelve el
+ * servidor para rutas desconocidas: todos disparan onerror) devuelve null y el PDF se
+ * genera sin logo.
  */
 export async function cargarLogo(ruta: string = RUTA_LOGO): Promise<LogoPDF | null> {
   try {
-    const resp = await fetch(ruta);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const datos = new Uint8Array(await resp.arrayBuffer());
-    if (datos.length < 24 || FIRMA_PNG.some((b, i) => datos[i] !== b)) throw new Error('no es un PNG');
-    const cabecera = new DataView(datos.buffer, datos.byteOffset, datos.byteLength);
-    return { datos, ancho: cabecera.getUint32(16), alto: cabecera.getUint32(20) };
+    const imagen = new Image();
+    await new Promise<void>((resolver, rechazar) => {
+      imagen.onload = () => resolver();
+      imagen.onerror = () => rechazar(new Error('la imagen no cargó'));
+      imagen.src = ruta;
+    });
+    const ancho = imagen.naturalWidth;
+    const alto = imagen.naturalHeight;
+    if (!ancho || !alto) throw new Error('la imagen no tiene dimensiones');
+
+    const canvas = document.createElement('canvas');
+    canvas.width = ancho;
+    canvas.height = alto;
+    const contexto = canvas.getContext('2d');
+    if (!contexto) throw new Error('sin contexto 2D');
+    contexto.drawImage(imagen, 0, 0);
+    return { canvas, ancho, alto };
   } catch (error) {
     console.warn(`No se pudo cargar el logo (${ruta}); el PDF se exporta sin logo.`, error);
     return null;

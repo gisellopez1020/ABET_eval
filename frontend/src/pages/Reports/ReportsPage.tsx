@@ -25,6 +25,8 @@ const PDF_Y_FIN = 285;
 // Ancho fijo de la gráfica que se captura: el PDF sale igual sin importar la ventana
 const ANCHO_GRAFICA_PDF = 900;
 const ALTO_LOGO_PDF = 12;
+// Un canvas entra al PDF sin comprimir: el logo pesaba ~430 KB y con 'FAST' ~9 KB
+const COMPRESION_IMAGEN = 'FAST';
 const Y_LOGO_PDF = 10;
 
 /**
@@ -50,14 +52,14 @@ function imagenPDF(doc: jsPDF, titulo: string, canvas: HTMLCanvasElement, y: num
   doc.setFont('helvetica', 'normal');
   y += altoTitulo;
 
-  doc.addImage(canvas, 'PNG', PDF_X + (PDF_ANCHO - ancho) / 2, y, ancho, alto);
+  doc.addImage(canvas, 'PNG', PDF_X + (PDF_ANCHO - ancho) / 2, y, ancho, alto, undefined, COMPRESION_IMAGEN);
   return y + alto + 4;
 }
 
 /** Logo de la UAO arriba a la derecha, con su proporción. */
 function logoPDF(doc: jsPDF, logo: LogoPDF) {
   const ancho = (logo.ancho / logo.alto) * ALTO_LOGO_PDF;
-  doc.addImage(logo.datos, 'PNG', PDF_X + PDF_ANCHO - ancho, Y_LOGO_PDF, ancho, ALTO_LOGO_PDF);
+  doc.addImage(logo.canvas, 'PNG', PDF_X + PDF_ANCHO - ancho, Y_LOGO_PDF, ancho, ALTO_LOGO_PDF, undefined, COMPRESION_IMAGEN);
 }
 
 /**
