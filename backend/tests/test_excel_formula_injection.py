@@ -137,11 +137,11 @@ class TestReporteDetalle:
     @pytest.mark.parametrize("valor", PELIGROSOS)
     def test_etiqueta_rango(self, valor):
         conteo, _ = _libro_detalle(etiqueta=valor)
-        _es_texto_literal(conteo["B1"], valor)
+        _es_texto_literal(conteo["B5"], valor)
 
     def test_texto_normal_y_numeros_no_se_tocan(self):
         conteo, ws = _libro_detalle()
-        assert [conteo["A1"].value, conteo["B1"].value, conteo["B2"].value] == ["Calificación", "0.0-5.0", 1]
+        assert [conteo["A5"].value, conteo["B5"].value, conteo["B6"].value] == ["Calificación", "0.0-5.0", 1]
         assert [ws["A3"].value, ws["B3"].value, ws["C3"].value, ws["C6"].value] == [
             "ABET 1.1", NORMAL, NORMAL, "ANA (001)",
         ]

@@ -13,12 +13,14 @@ from types import SimpleNamespace
 
 import openpyxl
 import pytest
+from PIL import Image
 
 from app.config import settings
 from app.models import EquipoTrabajo, MiembroEquipo
 from app.models.actividad import TipoActividad
-from app.services import google_drive
-from app.services.reporte_excel import _nombre_hoja, color_rango, nombre_archivo
+from app.schemas.reporte import RangoReporte, ReporteCriterioItem
+from app.services import google_drive, reporte_excel
+from app.services.reporte_excel import FILA_ENCABEZADO_CONTEO, _nombre_hoja, color_rango, nombre_archivo
 from tests.test_catalogo_ra_abet import MOCK_USER, client, db_session  # noqa: F401 (fixtures)
 from tests.test_reportes import DEFAULT, _actividad, _calificar, _estudiante, _seccion, curso  # noqa: F401
 
@@ -118,7 +120,7 @@ class TestResumenXlsx:
 
         wb = _libro(resp.content)
         assert wb.sheetnames == ["Conteo"]
-        filas = [list(f) for f in wb["Conteo"].iter_rows(values_only=True)]
+        filas = [list(f) for f in wb["Conteo"].iter_rows(min_row=FILA_ENCABEZADO_CONTEO, values_only=True)]
         assert filas == [
             ["Calificación", *RANGOS_DEFAULT],
             ["ABET 2.1.1", 0, 2, 0],
@@ -133,7 +135,7 @@ class TestResumenXlsx:
         ]
         db_session.commit()
         wb = _libro(client.get(_url(curso, grupal, "/resumen-xlsx")).content)
-        assert [c.value for c in wb["Conteo"][1]] == ["Calificación", "Bajo", "Alto"]
+        assert [c.value for c in wb["Conteo"][FILA_ENCABEZADO_CONTEO]] == ["Calificación", "Bajo", "Alto"]
 
 
 class TestDetalleXlsx:
@@ -285,3 +287,48 @@ class TestUtilidades:
     def test_color_rango_igual_al_frontend(self):
         assert [color_rango(i, 3) for i in range(3)] == ["C8102E", "FFB300", "2E7D32"]
         assert color_rango(0, 1) == "2E7D32"
+
+
+class TestLogoConteo:
+    """Logo de la UAO en la hoja Conteo: se agrega si existe el archivo y nunca rompe el libro."""
+
+    RANGOS = [RangoReporte(etiqueta="0.0-5.0", minimo=0.0, maximo=5.0)]
+    CRITERIOS = [ReporteCriterioItem(
+        codigo="1.1", descripcion="d", codigo_padre=None, peso=None,
+        rangos={"0.0-5.0": 1}, sin_clasificar=0, total=1,
+    )]
+
+    def _medios(self, contenido: bytes) -> list[str]:
+        with zipfile.ZipFile(io.BytesIO(contenido)) as z:
+            return [n for n in z.namelist() if n.startswith("xl/media/")]
+
+    def test_agrega_el_logo_cuando_existe(self, tmp_path, monkeypatch):
+        logo = tmp_path / "logo-uao.png"
+        Image.new("RGB", (514, 213), "red").save(logo)
+        monkeypatch.setattr(reporte_excel, "LOGO_UAO", logo)
+
+        contenido = reporte_excel.libro_resumen(self.RANGOS, self.CRITERIOS)
+        assert len(self._medios(contenido)) == 1
+        ws = _libro(contenido)["Conteo"]
+        assert len(ws._images) == 1
+        ancla = ws._images[0].anchor._from
+        assert (ancla.row, ancla.col) == (0, 0)   # A1, sobre las filas reservadas
+        # La tabla sigue debajo del espacio del logo
+        assert ws.cell(FILA_ENCABEZADO_CONTEO, 1).value == "Calificación"
+
+    def test_sin_archivo_genera_el_libro_sin_logo(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(reporte_excel, "LOGO_UAO", tmp_path / "no-existe.png")
+
+        contenido = reporte_excel.libro_detalle(self.RANGOS, self.CRITERIOS, [])
+        assert self._medios(contenido) == []
+        ws = _libro(contenido)["Conteo"]
+        assert ws.cell(FILA_ENCABEZADO_CONTEO, 1).value == "Calificación"
+        assert ws.cell(FILA_ENCABEZADO_CONTEO + 1, 1).value == "ABET 1.1"
+
+    def test_archivo_invalido_no_rompe(self, tmp_path, monkeypatch):
+        logo = tmp_path / "logo-uao.png"
+        logo.write_bytes(b"no es un png")
+        monkeypatch.setattr(reporte_excel, "LOGO_UAO", logo)
+
+        contenido = reporte_excel.libro_resumen(self.RANGOS, self.CRITERIOS)
+        assert self._medios(contenido) == []
