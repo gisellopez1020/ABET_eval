@@ -14,7 +14,30 @@ Sistema de evaluación por criterios ABET para la Universidad Autónoma de Occid
 - Sincronización automática del reporte de detalle con Google Drive.
 - Autenticación con Google OAuth 2.0, con modo simulado (`SKIP_AUTH`) para desarrollo local sin credenciales reales.
 
+## Instalación para usar la app (sin programar)
+
+Para quien solo va a usar la app en su computador, sin modificar el código. Ocupa y consume mucho menos que la instalación de desarrollo de la sección siguiente: el frontend va compilado y no hay recarga automática.
+
+1. Instala [Docker Desktop](https://www.docker.com/products/docker-desktop/) y déjalo abierto.
+2. Descarga el repositorio y crea el archivo de configuración:
+   ```bash
+   git clone https://github.com/gisellopez1020/ABET_eval.git
+   cd ABET_eval
+   cp .env.example .env
+   ```
+3. Levanta la app (la primera vez tarda unos minutos):
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --build
+   ```
+4. Abre http://localhost:5173. La base de datos se prepara sola al arrancar. Antes de crear cursos, carga el catálogo de Student Outcomes como se explica en el [paso 4](#4-cargar-el-catálogo-de-student-outcomes-abet).
+
+La app vuelve a arrancar sola al reiniciar el computador mientras Docker Desktop esté abierto. Para detenerla: `docker compose -f docker-compose.prod.yml down`. Los datos se conservan; **no** agregues `-v` a ese comando, porque borra la base de datos.
+
+Usa los mismos puertos que la instalación de desarrollo (5173 y 8000): no se pueden tener las dos levantadas a la vez.
+
 ## Instalación en 6 pasos
+
+Para programar: monta el código en los contenedores y recarga los cambios al guardar.
 
 ### Requisitos previos
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y en ejecución
@@ -110,7 +133,8 @@ Con el entorno ya creado, solo hace falta la última línea. Para correr un solo
 
 ```
 ABET_eval/
-├── docker-compose.yml
+├── docker-compose.yml            # Desarrollo (código montado, recarga al guardar)
+├── docker-compose.prod.yml       # Instalación para usar la app
 ├── .env.example
 ├── SETUP_GOOGLE.md
 ├── backend/                      # FastAPI + Python 3.11
@@ -129,6 +153,7 @@ ABET_eval/
 │   ├── scripts/                  # seed.py y el CSV del catálogo ABET
 │   └── tests/                    # Pruebas unitarias y de integración (pytest)
 └── frontend/                     # React 18 + TypeScript + Vite
+    ├── Dockerfile.prod           # Compila y sirve con nginx (nginx.conf: proxy de /api)
     └── src/
         ├── pages/                # Una carpeta por pantalla: Login, Auth, Dashboard,
         │                         #   Course, Section, students, rubrica,

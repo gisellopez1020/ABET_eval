@@ -6,12 +6,14 @@ que se confirma con PUT /criterios) y de estudiantes (POST .../estudiantes/csv y
 Los .xlsx se generan en memoria con openpyxl. Reutiliza las fixtures de SQLite.
 """
 import io
+from decimal import Decimal
 
 import pytest
 from openpyxl import Workbook
 
 from app.models import Actividad, Curso, Seccion
 from app.models.actividad import TipoActividad
+from app.utils.excel_parser import ExcelParserError, parsear_excel_criterios
 from tests.test_catalogo_ra_abet import MOCK_USER, client, db_session  # noqa: F401 (fixtures)
 
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -136,7 +138,7 @@ class TestRubricaExcel:
         filas = [
             ("Aspecto", "Criterio", "%Criterio"),
             ("Diseño", "A", 60),
-            (None, "B", 40),  # vacía sin fusionar: pandas la lee como NaN
+            (None, "B", 40),  # vacía sin fusionar: llega como None, igual que una fusionada
             (None, None, None),
         ]
         resp = client.post(f"/actividades/{act.id}/criterios/importar-excel", files=_subir_xlsx(_xlsx(filas)))
@@ -161,6 +163,45 @@ class TestRubricaExcel:
         )
         assert resp.status_code == 422
         assert "No se pudo leer" in resp.json()["detail"]
+
+
+class TestParserExcelCriterios:
+    """parsear_excel_criterios sobre .xlsx reales (lo que antes resolvía pandas)."""
+
+    def test_aspecto_numerico_sin_punto_cero(self):
+        filas = [("Aspecto", "Criterio", "%Criterio"), (1, "A", 50), (2.0, "B", 50)]
+        assert [a["nombre"] for a in parsear_excel_criterios(_xlsx(filas))["aspectos"]] == ["1", "2"]
+
+    def test_texto_que_parece_numero_se_conserva(self):
+        # pandas convertía el texto "007" en 7 y "10.50" en 10.5
+        filas = [("Aspecto", "Criterio", "%Criterio"), ("10.50", "007", 100)]
+        aspecto = parsear_excel_criterios(_xlsx(filas))["aspectos"][0]
+        assert (aspecto["nombre"], aspecto["criterios"][0]["texto"]) == ("10.50", "007")
+
+    def test_peso_como_texto_o_float(self):
+        filas = [("Aspecto", "Criterio", "%Criterio"), ("X", "A", "40"), (None, "B", 59.5), (None, "C", " 0.5 ")]
+        resultado = parsear_excel_criterios(_xlsx(filas))
+        assert [c["peso_porcentaje"] for c in resultado["aspectos"][0]["criterios"]] == [
+            Decimal("40.00"), Decimal("59.50"), Decimal("0.50"),
+        ]
+        assert resultado["total_peso"] == Decimal("100.00")
+
+    def test_peso_vacio(self):
+        filas = [("Aspecto", "Criterio", "%Criterio"), ("X", "A", None)]
+        with pytest.raises(ExcelParserError, match="^Fila 2: falta el peso$"):
+            parsear_excel_criterios(_xlsx(filas))
+
+    def test_peso_no_numerico(self):
+        filas = [("Aspecto", "Criterio", "%Criterio"), ("X", "A", "diez")]
+        with pytest.raises(ExcelParserError, match="^Fila 2: el peso 'diez' no es un número válido$"):
+            parsear_excel_criterios(_xlsx(filas))
+
+    def test_encabezado_mas_corto_que_los_datos(self):
+        assert parsear_excel_criterios(_xlsx([("Aspecto", "Criterio"), ("X", "A", 100)]))["total_peso"] == 100
+
+    def test_menos_de_tres_columnas(self):
+        with pytest.raises(ExcelParserError, match="al menos 3 columnas"):
+            parsear_excel_criterios(_xlsx([("Aspecto", "Criterio"), ("X", "A")]))
 
 
 # ── Estudiantes ──────────────────────────────────────────────────────────────

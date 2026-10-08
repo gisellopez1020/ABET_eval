@@ -7,15 +7,16 @@ import io
 import pytest
 from openpyxl import Workbook
 
-from app.services import lista_estudiantes
 from app.services.errores import ArchivoInvalido, DatosInvalidos
 from app.services.lista_estudiantes import MIME_XLSX, es_excel, leer_lista, normalizar_email
 
 
-def _xlsx(filas):
+def _xlsx(filas, fusionar=()):
     wb = Workbook()
     for fila in filas:
         wb.active.append(fila)
+    for rango in fusionar:
+        wb.active.merge_cells(rango)
     salida = io.BytesIO()
     wb.save(salida)
     return salida.getvalue()
@@ -56,6 +57,39 @@ class TestFormatoSimple:
         assert leer_lista(contenido, "l.xlsx", None) == ([("ANA", "2021001", None)], [])
 
 
+class TestExcel:
+    """Casos que pandas resolvía solo (dtype=str, keep_default_na=False) y ahora hace openpyxl."""
+
+    def test_codigos_numericos_sin_punto_cero_y_con_ceros_a_la_izquierda(self):
+        contenido = _xlsx([("Nombre", "Codigo"), ("Ana", 2021001.0), ("Beto", "0012"), ("Cira", 2.5e6)])
+        validos, _ = leer_lista(contenido, "l.xlsx", None)
+        assert [codigo for _, codigo, _ in validos] == ["2021001", "0012", "2500000"]
+
+    def test_fila_vacia_intermedia_se_avisa_con_su_numero_de_fila(self):
+        contenido = _xlsx([("Nombre", "Codigo"), ("Ana", "1"), (None, None), ("Eva", "3")])
+        assert leer_lista(contenido, "l.xlsx", None) == (
+            [("ANA", "1", None), ("EVA", "3", None)],
+            ["Fila 3: nombre o código vacío, se omite"],
+        )
+
+    def test_nombre_fusionado_queda_vacio_como_en_pandas(self):
+        contenido = _xlsx([("Nombre", "Codigo"), ("Ana", "1"), (None, "2")], fusionar=["A2:A3"])
+        assert leer_lista(contenido, "l.xlsx", None) == (
+            [("ANA", "1", None)], ["Fila 3: nombre o código vacío, se omite"],
+        )
+
+    def test_encabezados_repetidos_o_vacios_usan_la_primera_columna(self):
+        contenido = _xlsx([("Nombre", None, "Codigo", "Nombre"), ("Ana", "x", "1", "OTRO")])
+        assert leer_lista(contenido, "l.xlsx", None) == ([("ANA", "1", None)], [])
+
+    def test_formato_institucional_con_grupo_numerico(self):
+        contenido = _xlsx([
+            ("Nombre", "Apellido(s)", "Número de ID", "Dirección de correo", "Grupo"),
+            ("Ana", "Ruiz", 2021001, None, 1),
+        ])
+        assert leer_lista(contenido, "l.xlsx", None, seccion_nombre="1") == ([("ANA RUIZ", "2021001", None)], [])
+
+
 class TestFormatoInstitucional:
     ENCABEZADO = "Nombre,Apellido(s),Número de ID,Dirección de correo,Grupo\n"
 
@@ -83,10 +117,9 @@ class TestArchivoInvalido:
         with pytest.raises(ArchivoInvalido, match="^No se pudo leer el archivo Excel: "):
             leer_lista(b"no es un excel", "l.xlsx", None)
 
-    def test_excel_sin_pandas(self, monkeypatch):
-        monkeypatch.setattr(lista_estudiantes, "pd", None)
-        with pytest.raises(ArchivoInvalido, match="^pandas y openpyxl son necesarios para leer Excel$"):
-            leer_lista(_xlsx([("Nombre", "Codigo")]), "l.xlsx", None)
+    def test_excel_vacio(self):
+        with pytest.raises(ArchivoInvalido, match=r"^El Excel debe tener columnas 'Nombre' y 'Codigo'"):
+            leer_lista(_xlsx([]), "l.xlsx", None)
 
     def test_es_datos_invalidos(self):
         assert issubclass(ArchivoInvalido, DatosInvalidos)

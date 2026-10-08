@@ -8,14 +8,8 @@ El parser propaga el nombre del aspecto hacia abajo cuando hay celdas fusionadas
 """
 from decimal import Decimal
 from typing import Any
-import io
 
-try:
-    import pandas as pd
-    import openpyxl
-    _HAS_EXCEL = True
-except ImportError:
-    _HAS_EXCEL = False
+from app.utils.excel_lectura import ExcelIlegible, leer_primera_hoja
 
 
 class ExcelParserError(Exception):
@@ -23,8 +17,8 @@ class ExcelParserError(Exception):
 
 
 def _vacia(v: Any) -> bool:
-    """pandas lee las celdas vacías (y las fusionadas) como NaN, no como None."""
-    return v is None or pd.isna(v) or not str(v).strip()
+    """Celda vacía, fusionada (llega como None) o con solo espacios."""
+    return v is None or not str(v).strip()
 
 
 def _propagar_aspecto(valores: list[Any]) -> list[str]:
@@ -59,27 +53,21 @@ def parsear_excel_criterios(contenido: bytes) -> dict:
 
     Lanza ExcelParserError si el archivo no tiene el formato esperado o los pesos no suman 100.
     """
-    if not _HAS_EXCEL:
-        raise ExcelParserError("pandas y openpyxl son necesarios para parsear Excel")
-
     try:
-        df = pd.read_excel(io.BytesIO(contenido), header=0)
-    except Exception as exc:
+        filas = leer_primera_hoja(contenido)
+    except ExcelIlegible as exc:
         raise ExcelParserError(f"No se pudo leer el archivo Excel: {exc}") from exc
 
-    columnas = list(df.columns)
-    if len(columnas) < 3:
+    # Columnas por posición (el encabezado de la fila 1 no importa): Aspecto, Criterio, %Criterio
+    if not filas or len(filas[0]) < 3:
         raise ExcelParserError(
             "El archivo debe tener al menos 3 columnas: Aspecto, Criterio, %Criterio"
         )
 
-    col_aspecto = columnas[0]
-    col_criterio = columnas[1]
-    col_peso = columnas[2]
-
-    aspectos_raw = _propagar_aspecto(df[col_aspecto].tolist())
-    criterios_raw = df[col_criterio].tolist()
-    pesos_raw = df[col_peso].tolist()
+    datos = filas[1:]
+    aspectos_raw = _propagar_aspecto([f[0] for f in datos])
+    criterios_raw = [f[1] for f in datos]
+    pesos_raw = [f[2] for f in datos]
 
     aspectos: dict[str, list[dict]] = {}
     orden_aspectos: list[str] = []
@@ -90,6 +78,8 @@ def parsear_excel_criterios(contenido: bytes) -> dict:
             continue
         if _vacia(criterio):
             continue
+        if _vacia(peso):
+            raise ExcelParserError(f"Fila {i}: falta el peso")
         try:
             peso_dec = Decimal(str(peso)).quantize(Decimal("0.01"))
         except Exception:

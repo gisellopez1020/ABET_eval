@@ -14,14 +14,10 @@ import io
 import re
 import unicodedata
 from collections import Counter
-from typing import List, NamedTuple, Optional, Tuple
+from typing import Any, List, NamedTuple, Optional, Tuple
 
 from app.services.errores import ArchivoInvalido
-
-try:
-    import pandas as pd
-except ImportError:  # misma dependencia opcional que utils/excel_parser.py
-    pd = None
+from app.utils.excel_lectura import ExcelIlegible, leer_primera_hoja
 
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -130,31 +126,36 @@ def _leer_filas_csv(contenido: bytes) -> List[FilaCruda]:
     ]
 
 
+def _texto(v: Any) -> str:
+    """Toda celda como texto, igual que en el CSV: vacía -> "" y 2021001 -> "2021001" (sin ".0")."""
+    return "" if v is None else str(v)
+
+
 def _leer_filas_excel(contenido: bytes) -> List[FilaCruda]:
-    if pd is None:
-        raise ArchivoInvalido("pandas y openpyxl son necesarios para leer Excel")
     try:
-        # dtype=str: un código como 2021001 no debe llegar como 2021001.0;
-        # keep_default_na=False: las celdas vacías llegan como "" y no como NaN
-        df = pd.read_excel(io.BytesIO(contenido), header=0, dtype=str, keep_default_na=False)
-    except Exception as exc:
+        filas = leer_primera_hoja(contenido)
+    except ExcelIlegible as exc:
         raise ArchivoInvalido(f"No se pudo leer el archivo Excel: {exc}")
 
-    df.columns = [str(c) for c in df.columns]
-    cols = _columnas(list(df.columns))
+    encabezados = [_texto(c) for c in filas[0]] if filas else []
+    cols = _columnas(encabezados)
 
     if not cols.nombre or not cols.codigo:
         raise ArchivoInvalido("El Excel debe tener columnas 'Nombre' y 'Codigo' (o 'Código', o 'Número de ID')")
 
-    def columna(nombre_col: Optional[str]):
-        return df[nombre_col] if nombre_col else [None] * len(df)
+    # Por posición: con encabezados repetidos vale la primera columna, como en _columnas
+    def valor(fila: list, nombre_col: Optional[str]) -> Optional[str]:
+        return _texto(fila[encabezados.index(nombre_col)]) if nombre_col else None
 
     return [
-        (i, _nombre_completo(nombre, apellidos), codigo, email, grupo)
-        for i, (nombre, apellidos, codigo, email, grupo) in enumerate(
-            zip(df[cols.nombre], columna(cols.apellidos), df[cols.codigo], columna(cols.email), columna(cols.grupo)),
-            start=2,
+        (
+            i,
+            _nombre_completo(valor(fila, cols.nombre), valor(fila, cols.apellidos)),
+            valor(fila, cols.codigo),
+            valor(fila, cols.email),
+            valor(fila, cols.grupo),
         )
+        for i, fila in enumerate(filas[1:], start=2)
     ]
 
 
