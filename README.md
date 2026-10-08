@@ -72,6 +72,26 @@ Para configurar el login real con Google y la sincronización con Google Drive (
 
 ---
 
+## Pruebas del backend
+
+Las pruebas usan SQLite en memoria: no necesitan PostgreSQL ni datos cargados. Se pueden correr de dos formas.
+
+**Dentro del contenedor** (con los servicios levantados):
+```bash
+docker-compose exec backend pytest
+```
+
+**Con un entorno virtual local** (desde `backend/`):
+```bash
+python -m venv venv
+venv\Scripts\python -m pip install -r requirements.txt   # Linux/macOS: venv/bin/python -m pip ...
+venv\Scripts\python -m pytest                            # Linux/macOS: venv/bin/python -m pytest
+```
+
+Con el entorno ya creado, solo hace falta la última línea. Para correr un solo archivo: `pytest tests/test_estadisticas.py`.
+
+---
+
 ## Credenciales de desarrollo
 
 | Campo | Valor |
