@@ -1,0 +1,64 @@
+# Instalación para usar la app en una sola máquina (no para programar):
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Usa el mismo .env que docker-compose.yml. Sin código montado ni recarga automática;
+# el frontend va compilado y nginx hace de proxy de /api al backend.
+# Proyecto aparte (contenedores y base de datos propios), pero en los mismos puertos que
+# el de desarrollo: no se pueden levantar los dos a la vez.
+name: abet-eval-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-abet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-abet_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-abet_eval}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-abet} -d ${POSTGRES_DB:-abet_eval}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-abet}:${POSTGRES_PASSWORD:-abet_pass}@postgres:5432/${POSTGRES_DB:-abet_eval}}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-PLACEHOLDER}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-PLACEHOLDER}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/callback}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-PLACEHOLDER}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:5173,http://frontend:5173}
+      GOOGLE_DRIVE_FOLDER_NAME: ${GOOGLE_DRIVE_FOLDER_NAME:-ABET_Eval}
+      SKIP_AUTH: ${SKIP_AUTH:-true}
+    # Las migraciones corren solas en cada arranque (no hay que ejecutar alembic a mano)
+    command: sh -c "alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port 8000"
+    # Publicado porque el login con Google navega directo al backend (VITE_API_URL)
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_SKIP_AUTH: ${SKIP_AUTH:-true}
+    # Mismo puerto que en desarrollo: FRONTEND_URL y FRONTEND_ORIGINS del .env siguen valiendo
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
