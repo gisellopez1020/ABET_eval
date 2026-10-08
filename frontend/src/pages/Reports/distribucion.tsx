@@ -108,29 +108,40 @@ export function GraficaDistribucion({
     ...(paraPDF ? { bottom: MARGEN_INFERIOR_PDF } : {}),
   };
 
+  const grafica = (
+    <BarChart
+      data={filas}
+      layout="vertical"
+      margin={margen}
+      // Con ancho fijo (copia para el PDF)
+      {...(paraPDF ? { width: ancho, height: alto } : {})}
+    >
+      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+      <XAxis type="number" allowDecimals={false} />
+      <YAxis type="category" dataKey="codigo" width={60} tick={{ fontSize: 12 }} />
+      <Tooltip
+        labelFormatter={(codigo: string) => `${codigo} · ${descripcionDe(codigo)}`}
+        contentStyle={{ maxWidth: 360, whiteSpace: 'normal' }}
+      />
+      <Legend />
+      {/* dataKey como función: las etiquetas con puntos ("0.0-2.9") se tomarían como rutas */}
+      {series.map((s) => (
+        <Bar
+          key={s.nombre}
+          name={s.nombre}
+          dataKey={s.valor}
+          stackId="rangos"
+          fill={s.color}
+          isAnimationActive={animar}
+        />
+      ))}
+    </BarChart>
+  );
+
+  if (paraPDF) return grafica;
   return (
     <ResponsiveContainer width={ancho} height={alto}>
-      <BarChart data={filas} layout="vertical" margin={margen}>
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-        <XAxis type="number" allowDecimals={false} />
-        <YAxis type="category" dataKey="codigo" width={60} tick={{ fontSize: 12 }} />
-        <Tooltip
-          labelFormatter={(codigo: string) => `${codigo} · ${descripcionDe(codigo)}`}
-          contentStyle={{ maxWidth: 360, whiteSpace: 'normal' }}
-        />
-        <Legend />
-        {/* dataKey como función: las etiquetas con puntos ("0.0-2.9") se tomarían como rutas */}
-        {series.map((s) => (
-          <Bar
-            key={s.nombre}
-            name={s.nombre}
-            dataKey={s.valor}
-            stackId="rangos"
-            fill={s.color}
-            isAnimationActive={animar}
-          />
-        ))}
-      </BarChart>
+      {grafica}
     </ResponsiveContainer>
   );
 }
@@ -219,11 +230,10 @@ export function PestanasNivel({
           role="tab"
           aria-selected={nivel === n.id}
           onClick={() => onChange(n.id)}
-          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
-            nivel === n.id
+          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${nivel === n.id
               ? 'border-uao-accent text-uao-dark'
               : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
+            }`}
         >
           {n.titulo}
           <span className="ml-2 text-xs text-gray-400">{conteos[n.id]}</span>

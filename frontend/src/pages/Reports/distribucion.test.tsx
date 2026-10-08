@@ -54,16 +54,19 @@ describe('GraficaDistribucion', () => {
     rangos: {}, sin_clasificar: 0, total: 0,
   }));
   const series: Serie[] = RANGOS_LARGOS.map((nombre) => ({ nombre, color: '#000000', valor: () => 1 }));
-  const altoContenedor = (ancho: number | `${number}%`) => {
-    const { container } = render(<GraficaDistribucion filas={filas} series={series} ancho={ancho} animar={false} />);
-    return container.querySelector<HTMLElement>('.recharts-responsive-container')!.style.height;
-  };
+  const renderizar = (ancho: number | `${number}%`) =>
+    render(<GraficaDistribucion filas={filas} series={series} ancho={ancho} animar={false} />).container;
 
-  it('la copia para exportar usa el alto con la leyenda', () => {
-    expect(altoContenedor(900)).toBe(`${altoGrafica(6, RANGOS_LARGOS, 900)}px`);
+  it('la copia para exportar usa el alto con la leyenda, sin ResponsiveContainer', () => {
+    const container = renderizar(900);
+    expect(container.querySelector('.recharts-responsive-container')).toBeNull();
+    const grafica = container.querySelector<HTMLElement>('.recharts-wrapper')!;
+    expect(grafica.style.width).toBe('900px');
+    expect(grafica.style.height).toBe(`${altoGrafica(6, RANGOS_LARGOS, 900)}px`);
   });
 
-  it('la gráfica en pantalla conserva su alto', () => {
-    expect(altoContenedor('100%')).toBe(`${altoAnterior(6)}px`);
+  it('la gráfica en pantalla sigue en un ResponsiveContainer con su alto de siempre', () => {
+    const contenedor = renderizar('100%').querySelector<HTMLElement>('.recharts-responsive-container')!;
+    expect(contenedor.style.height).toBe(`${altoAnterior(6)}px`);
   });
 });
