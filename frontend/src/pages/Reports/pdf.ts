@@ -1,10 +1,7 @@
-// Piezas del PDF del reporte ABET (ReportsPage) que no dependen de React.
+// Piezas del PDF del reporte ABET (ReportsPage).
 
 type RGB = [number, number, number];
 
-// Colores de la "piel" del documento: el granate de marca de la app (barra lateral, botones,
-// encabezados de DataTable) y los grises de Tailwind. La escala de rangos no se toca: va
-// dentro de la imagen capturada de la gráfica.
 export const COLOR_MARCA: RGB = [158, 11, 15];
 export const FONDO_ENCABEZADO_TABLA: RGB = [245, 231, 231];
 export const BORDE_ENCABEZADO_TABLA: RGB = [226, 182, 183];

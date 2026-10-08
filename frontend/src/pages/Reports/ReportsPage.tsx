@@ -24,7 +24,6 @@ const PDF_Y_INICIO = 20;
 const PDF_Y_FIN = 285;
 // Ancho fijo de la gráfica que se captura: el PDF sale igual sin importar la ventana
 const ANCHO_GRAFICA_PDF = 900;
-// Logo arriba a la derecha, a la altura del título (no mueve título ni metadatos)
 const ALTO_LOGO_PDF = 12;
 const Y_LOGO_PDF = 10;
 
@@ -86,7 +85,6 @@ function tablaPDF(doc: jsPDF, titulo: string | null, filas: Fila[], rangos: Rang
     y += 6;
   }
 
-  // Encabezado como el de DataTable: fondo granate tenue, texto granate y borde inferior
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLOR_MARCA);

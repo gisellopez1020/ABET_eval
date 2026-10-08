@@ -41,7 +41,6 @@ HOJA_CONTEO = "Conteo"
 FILA_ENCABEZADO_CONTEO = 5
 SIN_CLASIFICAR = "Sin clasificar"
 COLOR_SIN_CLASIFICAR = "9CA3AF"
-# Misma escala que colorRango del frontend: rojo (rango más bajo) -> ámbar -> verde
 ESCALA_RANGOS = ["C8102E", "FFB300", "2E7D32"]
 
 ENCABEZADOS_DETALLE = [
@@ -126,7 +125,7 @@ def _agregar_logo(ws: Worksheet, ancla: str) -> None:
         logger.warning("Logo no encontrado en %s; el Excel se genera sin logo", LOGO_UAO)
         return
     try:
-        logo = Image(str(LOGO_UAO))   # requiere Pillow
+        logo = Image(str(LOGO_UAO))
     except Exception:
         logger.warning("No se pudo cargar el logo %s; el Excel se genera sin logo", LOGO_UAO, exc_info=True)
         return
