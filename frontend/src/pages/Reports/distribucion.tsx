@@ -50,6 +50,43 @@ export function seriesDe(filas: Fila[], rangos: RangoCalificacion[]): Serie[] {
   ];
 }
 
+// Leyenda de Recharts (DefaultLegendContent, fuente heredada de 16px): una línea mide 24px y
+// cada ítem ocupa ícono 14 + 4 + margen 10 más el texto. El ancho por carácter es holgado a
+// propósito: sobrestimar solo deja blanco, subestimar le quita alto a las barras.
+const MARGEN_X_GRAFICA = 20;
+export const ALTO_LINEA_LEYENDA = 24;
+const ANCHO_CARACTER_LEYENDA = 9;
+const EXTRA_ITEM_LEYENDA = 28;
+// Aire bajo la leyenda en la copia exportada
+export const MARGEN_INFERIOR_PDF = 8;
+
+/** Líneas que ocupa la leyenda: los ítems se acomodan uno tras otro y saltan de línea al no caber. */
+export function lineasLeyenda(nombres: string[], anchoDisponible: number): number {
+  let lineas = 1;
+  let usado = 0;
+  for (const nombre of nombres) {
+    const item = nombre.length * ANCHO_CARACTER_LEYENDA + EXTRA_ITEM_LEYENDA;
+    if (usado > 0 && usado + item > anchoDisponible) {
+      lineas++;
+      usado = 0;
+    }
+    usado += item;
+  }
+  return lineas;
+}
+
+/**
+ * Alto de la gráfica. En pantalla (ancho en %) es el de siempre y Recharts le descuenta la
+ * leyenda a las barras. Para exportar (ancho fijo en px) se suma el alto estimado de la
+ * leyenda, para que con muchos rangos las barras no queden aplastadas.
+ */
+export function altoGrafica(cantidadFilas: number, nombresSeries: string[], ancho: number | `${number}%`): number {
+  const base = Math.max(200, cantidadFilas * 40 + 80);
+  if (typeof ancho !== 'number') return base;
+  const lineas = lineasLeyenda(nombresSeries, ancho - 2 * MARGEN_X_GRAFICA);
+  return base + lineas * ALTO_LINEA_LEYENDA + MARGEN_INFERIOR_PDF;
+}
+
 /** Gráfica de barras apiladas; la usan la pantalla y la copia oculta que se exporta al PDF. */
 export function GraficaDistribucion({
   filas,
@@ -63,10 +100,17 @@ export function GraficaDistribucion({
   animar?: boolean;
 }) {
   const descripcionDe = (codigo: string) => filas.find((f) => f.codigo === codigo)?.descripcion ?? '';
+  const paraPDF = typeof ancho === 'number';
+  const alto = altoGrafica(filas.length, series.map((s) => s.nombre), ancho);
+  const margen = {
+    left: MARGEN_X_GRAFICA,
+    right: MARGEN_X_GRAFICA,
+    ...(paraPDF ? { bottom: MARGEN_INFERIOR_PDF } : {}),
+  };
 
   return (
-    <ResponsiveContainer width={ancho} height={Math.max(200, filas.length * 40 + 80)}>
-      <BarChart data={filas} layout="vertical" margin={{ left: 20, right: 20 }}>
+    <ResponsiveContainer width={ancho} height={alto}>
+      <BarChart data={filas} layout="vertical" margin={margen}>
         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
         <XAxis type="number" allowDecimals={false} />
         <YAxis type="category" dataKey="codigo" width={60} tick={{ fontSize: 12 }} />

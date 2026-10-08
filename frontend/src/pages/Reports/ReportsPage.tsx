@@ -12,6 +12,10 @@ import { Curso, Seccion, RangoCalificacion, ReporteABETResponse } from '../../ty
 import {
   DistribucionNivel, Fila, GraficaDistribucion, NIVELES, Nivel, PestanasNivel, SIN_CLASIFICAR, seriesDe,
 } from './distribucion';
+import {
+  BORDE_ENCABEZADO_TABLA, COLOR_MARCA, COLOR_METADATOS, COLOR_TEXTO, FONDO_ENCABEZADO_TABLA, LogoPDF,
+  cargarLogo, conTextoAlineado,
+} from './pdf';
 
 // Página A4 vertical (mm): márgenes del contenido
 const PDF_X = 14;
@@ -20,6 +24,8 @@ const PDF_Y_INICIO = 20;
 const PDF_Y_FIN = 285;
 // Ancho fijo de la gráfica que se captura: el PDF sale igual sin importar la ventana
 const ANCHO_GRAFICA_PDF = 900;
+const ALTO_LOGO_PDF = 12;
+const Y_LOGO_PDF = 10;
 
 /**
  * Dibuja el título de la sección y la gráfica capturada, a todo el ancho y con su
@@ -38,12 +44,20 @@ function imagenPDF(doc: jsPDF, titulo: string, canvas: HTMLCanvasElement, y: num
   if (y + altoTitulo + alto > PDF_Y_FIN) { doc.addPage(); y = PDF_Y_INICIO; }
 
   doc.setFontSize(12);
-  doc.setTextColor(31, 56, 100);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLOR_MARCA);
   doc.text(titulo, PDF_X, y);
+  doc.setFont('helvetica', 'normal');
   y += altoTitulo;
 
   doc.addImage(canvas, 'PNG', PDF_X + (PDF_ANCHO - ancho) / 2, y, ancho, alto);
   return y + alto + 4;
+}
+
+/** Logo de la UAO arriba a la derecha, con su proporción. */
+function logoPDF(doc: jsPDF, logo: LogoPDF) {
+  const ancho = (logo.ancho / logo.alto) * ALTO_LOGO_PDF;
+  doc.addImage(logo.datos, 'PNG', PDF_X + PDF_ANCHO - ancho, Y_LOGO_PDF, ancho, ALTO_LOGO_PDF);
 }
 
 /**
@@ -64,19 +78,27 @@ function tablaPDF(doc: jsPDF, titulo: string | null, filas: Fila[], rangos: Rang
   if (y > 250) { doc.addPage(); y = 20; }
   if (titulo) {
     doc.setFontSize(12);
-    doc.setTextColor(31, 56, 100);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLOR_MARCA);
     doc.text(titulo, 14, y);
+    doc.setFont('helvetica', 'normal');
     y += 6;
   }
 
   doc.setFontSize(8);
-  doc.setTextColor(0, 0, 0);
-  doc.setFillColor(240, 240, 240);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLOR_MARCA);
+  doc.setFillColor(...FONDO_ENCABEZADO_TABLA);
   doc.rect(14, y, 182, 7, 'F');
+  doc.setDrawColor(...BORDE_ENCABEZADO_TABLA);
+  doc.setLineWidth(0.3);
+  doc.line(14, y + 7, 196, y + 7);
   doc.text('Código', 16, y + 5);
   columnas.forEach((c, i) => {
     doc.text(recortar(c.nombre, ancho - 1), xDatos + i * ancho + ancho / 2, y + 5, { align: 'center' });
   });
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLOR_TEXTO);
   y += 8;
 
   filas.forEach((fila, i) => {
@@ -133,6 +155,7 @@ export function ReportsPage() {
   const capturarGrafica = (nivelGrafica: Nivel) => {
     const nodo = graficasPDF.current?.querySelector<HTMLElement>(`[data-grafica="${nivelGrafica}"]`);
     if (!nodo) throw new Error(`No se encontró la gráfica "${nivelGrafica}" para exportar`);
+    // Dentro de conTextoAlineado (handleExportPDF): sin él la leyenda sale corrida y cortada
     return html2canvas(nodo, {
       scale: 2,
       backgroundColor: '#ffffff',
@@ -149,25 +172,33 @@ export function ReportsPage() {
     if (!curso || !reporte) return;
     setExporting(true);
     try {
-      const [canvasCriterios, canvasResultados] = await Promise.all([
-        capturarGrafica('criterios'),
-        capturarGrafica('resultados'),
+      const [[canvasCriterios, canvasResultados], logo] = await Promise.all([
+        conTextoAlineado(() => Promise.all([capturarGrafica('criterios'), capturarGrafica('resultados')])),
+        cargarLogo(),
       ]);
 
       const doc = new jsPDF();
       const fecha = new Date().toLocaleDateString('es-CO');
       const seccion = secciones.find((s) => s.id === seccionId);
 
+      if (logo) logoPDF(doc, logo);
+
       doc.setFontSize(16);
-      doc.setTextColor(31, 56, 100);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLOR_MARCA);
       doc.text('Reporte ABET', 14, 20);
+      doc.setFont('helvetica', 'normal');
 
       doc.setFontSize(10);
-      doc.setTextColor(80, 80, 80);
+      doc.setTextColor(...COLOR_METADATOS);
       doc.text(`Curso: ${curso.nombre} (${curso.codigo})`, 14, 30);
       doc.text(`Período: ${curso.periodo}`, 14, 36);
       doc.text(`Docente: ${curso.docente_email}`, 14, 42);
       doc.text(`Sección: ${seccion?.nombre ?? 'Todas'} · Generado: ${fecha}`, 14, 48);
+
+      doc.setDrawColor(...COLOR_MARCA);
+      doc.setLineWidth(0.5);
+      doc.line(PDF_X, 53, PDF_X + PDF_ANCHO, 53);
 
       let y = 60;
       y = imagenPDF(doc, 'Distribución por Criterio ABET', canvasCriterios, y);

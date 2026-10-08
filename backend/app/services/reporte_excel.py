@@ -1,23 +1,27 @@
 """
 Libros Excel de Estadísticas ABET por actividad (openpyxl, sin base de datos).
 
-- Hoja "Conteo": una fila por Criterio ABET con la cantidad de estudiantes en
-  cada rango del curso y una torta por fila.
+- Hoja "Conteo": logo de la UAO arriba (filas 1-4) y debajo una fila por
+  Criterio ABET con la cantidad de estudiantes en cada rango del curso y una
+  torta por fila.
 - Hojas de detalle (una por equipo o estudiante): mismo formato que la rúbrica
   del profesor (Punto del informe / Aspecto evaluado / Criterio / Cumple /
   Nota informe / Nota del proyecto / Cantidad estudiantes). Los valores son
   fijos, no fórmulas: la app es la fuente de verdad.
 """
 import io
+import logging
 import re
 from dataclasses import dataclass
 from itertools import groupby
+from pathlib import Path
 from typing import Hashable, Optional, Sequence
 
 from openpyxl import Workbook
 from openpyxl.chart import PieChart, Reference
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.series import DataPoint
+from openpyxl.drawing.image import Image
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -25,12 +29,18 @@ from openpyxl.worksheet.worksheet import Worksheet
 from app.schemas.reporte import RangoReporte, ReporteCriterioItem
 from app.utils.excel_seguro import escribir_texto, texto_seguro_para_excel
 
+logger = logging.getLogger("abet.reporte_excel")
+
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
+LOGO_UAO = Path(__file__).resolve().parent.parent / "assets" / "logo-uao.png"
+ALTO_LOGO_PX = 60   # filas 1-3 con el alto por defecto (20 px)
+
 HOJA_CONTEO = "Conteo"
+# Filas 1-4 reservadas para el logo (haya o no archivo, el formato no cambia)
+FILA_ENCABEZADO_CONTEO = 5
 SIN_CLASIFICAR = "Sin clasificar"
 COLOR_SIN_CLASIFICAR = "9CA3AF"
-# Misma escala que colorRango del frontend: rojo (rango más bajo) -> ámbar -> verde
 ESCALA_RANGOS = ["C8102E", "FFB300", "2E7D32"]
 
 ENCABEZADOS_DETALLE = [
@@ -109,6 +119,20 @@ def _estilo(ws: Worksheet, rango: str, alineacion: Alignment, borde: bool = True
                 celda.border = _BORDE
 
 
+def _agregar_logo(ws: Worksheet, ancla: str) -> None:
+    """Inserta LOGO_UAO con ALTO_LOGO_PX de alto; sin archivo (o sin Pillow) solo lo registra."""
+    if not LOGO_UAO.is_file():
+        logger.warning("Logo no encontrado en %s; el Excel se genera sin logo", LOGO_UAO)
+        return
+    try:
+        logo = Image(str(LOGO_UAO))
+    except Exception:
+        logger.warning("No se pudo cargar el logo %s; el Excel se genera sin logo", LOGO_UAO, exc_info=True)
+        return
+    logo.width, logo.height = round(logo.width * ALTO_LOGO_PX / logo.height), ALTO_LOGO_PX
+    ws.add_image(logo, ancla)
+
+
 def _escribir_conteo(ws: Worksheet, rangos: Sequence[RangoReporte], criterios: Sequence[ReporteCriterioItem]) -> None:
     con_sin_clasificar = any(c.sin_clasificar for c in criterios)
     columnas = [r.etiqueta for r in rangos] + ([SIN_CLASIFICAR] if con_sin_clasificar else [])
@@ -116,26 +140,32 @@ def _escribir_conteo(ws: Worksheet, rangos: Sequence[RangoReporte], criterios: S
         [COLOR_SIN_CLASIFICAR] if con_sin_clasificar else []
     )
     ultima_col = len(columnas) + 1
+    encabezado = FILA_ENCABEZADO_CONTEO
 
-    ws.append(["Calificación", *columnas])
-    for c in criterios:
-        ws.append([f"ABET {c.codigo}", *(c.rangos.get(r.etiqueta, 0) for r in rangos),
-                   *([c.sin_clasificar] if con_sin_clasificar else [])])
+    _agregar_logo(ws, "A1")
+    filas = [["Calificación", *columnas]] + [
+        [f"ABET {c.codigo}", *(c.rangos.get(r.etiqueta, 0) for r in rangos),
+         *([c.sin_clasificar] if con_sin_clasificar else [])]
+        for c in criterios
+    ]
+    for i, valores in enumerate(filas):
+        for j, valor in enumerate(valores, start=1):
+            ws.cell(encabezado + i, j, valor)
 
     ws.column_dimensions["A"].width = 16
     for i in range(2, ultima_col + 1):
         ws.column_dimensions[get_column_letter(i)].width = 14
-    for celda in ws[1]:
+    for celda in ws[encabezado]:
         texto_seguro_para_excel(celda)   # etiquetas de rango del docente
         celda.font = Font(bold=True)
         celda.fill = _FONDO_ENCABEZADO
-    _estilo(ws, f"A1:{get_column_letter(ultima_col)}{len(criterios) + 1}", _CENTRADO)
+    _estilo(ws, f"A{encabezado}:{get_column_letter(ultima_col)}{encabezado + len(criterios)}", _CENTRADO)
 
     # Una torta por fila, apiladas a la derecha de la tabla
     ancla = get_column_letter(ultima_col + 2)
-    categorias = Reference(ws, min_col=2, max_col=ultima_col, min_row=1, max_row=1)
+    categorias = Reference(ws, min_col=2, max_col=ultima_col, min_row=encabezado, max_row=encabezado)
     for i, c in enumerate(criterios):
-        fila = i + 2
+        fila = encabezado + 1 + i
         torta = PieChart()
         torta.title = f"ABET {c.codigo}"
         torta.add_data(Reference(ws, min_col=2, max_col=ultima_col, min_row=fila, max_row=fila), from_rows=True)
@@ -148,7 +178,7 @@ def _escribir_conteo(ws: Worksheet, rangos: Sequence[RangoReporte], criterios: S
             punto.graphicalProperties.solidFill = color
             torta.series[0].dPt.append(punto)
         torta.width, torta.height = 12, 7.5
-        ws.add_chart(torta, f"{ancla}{1 + i * 16}")
+        ws.add_chart(torta, f"{ancla}{encabezado + i * 16}")
 
 
 def _combinar(ws: Worksheet, columna: str, inicio: int, fin: int, valor, texto_usuario: bool = False) -> None:
