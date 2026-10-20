@@ -3,6 +3,7 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.curso import RANGOS_CALIFICACION_DEFAULT
+from app.models.ra_abet_catalogo import PROGRAMA_DEFAULT
 
 MAX_RA_ABET = 10
 MAX_RANGOS = 10
@@ -80,6 +81,7 @@ class CursoCreate(BaseModel):
     nombre: str
     codigo: str
     periodo: str
+    programa: str = PROGRAMA_DEFAULT
     # Códigos de ra_abet_catalogo; su existencia se valida en CursoService (requiere BD)
     ra_abet: List[str] = []
     rangos_calificacion: List[RangoCalificacion] = Field(default_factory=_rangos_default)
@@ -88,6 +90,16 @@ class CursoCreate(BaseModel):
     @classmethod
     def validar_ra_abet(cls, v: List[str]) -> List[str]:
         return limpiar_ra_abet(v)
+
+    @field_validator("programa")
+    @classmethod
+    def validar_programa(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("La carrera no puede estar vacía")
+        if len(v) > 200:
+            raise ValueError("La carrera admite máximo 200 caracteres")
+        return v
 
     @field_validator("rangos_calificacion")
     @classmethod
@@ -99,8 +111,21 @@ class CursoUpdate(BaseModel):
     nombre: Optional[str] = None
     codigo: Optional[str] = None
     periodo: Optional[str] = None
+    programa: Optional[str] = None
     ra_abet: Optional[List[str]] = None
     rangos_calificacion: Optional[List[RangoCalificacion]] = None
+
+    @field_validator("programa")
+    @classmethod
+    def validar_programa(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("La carrera no puede estar vacía")
+        if len(v) > 200:
+            raise ValueError("La carrera admite máximo 200 caracteres")
+        return v
 
     @field_validator("ra_abet")
     @classmethod
@@ -122,6 +147,7 @@ class CursoOut(BaseModel):
     nombre: str
     codigo: str
     periodo: str
+    programa: str = PROGRAMA_DEFAULT
     docente_email: str
     ra_abet: List[str] = []
     rangos_calificacion: List[RangoCalificacion] = Field(default_factory=_rangos_default)

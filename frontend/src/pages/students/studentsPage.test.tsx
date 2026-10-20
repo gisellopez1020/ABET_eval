@@ -30,6 +30,7 @@ const CONFIRMACION =
 beforeEach(() => {
   vi.mocked(cursosApi.list).mockResolvedValue([
     { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+      programa: 'Ingeniería Informática',
       ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
   ]);
   vi.mocked(seccionesApi.list).mockResolvedValue([{ id: 10, nombre: 'Grupo A', curso_id: 1, activo: true }]);
@@ -132,6 +133,7 @@ describe('StudentsPage — crear/editar estudiante como diálogo', () => {
 
 const CURSO = (id: number, nombre: string, periodo = '2026-2') => ({
   id, nombre, codigo: `C${id}`, periodo, docente_email: 'd@uao.edu.co',
+  programa: 'Ingeniería Informática',
   ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01',
 });
 const est = (id: number, nombre: string, seccion_id: number, extra: object = {}) =>

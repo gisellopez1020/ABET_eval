@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { BookOpen, CalendarDays, Layers3, Users, X } from 'lucide-react';
+import { BookOpen, CalendarDays, GraduationCap, Layers3, Users, X } from 'lucide-react';
 
 import { Button } from '../../../components/ui/Button';
 import { Dialog } from '../../../components/ui/Dialog';
@@ -64,6 +64,14 @@ export function CourseDetailsModal({ course, stats, onClose, onEdit }: CourseDet
               Período
             </div>
             <p className="text-lg font-medium text-gray-900">{course.periodo}</p>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700">
+              <GraduationCap size={16} className="text-[#9E0B0F]" />
+              Carrera
+            </div>
+            <p className="text-lg font-medium text-gray-900">{course.programa}</p>
           </div>
         </div>
 

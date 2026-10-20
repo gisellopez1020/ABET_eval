@@ -30,6 +30,7 @@ const DETALLE_409 = 'No se puede eliminar al estudiante: tiene calificaciones re
 beforeEach(() => {
   vi.mocked(cursosApi.get).mockResolvedValue(
     { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+      programa: 'Ingeniería Informática',
       ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
   );
   vi.mocked(seccionesApi.list).mockResolvedValue([{ id: 10, nombre: 'Grupo A', curso_id: 1, activo: true }]);

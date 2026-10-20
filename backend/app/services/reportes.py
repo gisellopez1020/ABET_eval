@@ -168,11 +168,11 @@ class ReporteService:
 
         # Catálogo: Criterios vinculados, sus RA padre y los Criterios hermanos
         ra_abet = RaAbetRepository(self.db)
-        catalogo = {c.codigo: c for c in ra_abet.por_codigos(codigos_vinculados)}
+        catalogo = {c.codigo: c for c in ra_abet.por_codigos(codigos_vinculados, curso.programa)}
         padres = {c.codigo_padre for c in catalogo.values() if c.codigo_padre}
-        ras = {r.codigo: r for r in ra_abet.por_codigos(padres)}
+        ras = {r.codigo: r for r in ra_abet.por_codigos(padres, curso.programa)}
         hijos: dict[str, list[RaAbetCatalogo]] = defaultdict(list)
-        for c in ra_abet.hijos_de(padres):
+        for c in ra_abet.hijos_de(padres, curso.programa):
             hijos[c.codigo_padre].append(c)
 
         criterios_out = []

@@ -162,8 +162,11 @@ class TestImportar:
 
     def test_actualizar_no_pisa_campos_no_enviados(self, client):
         client.post("/catalogo/ra-abet", json=_ra("2.1", programa="Ingeniería de Sistemas"))
-        client.post("/catalogo/ra-abet/importar", json={"items": [_ra("2.1", descripcion="Nueva")]})
-        ra = client.get("/catalogo/ra-abet").json()[0]
+        client.post(
+            "/catalogo/ra-abet/importar",
+            json={"items": [_ra("2.1", programa="Ingeniería de Sistemas", descripcion="Nueva")]},
+        )
+        ra = client.get("/catalogo/ra-abet", params={"programa": "Ingeniería de Sistemas"}).json()[0]
         assert ra["descripcion"] == "Nueva"
         assert ra["programa"] == "Ingeniería de Sistemas"
 

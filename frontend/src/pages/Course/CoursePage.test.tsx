@@ -26,6 +26,7 @@ vi.mock('../../api/catalogo', () => ({ catalogoRaAbetApi: { list: vi.fn() } }));
 
 const CURSO: Curso = {
   id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+  programa: 'Ingeniería Informática',
   ra_abet: [], rangos_calificacion: RANGOS_CALIFICACION_DEFAULT, activo: true, created_at: '2026-01-01',
 };
 const actividad = (id: number, nombre: string, tipo: 'grupal' | 'individual', total: string): Actividad => ({

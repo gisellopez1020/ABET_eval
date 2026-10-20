@@ -11,8 +11,7 @@ import { parseRaAbetCsv, RaAbetCsvItem } from '../raAbetCsv';
 // memorizan, así que siempre son los actuales.
 export function useImportarRaAbet(
   catalogo: RaAbet[],
-  porCodigo: Map<string, RaAbet>,
-  hijosPorPadre: Map<string, RaAbet[]>,
+  programa: string,
   onImportado: (result: RaAbetImportResultado) => Promise<void>,
 ) {
   const [csvModal, setCsvModal] = useState(false);
@@ -21,6 +20,21 @@ export function useImportarRaAbet(
   const [csvError, setCsvError] = useState('');
   const [csvLoading, setCsvLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const catalogoPrograma = useMemo(
+    () => catalogo.filter((ra) => ra.programa === programa.trim()),
+    [catalogo, programa],
+  );
+  const porCodigo = useMemo(
+    () => new Map(catalogoPrograma.map((ra) => [ra.codigo, ra])),
+    [catalogoPrograma],
+  );
+  const hijosPorPadre = useMemo(() => {
+    const hijos = new Map<string, RaAbet[]>();
+    for (const ra of catalogoPrograma) {
+      if (ra.codigo_padre) hijos.set(ra.codigo_padre, [...(hijos.get(ra.codigo_padre) ?? []), ra]);
+    }
+    return hijos;
+  }, [catalogoPrograma]);
 
   const closeCsvModal = () => {
     setCsvModal(false);
@@ -36,8 +50,8 @@ export function useImportarRaAbet(
     setCsvError('');
     const reader = new FileReader();
     reader.onload = (e) => {
-      // Se valida contra el catálogo actual: padres existentes y que nadie cambie de nivel
-      const result = parseRaAbetCsv(decodeCsvBytes(e.target?.result as ArrayBuffer), catalogo);
+      // Cada colección se valida solo contra sus propios códigos y padres.
+      const result = parseRaAbetCsv(decodeCsvBytes(e.target?.result as ArrayBuffer), catalogoPrograma);
       if (result.ok) {
         setCsvPreview(result.items);
       } else {
@@ -58,7 +72,8 @@ export function useImportarRaAbet(
     }
     return orden.map((codigoRa) => {
       const delArchivo = enArchivo.get(codigoRa);
-      const existente = porCodigo.get(codigoRa);
+      const resultadoExistente = porCodigo.get(codigoRa);
+      const existente = resultadoExistente?.programa === programa ? resultadoExistente : undefined;
       const criterios = csvPreview.filter((item) => item.codigo_padre === codigoRa);
       // Pesos tras importar: los del archivo + los Criterios existentes de ese RA que el archivo no toca
       const pesosFinales = [
@@ -80,6 +95,10 @@ export function useImportarRaAbet(
 
   const handleCsvImport = async () => {
     if (csvPreview.length === 0) return;
+    if (!programa.trim()) {
+      setCsvError('Indica la carrera a la que pertenecen estos Student Outcomes.');
+      return;
+    }
     setCsvLoading(true);
     setCsvError('');
     try {
@@ -89,6 +108,7 @@ export function useImportarRaAbet(
           so: item.so,
           competencia: item.competencia,
           descripcion: item.descripcion,
+          programa: programa.trim(),
           ...(item.codigo_padre !== null ? { codigo_padre: item.codigo_padre, peso: item.peso ?? undefined } : {}),
         }))
       );

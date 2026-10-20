@@ -26,15 +26,21 @@ const base = '/catalogo/ra-abet';
 const path = (codigo: string) => `${base}/${encodeURIComponent(codigo)}`;
 
 export const catalogoRaAbetApi = {
-  /** `soloRaiz`: solo Resultados de Aprendizaje, sin Criterios (p. ej. para el selector del curso). */
-  list: ({ soloRaiz = false }: { soloRaiz?: boolean } = {}) =>
+  /** `soloRaiz`: Resultados de Aprendizaje; `programa`: limita los resultados a una carrera. */
+  list: ({ soloRaiz = false, programa }: { soloRaiz?: boolean; programa?: string } = {}) =>
     apiClient
-      .get<RaAbet[]>(base, { params: soloRaiz ? { solo_raiz: true } : undefined })
+      .get<RaAbet[]>(base, {
+        params: {
+          ...(soloRaiz ? { solo_raiz: true } : {}),
+          ...(programa ? { programa } : {}),
+        },
+      })
       .then((r) => r.data),
   create: (data: RaAbetCreate) => apiClient.post<RaAbet>(base, data).then((r) => r.data),
-  update: (codigo: string, data: RaAbetUpdate) =>
-    apiClient.put<RaAbet>(path(codigo), data).then((r) => r.data),
-  delete: (codigo: string) => apiClient.delete(path(codigo)).then((r) => r.data),
+  update: (codigo: string, programa: string, data: RaAbetUpdate) =>
+    apiClient.put<RaAbet>(path(codigo), data, { params: { programa } }).then((r) => r.data),
+  delete: (codigo: string, programa: string) =>
+    apiClient.delete(path(codigo), { params: { programa } }).then((r) => r.data),
   /** Crea los códigos nuevos y actualiza los existentes en una sola transacción. */
   importar: (items: RaAbetCreate[]) =>
     apiClient.post<RaAbetImportResultado>(`${base}/importar`, { items }).then((r) => r.data),

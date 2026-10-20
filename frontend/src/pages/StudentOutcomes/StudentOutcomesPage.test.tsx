@@ -37,6 +37,7 @@ describe('StudentOutcomesPage — eliminar del catálogo', () => {
     const user = userEvent.setup();
 
     render(<StudentOutcomesPage />);
+    await conCatalogo('Ingeniería');
 
     await user.click(await screen.findByRole('button', { name: 'Eliminar 2.1' }));
     expect(screen.getByText('¿Eliminar el Resultado de Aprendizaje "2.1" del catálogo?')).toBeTruthy();
@@ -50,7 +51,7 @@ describe('StudentOutcomesPage — eliminar del catálogo', () => {
     // La fila sigue en la tabla
     expect(screen.getByRole('button', { name: 'Eliminar 2.1' })).toBeTruthy();
     expect(catalogoRaAbetApi.delete).toHaveBeenCalledTimes(1);
-    expect(catalogoRaAbetApi.delete).toHaveBeenCalledWith('2.1');
+    expect(catalogoRaAbetApi.delete).toHaveBeenCalledWith('2.1', 'Ingeniería');
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 
@@ -59,6 +60,7 @@ describe('StudentOutcomesPage — eliminar del catálogo', () => {
     const user = userEvent.setup();
 
     render(<StudentOutcomesPage />);
+    await conCatalogo('Ingeniería');
 
     await user.click(await screen.findByRole('button', { name: 'Eliminar 2.1' }));
     await user.click(screen.getByRole('button', { name: 'Eliminar' }));
@@ -89,7 +91,15 @@ const CATALOGO = [
 const fila = (codigo: string) =>
   screen.getAllByRole('row').find((tr) => tr.querySelector('td')?.textContent?.trim() === codigo) as HTMLElement;
 const celdas = (codigo: string) => Array.from(fila(codigo).querySelectorAll('td')).map((td) => td.textContent);
-const conCatalogo = async () => { await screen.findByText('Diseña soluciones'); };
+const conCatalogo = async (programa = 'Ingeniería Informática') => {
+  await screen.findByRole('combobox', { name: 'Selecciona la carrera' });
+  await screen.findByRole('option', { name: programa });
+  await userEvent.setup().selectOptions(
+    screen.getByRole('combobox', { name: 'Selecciona la carrera' }),
+    programa,
+  );
+  await screen.findByText(/Diseña soluciones/);
+};
 
 describe('StudentOutcomesPage — listado', () => {
   beforeEach(() => {
@@ -119,7 +129,28 @@ describe('StudentOutcomesPage — listado', () => {
     vi.mocked(catalogoRaAbetApi.list).mockResolvedValue([]);
     render(<StudentOutcomesPage />);
 
-    expect(await screen.findByText(/El catálogo está vacío\. Impórtalo desde un CSV/)).toBeTruthy();
+    expect(await screen.findByText('Selecciona una carrera para ver sus Student Outcomes.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Agregar' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('filtra los resultados y criterios según la carrera seleccionada', async () => {
+    vi.mocked(catalogoRaAbetApi.list).mockResolvedValue([
+      ...CATALOGO,
+      { ...ra('8.1', 'Gestión', 'Gestiona procesos'), programa: 'Ingeniería Biomédica' },
+      { ...crit('8.1.1', '8.1', 1, 'Gestión', 'Analiza procesos'), programa: 'Ingeniería Biomédica' },
+    ]);
+    const user = userEvent.setup();
+    render(<StudentOutcomesPage />);
+    await conCatalogo();
+
+    expect(screen.getByText('Diseña soluciones')).toBeTruthy();
+    expect(screen.queryByText('Gestiona procesos')).toBeNull();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Selecciona la carrera' }), 'Ingeniería Biomédica');
+
+    expect(screen.getByText('Gestiona procesos')).toBeTruthy();
+    expect(screen.getByText('Analiza procesos')).toBeTruthy();
+    expect(screen.queryByText('Diseña soluciones')).toBeNull();
   });
 
   it('si falla la carga muestra el error', async () => {
@@ -135,25 +166,98 @@ describe('StudentOutcomesPage — agregar', () => {
     vi.mocked(catalogoRaAbetApi.list).mockResolvedValue(CATALOGO);
   });
 
+  describe('StudentOutcomesPage — importar por carrera', () => {
+    it('asigna la carrera seleccionada a todos los Student Outcomes del CSV', async () => {
+      vi.mocked(catalogoRaAbetApi.list).mockResolvedValue([]);
+      vi.mocked(catalogoRaAbetApi.importar).mockResolvedValue({ creados: 1, actualizados: 0 });
+      const user = userEvent.setup();
+      render(<StudentOutcomesPage />);
+
+      await user.click(screen.getByRole('button', { name: 'Importar CSV' }));
+      await user.selectOptions(
+        screen.getByRole('combobox', { name: 'Colección de Student Outcomes' }),
+        '__nueva_carrera__',
+      );
+      await user.type(screen.getByLabelText('Nombre de la nueva colección'), 'Ingeniería Industrial');
+
+      const file = new File(
+        ['Codigo,Competencia,Descripcion\n5.1,Optimización,Optimiza procesos\n'],
+        'outcomes.csv',
+        { type: 'text/csv' },
+      );
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(input, file);
+      await screen.findByText('5.1');
+      await user.click(screen.getByRole('button', { name: 'Importar' }));
+
+      await waitFor(() => expect(catalogoRaAbetApi.importar).toHaveBeenCalledWith([
+        expect.objectContaining({
+          codigo: '5.1',
+          programa: 'Ingeniería Industrial',
+        }),
+      ]));
+    });
+
+    it('lista las colecciones existentes en el selector de importación', async () => {
+      vi.mocked(catalogoRaAbetApi.list).mockResolvedValue([
+        { codigo: '2.1', so: '2', competencia: 'Diseño', descripcion: 'Diseña', programa: 'Ingeniería Informática', codigo_padre: null, peso: null },
+        { codigo: '4.1', so: '4', competencia: 'Ética', descripcion: 'Actúa con ética', programa: 'Ingeniería Industrial', codigo_padre: null, peso: null },
+      ]);
+      const user = userEvent.setup();
+      render(<StudentOutcomesPage />);
+
+      await user.click(screen.getByRole('button', { name: 'Importar CSV' }));
+
+      const selector = screen.getByRole('combobox', { name: 'Colección de Student Outcomes' });
+      expect(within(selector).getByRole('option', { name: 'Ingeniería Informática' })).toBeTruthy();
+      expect(within(selector).getByRole('option', { name: 'Ingeniería Industrial' })).toBeTruthy();
+    });
+
+    it('permite crear el mismo código en una colección distinta', async () => {
+      vi.mocked(catalogoRaAbetApi.list).mockResolvedValue([
+        { codigo: '2.1', so: '2', competencia: 'Diseño', descripcion: 'Diseña soluciones', programa: 'Ingeniería Informática', codigo_padre: null, peso: null },
+      ]);
+      vi.mocked(catalogoRaAbetApi.importar).mockResolvedValue({ creados: 1, actualizados: 0 });
+      const user = userEvent.setup();
+      render(<StudentOutcomesPage />);
+      await conCatalogo();
+      await user.click(screen.getByRole('button', { name: 'Importar CSV' }));
+      const modal = within(screen.getByRole('dialog', { name: 'Importar Student Outcomes desde CSV' }));
+      await user.selectOptions(
+        modal.getByRole('combobox', { name: 'Colección de Student Outcomes' }),
+        '__nueva_carrera__',
+      );
+      await user.type(modal.getByLabelText('Nombre de la nueva colección'), 'Ingeniería Industrial');
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(
+        input,
+        new File(['Codigo,Competencia,Descripcion\n2.1,Diseño,Otro resultado\n'], 'outcomes.csv', { type: 'text/csv' }),
+      );
+      await modal.findByText('Vista previa: 1 nuevo, 0 actualizan');
+
+      await user.click(modal.getByRole('button', { name: 'Importar' }));
+
+      await waitFor(() => expect(catalogoRaAbetApi.importar).toHaveBeenCalledWith([
+        expect.objectContaining({
+          codigo: '2.1',
+          programa: 'Ingeniería Industrial',
+          descripcion: 'Otro resultado',
+        }),
+      ]));
+      expect(await screen.findByText('Importación completa: 1 nuevo(s), 0 actualizado(s).')).toBeTruthy();
+    });
+  });
+
   const abrirMenu = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(screen.getByRole('button', { name: /agregar/i }));
     return screen.getByRole('menu');
   };
 
-  it('el menú ofrece RA o Criterio; sin RAs el Criterio está deshabilitado', async () => {
+  it('requiere seleccionar una carrera antes de agregar resultados', async () => {
     vi.mocked(catalogoRaAbetApi.list).mockResolvedValue([]);
-    const user = userEvent.setup();
     render(<StudentOutcomesPage />);
-    await screen.findByText(/El catálogo está vacío/);
-
-    const menu = await abrirMenu(user);
-    const criterio = within(menu).getByRole('menuitem', { name: /criterio de evaluación/i }) as HTMLButtonElement;
-    expect(criterio.disabled).toBe(true);
-    expect(criterio.textContent).toContain('Primero crea un Resultado de Aprendizaje');
-
-    // La capa invisible cierra el menú
-    await user.click(menu.previousElementSibling as HTMLElement);
-    expect(screen.queryByRole('menu')).toBeNull();
+    expect(await screen.findByText('Selecciona una carrera para ver sus Student Outcomes.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /agregar/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('un RA nuevo valida código, descripción y competencia', async () => {
@@ -270,7 +374,7 @@ describe('StudentOutcomesPage — editar', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(await screen.findByText('"2.1.2" actualizado.')).toBeTruthy();
-    expect(catalogoRaAbetApi.update).toHaveBeenCalledWith('2.1.2', {
+    expect(catalogoRaAbetApi.update).toHaveBeenCalledWith('2.1.2', 'Ingeniería Informática', {
       descripcion: 'Modela el sistema', programa: 'Ingeniería Informática', so: '2', competencia: 'Modelado',
       codigo_padre: '2.1', peso: 0.6,
     });
@@ -306,6 +410,10 @@ describe('StudentOutcomesPage — importar CSV', () => {
   const archivo = (contenido: string, nombre = 'catalogo.csv') => new File([contenido], nombre, { type: 'text/csv' });
   const abrirImportar = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(screen.getByRole('button', { name: /importar csv/i }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Colección de Student Outcomes' }),
+      'Ingeniería Informática',
+    );
     return within(screen.getByRole('dialog', { name: 'Importar Student Outcomes desde CSV' }));
   };
   const inputArchivo = () => document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -366,10 +474,10 @@ describe('StudentOutcomesPage — importar CSV', () => {
     expect(await screen.findByText('Importación completa: 3 nuevo(s), 1 actualizado(s).')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(catalogoRaAbetApi.importar).toHaveBeenCalledWith([
-      { codigo: '2.1', so: '2', competencia: 'Diseño', descripcion: 'Diseña soluciones nuevas' },
-      { codigo: '2.1.3', so: '2', competencia: 'Diseño', descripcion: 'Valida el diseño', codigo_padre: '2.1', peso: 0.3 },
-      { codigo: '5.1', so: '5', competencia: 'Ética', descripcion: 'Actúa con ética' },
-      { codigo: '5.1.1', so: '5', competencia: 'Ética', descripcion: 'Reconoce dilemas', codigo_padre: '5.1', peso: 1 },
+      { codigo: '2.1', so: '2', competencia: 'Diseño', descripcion: 'Diseña soluciones nuevas', programa: 'Ingeniería Informática' },
+      { codigo: '2.1.3', so: '2', competencia: 'Diseño', descripcion: 'Valida el diseño', programa: 'Ingeniería Informática', codigo_padre: '2.1', peso: 0.3 },
+      { codigo: '5.1', so: '5', competencia: 'Ética', descripcion: 'Actúa con ética', programa: 'Ingeniería Informática' },
+      { codigo: '5.1.1', so: '5', competencia: 'Ética', descripcion: 'Reconoce dilemas', programa: 'Ingeniería Informática', codigo_padre: '5.1', peso: 1 },
     ]);
     expect(catalogoRaAbetApi.list).toHaveBeenCalledTimes(2);
 

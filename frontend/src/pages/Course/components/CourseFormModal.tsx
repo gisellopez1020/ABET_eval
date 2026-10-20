@@ -29,6 +29,7 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
   const [nombre, setNombre] = useState('');
   const [codigo, setCodigo] = useState('');
   const [periodo, setPeriodo] = useState('');
+  const [programa, setPrograma] = useState('');
   const [rangos, setRangos] = useState<RangoForm[]>([]);
   const [raAbet, setRaAbet] = useState<string[]>([]);
   const [error, setError] = useState('');
@@ -41,6 +42,7 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
     setNombre(course?.nombre ?? '');
     setCodigo(course?.codigo ?? '');
     setPeriodo(course?.periodo ?? '');
+    setPrograma(mode === 'edit' && course ? course.programa : '');
     setRangos((mode === 'edit' && course ? course.rangos_calificacion : RANGOS_CALIFICACION_DEFAULT).map(rangoToForm));
     setRaAbet(mode === 'edit' && course ? course.ra_abet : []);
     setError('');
@@ -52,11 +54,13 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
     if (!nombre.trim()) return setError('El nombre es obligatorio');
     if (!codigo.trim()) return setError('El código es obligatorio');
     if (!periodo.trim()) return setError('El período es obligatorio');
+    if (!programa.trim()) return setError('Selecciona la carrera a la que pertenece la asignatura');
 
     const data: Partial<CursoCreate> = {
       nombre: nombre.trim(),
       codigo: codigo.trim(),
       periodo: periodo.trim(),
+      programa: programa.trim(),
     };
 
     // Sin rangos al crear: se omite el campo y el backend aplica los 3 por defecto
@@ -172,7 +176,15 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
 
           <div>
             <p className="mb-2 text-sm font-medium text-gray-700">Student Outcomes (RA ABET)</p>
-            <RaAbetSelector value={raAbet} onChange={setRaAbet} />
+            <RaAbetSelector
+              value={raAbet}
+              onChange={setRaAbet}
+              programa={programa}
+              onProgramaChange={(next) => {
+                setPrograma(next);
+                setRaAbet([]);
+              }}
+            />
           </div>
         </section>
 

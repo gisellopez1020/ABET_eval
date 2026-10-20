@@ -35,6 +35,7 @@ export interface Curso {
   nombre: string;
   codigo: string;
   periodo: string;
+  programa: string;
   docente_email: string;
   /** Códigos del catálogo RA ABET (ej. ["2.1", "4.2"]) */
   ra_abet: string[];

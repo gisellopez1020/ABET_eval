@@ -26,6 +26,7 @@ vi.mock('../../api/catalogo', () => ({ catalogoRaAbetApi: { list: vi.fn() } }));
 
 const curso = (activo: boolean): Curso => ({
   id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+  programa: 'Ingeniería Informática',
   ra_abet: [], rangos_calificacion: [], activo, created_at: '2026-01-01',
 });
 
@@ -137,6 +138,22 @@ describe('CoursesPage — detalle de asignatura (CourseDetailsModal)', () => {
 });
 
 describe('CoursesPage — nueva asignatura (CourseFormModal como diálogo)', () => {
+  it('muestra solo Student Outcomes de la carrera elegida', async () => {
+    vi.mocked(cursosApi.list).mockResolvedValue([curso(true)]);
+    vi.mocked(catalogoRaAbetApi.list).mockResolvedValue([
+      { codigo: '2.1', so: '2', competencia: 'Diseño', descripcion: 'Diseña soluciones', programa: 'Ingeniería Informática', codigo_padre: null, peso: null },
+      { codigo: '3.1', so: '3', competencia: 'Gestión', descripcion: 'Gestiona proyectos', programa: 'Administración', codigo_padre: null, peso: null },
+    ]);
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: /nueva asignatura/i }));
+    await user.selectOptions(await screen.findByLabelText('Carrera'), 'Administración');
+
+    expect(screen.getByText('Gestiona proyectos')).toBeTruthy();
+    expect(screen.queryByText('Diseña soluciones')).toBeNull();
+  });
+
   it('atrapa el foco, cierra con Esc (no con el fondo) y devuelve el foco a "Nueva asignatura"', async () => {
     vi.mocked(cursosApi.list).mockResolvedValue([curso(true)]);
     const user = userEvent.setup();
@@ -170,6 +187,7 @@ describe('CoursesPage — nueva asignatura (CourseFormModal como diálogo)', () 
     await user.type(screen.getByPlaceholderText('Ej: Fundamentos de programación'), 'Cálculo');
     await user.type(screen.getByPlaceholderText('Ej: FIS-101'), 'MAT-1');
     await user.type(screen.getByPlaceholderText('Ej: 2026-1'), '2026-2');
+    await user.selectOptions(screen.getByLabelText('Carrera'), 'Ingeniería Informática');
     await user.click(screen.getByRole('button', { name: 'Crear asignatura' }));
     expect(cursosApi.create).toHaveBeenCalledTimes(1);
 
@@ -334,9 +352,11 @@ describe('CoursesPage — acciones y navegación', () => {
     await user.type(screen.getByPlaceholderText('Ej: Fundamentos de programación'), 'Física I');
     await user.type(screen.getByPlaceholderText('Ej: FIS-101'), 'FIS-1');
     await user.type(screen.getByPlaceholderText('Ej: 2026-1'), '2026-2');
+    await user.selectOptions(screen.getByLabelText('Carrera'), 'Ingeniería Informática');
     await user.click(screen.getByRole('button', { name: 'Crear asignatura' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(cursosApi.create).toHaveBeenCalledWith(expect.objectContaining({ programa: 'Ingeniería Informática' }));
     expect(nombresVisibles()).toEqual(['Física I', 'Ingeniería de Software', 'Bases de Datos', 'Cálculo Integral']);
     expect((screen.getByPlaceholderText('Buscar por código o nombre de asignatura...') as HTMLInputElement).value).toBe('');
     expect(useCourseStore.getState().selectedCourseId).toBe(9);

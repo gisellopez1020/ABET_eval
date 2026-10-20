@@ -98,7 +98,13 @@ class TestCrearCurso:
         resp = client.post("/cursos", json=self.CURSO)
         assert resp.status_code == 201
         assert resp.json()["docente_email"] == MOCK_USER["email"]
+        assert resp.json()["programa"] == "Ingeniería Informática"
         assert db_session.get(Curso, resp.json()["id"]) is not None
+
+    def test_guarda_la_carrera_seleccionada(self, client):
+        resp = client.post("/cursos", json={**self.CURSO, "programa": "Ingeniería Industrial"})
+        assert resp.status_code == 201
+        assert resp.json()["programa"] == "Ingeniería Industrial"
 
     def test_codigos_desconocidos_422(self, client, db_session, catalogo):
         resp = client.post("/cursos", json={**self.CURSO, "ra_abet": ["2.1", "9.9", "8.8"]})

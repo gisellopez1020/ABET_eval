@@ -4,6 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Actividad, Aspecto, Criterio
+from app.models.ra_abet_catalogo import PROGRAMA_DEFAULT
 
 
 class RubricaRepository:
@@ -74,6 +75,13 @@ class RubricaRepository:
             .scalar()
         )
 
-    def contar_aspectos_con_codigo(self, codigo_abet: str) -> int:
+    def contar_aspectos_con_codigo(self, codigo_abet: str, programa: str = PROGRAMA_DEFAULT) -> int:
         """Aspectos de rúbrica (de cualquier docente) vinculados al código."""
-        return self.db.query(Aspecto).filter(Aspecto.codigo_abet == codigo_abet).count()
+        return (
+            self.db.query(Aspecto)
+            .filter(
+                Aspecto.codigo_abet == codigo_abet,
+                (Aspecto.programa_abet == programa) | Aspecto.programa_abet.is_(None),
+            )
+            .count()
+        )

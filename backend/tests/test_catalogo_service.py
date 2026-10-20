@@ -128,7 +128,9 @@ class TestImportar:
 
         # Ni el RA nuevo ya escrito con flush ni la actualización del existente quedan
         assert _codigos(db_session) == ["2.1", "2.1.1", "2.2"]
-        assert db_session.get(RaAbetCatalogo, "2.2").descripcion == "Descripción 2.2"
+        assert db_session.get(
+            RaAbetCatalogo, ("Ingeniería Informática", "2.2")
+        ).descripcion == "Descripción 2.2"
 
 
 # ── Eliminar ─────────────────────────────────────────────────────────────────

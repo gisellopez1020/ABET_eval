@@ -15,7 +15,7 @@ import { useImportarRaAbet } from './hooks/useImportarRaAbet';
 import { deducirSo, parsePesoCriterio } from './raAbetCsv';
 import { agruparPorPadre, EMPTY_DRAFT, Editing, Nivel, PROGRAMA_DEFAULT, RowDraft, toDraft } from './raAbetDraft';
 
-// Catálogo global de Student Outcomes / RA ABET, compartido por todos los cursos.
+// Catálogo de Student Outcomes / RA ABET compartido por docentes y separado por carrera.
 // Dos niveles: Resultado de Aprendizaje (P.I., ej. "2.1") y Criterio de Evaluación
 // (ej. "2.1.1", con peso dentro de su RA). Cada fila se guarda al instante
 // (POST/PUT/DELETE); la importación CSV usa /importar (todo o nada).
@@ -26,6 +26,8 @@ export function StudentOutcomesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [programaSeleccionado, setProgramaSeleccionado] = useState('');
+  const [programaImportacion, setProgramaImportacion] = useState('');
 
   const [editing, setEditing] = useState<Editing | null>(null);
   const [draft, setDraft] = useState<RowDraft>(EMPTY_DRAFT);
@@ -50,21 +52,50 @@ export function StudentOutcomesPage() {
     void load();
   }, []);
 
-  const raices = useMemo(() => catalogo.filter((ra) => ra.codigo_padre === null), [catalogo]);
-  const hijosPorPadre = useMemo(() => agruparPorPadre(catalogo), [catalogo]);
-  const porCodigo = useMemo(() => new Map(catalogo.map((ra) => [ra.codigo, ra])), [catalogo]);
+  const catalogoPrograma = useMemo(
+    () => catalogo.filter((ra) => ra.programa === programaSeleccionado),
+    [catalogo, programaSeleccionado],
+  );
+  const raices = useMemo(() => catalogoPrograma.filter((ra) => ra.codigo_padre === null), [catalogoPrograma]);
+  const hijosPorPadre = useMemo(() => agruparPorPadre(catalogoPrograma), [catalogoPrograma]);
+  const porCodigo = useMemo(() => new Map(catalogoPrograma.map((ra) => [ra.codigo, ra])), [catalogoPrograma]);
+  const porCodigoImportacion = useMemo(
+    () => new Map(catalogo.filter((ra) => ra.programa === programaImportacion.trim()).map((ra) => [ra.codigo, ra])),
+    [catalogo, programaImportacion],
+  );
+  const programas = useMemo(
+    () => [...new Set(catalogo.map((ra) => ra.programa))].sort(),
+    [catalogo],
+  );
 
   const resetMessages = () => {
     setError('');
     setMessage('');
   };
 
+  const abrirImportacion = () => {
+    setProgramaImportacion(programaSeleccionado);
+    setCsvModal(true);
+  };
+
+  const cambiarPrograma = (programa: string) => {
+    setProgramaSeleccionado(programa);
+    setEditing(null);
+    setAddMenu(false);
+    resetMessages();
+  };
+
   // ── Edición en línea ─────────────────────────────────────────────────────
   const startAdd = (nivel: Nivel) => {
+    if (!programaSeleccionado) return;
     resetMessages();
     setAddMenu(false);
     setEditing({ codigo: null, nivel });
-    setDraft({ ...EMPTY_DRAFT, codigo_padre: nivel === 'criterio' ? raices[0]?.codigo ?? '' : '' });
+    setDraft({
+      ...EMPTY_DRAFT,
+      programa: programaSeleccionado,
+      codigo_padre: nivel === 'criterio' ? raices[0]?.codigo ?? '' : '',
+    });
   };
 
   const startEdit = (ra: RaAbet) => {
@@ -120,7 +151,7 @@ export function StudentOutcomesPage() {
         const created = await catalogoRaAbetApi.create({ codigo, ...payload });
         setMessage(`"${created.codigo}" agregado.`);
       } else {
-        const updated = await catalogoRaAbetApi.update(editing.codigo, payload);
+        const updated = await catalogoRaAbetApi.update(editing.codigo, draft.programa.trim(), payload);
         setMessage(`"${updated.codigo}" actualizado.`);
       }
       await load();
@@ -146,8 +177,9 @@ export function StudentOutcomesPage() {
     previewActualiza,
     previewNuevos,
     handleCsvImport,
-  } = useImportarRaAbet(catalogo, porCodigo, hijosPorPadre, async (result) => {
+  } = useImportarRaAbet(catalogo, programaImportacion, async (result) => {
     await load();
+    setProgramaSeleccionado(programaImportacion.trim());
     resetMessages();
     setMessage(`Importación completa: ${result.creados} nuevo(s), ${result.actualizados} actualizado(s).`);
     cancelEdit();
@@ -173,8 +205,8 @@ export function StudentOutcomesPage() {
     setDeleteLoading(true);
     setDeleteError('');
     try {
-      await catalogoRaAbetApi.delete(ra.codigo);
-      setCatalogo((prev) => prev.filter((item) => item.codigo !== ra.codigo));
+      await catalogoRaAbetApi.delete(ra.codigo, ra.programa);
+      setCatalogo((prev) => prev.filter((item) => item.codigo !== ra.codigo || item.programa !== ra.programa));
       setMessage(`"${ra.codigo}" eliminado.`);
       setDeleting(null);
     } catch (err) {
@@ -212,16 +244,31 @@ export function StudentOutcomesPage() {
                 Catálogo de Resultados de Aprendizaje ABET del programa y sus Criterios de Evaluación, compartido por
                 todas las asignaturas.
               </p>
+              <div className="mt-4">
+                <label htmlFor="student-outcomes-programa" className="sr-only">Selecciona la carrera</label>
+                <select
+                  id="student-outcomes-programa"
+                  aria-label="Selecciona la carrera"
+                  value={programaSeleccionado}
+                  onChange={(event) => cambiarPrograma(event.target.value)}
+                  className="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+                >
+                  <option value="">Selecciona la carrera...</option>
+                  {programas.map((programa) => (
+                    <option key={programa} value={programa}>{programa}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="md" icon={<Upload size={16} />} onClick={() => setCsvModal(true)}>
+              <Button variant="outline" size="md" icon={<Upload size={16} />} onClick={abrirImportacion}>
                 Importar CSV
               </Button>
               <AgregarMenu
                 open={addMenu}
                 onToggle={() => setAddMenu((v) => !v)}
                 onClose={() => setAddMenu(false)}
-                disabled={editing?.codigo === null}
+                disabled={!programaSeleccionado || editing?.codigo === null}
                 sinRaices={raices.length === 0}
                 onAdd={startAdd}
               />
@@ -238,10 +285,11 @@ export function StudentOutcomesPage() {
           )}
 
           <CatalogoTabla
-            catalogo={catalogo}
+            catalogo={catalogoPrograma}
             raices={raices}
             hijosPorPadre={hijosPorPadre}
             loading={loading}
+            programaSeleccionado={programaSeleccionado}
             editing={editing}
             editRow={editRow}
             onEdit={startEdit}
@@ -254,6 +302,9 @@ export function StudentOutcomesPage() {
       <ImportRaAbetModal
         open={csvModal}
         onClose={closeCsvModal}
+        programa={programaImportacion}
+        onProgramaChange={setProgramaImportacion}
+        programas={programas}
         file={csvFile}
         onFile={handleCsvSelect}
         fileRef={fileRef}
@@ -261,7 +312,7 @@ export function StudentOutcomesPage() {
         previewGrupos={previewGrupos}
         previewNuevos={previewNuevos}
         previewActualiza={previewActualiza}
-        porCodigo={porCodigo}
+        porCodigo={porCodigoImportacion}
         error={csvError}
         loading={csvLoading}
         onImport={handleCsvImport}

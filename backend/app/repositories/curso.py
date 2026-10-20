@@ -3,6 +3,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.models import Curso
+from app.models.ra_abet_catalogo import PROGRAMA_DEFAULT
 
 
 class CursoRepository:
@@ -19,10 +20,13 @@ class CursoRepository:
         self.db.add(curso)
         return curso
 
-    def contar_que_usan_ra(self, codigo: str) -> int:
+    def contar_que_usan_ra(self, codigo: str, programa: str = PROGRAMA_DEFAULT) -> int:
         """
         Cursos (de cualquier docente) cuyo ra_abet contiene el código.
         Se revisa en Python en vez de con operadores jsonb para que sea portable;
         el volumen de cursos es pequeño.
         """
-        return sum(1 for (ra_abet,) in self.db.query(Curso.ra_abet).all() if codigo in (ra_abet or []))
+        return sum(
+            1 for ra_abet, curso_programa in self.db.query(Curso.ra_abet, Curso.programa).all()
+            if curso_programa == programa and codigo in (ra_abet or [])
+        )

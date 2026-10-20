@@ -80,8 +80,13 @@ export default function RubricaPage() {
       .catch((err) => console.error('Error cargando el catálogo ABET:', err));
   }, []);
 
-  const porCodigoAbet = useMemo(() => new Map(catalogo.map((ra) => [ra.codigo, ra])), [catalogo]);
-  const raicesAbet = useMemo(() => catalogo.filter((ra) => ra.codigo_padre === null), [catalogo]);
+  const selectedCurso = cursos.find((item) => item.id === selectedCursoId) ?? null;
+  const catalogoCurso = useMemo(
+    () => catalogo.filter((ra) => ra.programa === selectedCurso?.programa),
+    [catalogo, selectedCurso?.programa],
+  );
+  const porCodigoAbet = useMemo(() => new Map(catalogoCurso.map((ra) => [ra.codigo, ra])), [catalogoCurso]);
+  const raicesAbet = useMemo(() => catalogoCurso.filter((ra) => ra.codigo_padre === null), [catalogoCurso]);
   const descripcionAbet = (codigo: string | null) => (codigo ? porCodigoAbet.get(codigo)?.descripcion : undefined);
 
   // Carga inicial. Si la URL trae actividadId se precarga esa actividad (y su curso);
@@ -149,7 +154,6 @@ export default function RubricaPage() {
     aspectosVacios.length === 0;
 
   const selectedActividad = actividades.find((item) => item.id === selectedActividadId) ?? null;
-  const selectedCurso = cursos.find((item) => item.id === selectedCursoId) ?? null;
 
   // Guarda de cambios sin guardar: sin cambios, la acción corre de inmediato; con cambios,
   // queda pendiente hasta que el usuario la confirma en el modal (no puede bloquear como confirm())
@@ -264,7 +268,7 @@ export default function RubricaPage() {
     openImportModal,
     handleFileSelect,
     handleCsvImport,
-  } = useRubricaImport(catalogo, selectedActividadId, dirty, (aspectos) =>
+  } = useRubricaImport(catalogoCurso, selectedActividadId, dirty, (aspectos) =>
     updateDraft(
       aspectos.map((aspecto) => ({
         key: newKey('a'),
@@ -382,7 +386,7 @@ export default function RubricaPage() {
         aspectoForm={aspectoForm}
         setAspectoForm={setAspectoForm}
         bloqueada={bloqueada}
-        catalogo={catalogo}
+        catalogo={catalogoCurso}
         raicesAbet={raicesAbet}
         descripcionAbet={descripcionAbet}
         formError={formError}

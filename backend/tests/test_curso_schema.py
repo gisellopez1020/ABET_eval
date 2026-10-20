@@ -87,3 +87,15 @@ class TestRaAbetCurso:
     def test_mas_de_10_falla(self):
         with pytest.raises(ValidationError, match="Máximo 10"):
             CursoCreate(**BASE, ra_abet=[f"1.{i}" for i in range(11)])
+
+
+class TestProgramaCurso:
+    def test_programa_se_limpia_y_por_omision_usa_el_predeterminado(self):
+        assert CursoCreate(**BASE, programa="  Ingeniería Industrial  ").programa == "Ingeniería Industrial"
+        assert CursoCreate(**BASE).programa == "Ingeniería Informática"
+
+    def test_programa_vacio_falla_en_creacion_y_edicion(self):
+        with pytest.raises(ValidationError, match="carrera no puede estar vacía"):
+            CursoCreate(**BASE, programa="  ")
+        with pytest.raises(ValidationError, match="carrera no puede estar vacía"):
+            CursoUpdate(programa="  ")

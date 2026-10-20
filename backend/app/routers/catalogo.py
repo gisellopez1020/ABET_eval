@@ -7,10 +7,11 @@ from app.auth.dependencies import get_current_user
 from app.schemas import (
     RaAbetCreate, RaAbetUpdate, RaAbetOut, RaAbetImportPayload, RaAbetImportResultado,
 )
+from app.models.ra_abet_catalogo import PROGRAMA_DEFAULT
 from app.services.catalogo import CatalogoService
 
-# Catálogo global del programa: lo comparten todos los docentes (sin verificación de
-# propiedad; get_current_user solo exige estar autenticado). Los errores de negocio
+# Catálogo compartido por programa: cada carrera puede reutilizar los mismos códigos
+# (sin verificación de propiedad; get_current_user solo exige estar autenticado). Los errores de negocio
 # (404, 409, 422) los lanza CatalogoService y los traduce a HTTP el manejador global
 # registrado en main.py (app/errores_http.py)
 router = APIRouter(prefix="/catalogo/ra-abet", tags=["Catálogo RA ABET"])
@@ -19,11 +20,12 @@ router = APIRouter(prefix="/catalogo/ra-abet", tags=["Catálogo RA ABET"])
 @router.get("", response_model=List[RaAbetOut], summary="Listar el catálogo de RA ABET")
 def listar_ra_abet(
     solo_raiz: bool = Query(default=False, description="Solo Resultados de Aprendizaje (sin Criterios)"),
+    programa: str | None = Query(default=None, description="Filtra por carrera"),
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
     """Devuelve el catálogo ordenado por código; con `solo_raiz=true`, solo el nivel superior."""
-    return CatalogoService(db).listar(solo_raiz)
+    return CatalogoService(db).listar(solo_raiz, programa)
 
 
 @router.post(
@@ -70,6 +72,7 @@ def importar_ra_abet(
 def editar_ra_abet(
     codigo: str,
     body: RaAbetUpdate,
+    programa: str = Query(default=PROGRAMA_DEFAULT),
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
@@ -79,7 +82,7 @@ def editar_ra_abet(
     404 si el código no existe; 422 si cambiaría de nivel o el nuevo RA padre no
     existe o es un Criterio.
     """
-    return CatalogoService(db).editar(codigo, body.model_dump(exclude_unset=True))
+    return CatalogoService(db).editar(codigo, body.model_dump(exclude_unset=True), programa)
 
 
 @router.delete(
@@ -89,6 +92,7 @@ def editar_ra_abet(
 )
 def eliminar_ra_abet(
     codigo: str,
+    programa: str = Query(default=PROGRAMA_DEFAULT),
     db: Session = Depends(get_db),
     usuario: dict = Depends(get_current_user),
 ):
@@ -97,4 +101,4 @@ def eliminar_ra_abet(
     ra_abet y ningún aspecto de rúbrica está vinculado a él (409 si no).
     404 si el código no existe.
     """
-    CatalogoService(db).eliminar(codigo)
+    CatalogoService(db).eliminar(codigo, programa)

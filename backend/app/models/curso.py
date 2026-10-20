@@ -5,6 +5,7 @@ from typing import List, Optional
 from sqlalchemy import String, Boolean, DateTime, JSON, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
+from .ra_abet_catalogo import PROGRAMA_DEFAULT
 
 # Rangos por defecto del reporte ABET (mismas etiquetas que usaba reportes.py).
 # Intervalos cerrados [minimo, maximo] sobre la escala 0-5.
@@ -26,6 +27,9 @@ class Curso(Base):
     nombre: Mapped[str] = mapped_column(String(200), nullable=False)
     codigo: Mapped[str] = mapped_column(String(50), nullable=False)
     periodo: Mapped[str] = mapped_column(String(20), nullable=False)
+    programa: Mapped[str] = mapped_column(
+        String(200), nullable=False, default=PROGRAMA_DEFAULT, server_default=PROGRAMA_DEFAULT
+    )
     docente_email: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     # Códigos de ra_abet_catalogo (ej. ["2.1", "4.2"])
     ra_abet: Mapped[Optional[List]] = mapped_column(JSON, default=list)

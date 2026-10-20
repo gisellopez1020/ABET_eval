@@ -5,6 +5,7 @@ export interface CursoCreate {
   nombre: string;
   codigo: string;
   periodo: string;
+  programa: string;
   ra_abet: string[];
   /** Si se omite, el backend aplica los 3 rangos por defecto. */
   rangos_calificacion?: RangoCalificacion[];

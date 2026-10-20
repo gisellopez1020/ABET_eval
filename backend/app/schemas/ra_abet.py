@@ -162,12 +162,13 @@ class RaAbetImportPayload(BaseModel):
     def validar_items(cls, v: List[RaAbetCreate]) -> List[RaAbetCreate]:
         if not v:
             raise ValueError("La importación no contiene resultados de aprendizaje")
-        vistos: set[str] = set()
+        vistos: set[tuple[str, str]] = set()
         repetidos: List[str] = []
         for item in v:
-            if item.codigo in vistos and item.codigo not in repetidos:
+            clave = (item.programa, item.codigo)
+            if clave in vistos and item.codigo not in repetidos:
                 repetidos.append(item.codigo)
-            vistos.add(item.codigo)
+            vistos.add(clave)
         if repetidos:
             raise ValueError(f"Códigos repetidos en la importación: {', '.join(repetidos)}")
         return v

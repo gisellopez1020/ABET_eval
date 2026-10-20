@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 
 from app.models import Curso
+from app.models.ra_abet_catalogo import PROGRAMA_DEFAULT
 from app.repositories.calificacion import CalificacionRepository
 from app.repositories.curso import CursoRepository
 from app.repositories.equipo import EquipoRepository
@@ -31,7 +32,7 @@ class CursoService:
         return self._curso_del_docente(curso_id, docente_email)
 
     def crear(self, docente_email: str, datos: Dict[str, Any]) -> Curso:
-        self._validar_ra_abet(datos.get("ra_abet"))
+        self._validar_ra_abet(datos.get("ra_abet"), datos.get("programa"))
         curso = self.cursos.agregar(Curso(**datos, docente_email=docente_email))
         self.db.commit()
         self.db.refresh(curso)
@@ -43,8 +44,8 @@ class CursoService:
         un curso con valores antiguos fuera del catálogo puede editarse sin tocarlos.
         """
         curso = self._curso_del_docente(curso_id, docente_email)
-        if "ra_abet" in cambios:
-            self._validar_ra_abet(cambios["ra_abet"])
+        if "ra_abet" in cambios or "programa" in cambios:
+            self._validar_ra_abet(cambios.get("ra_abet", curso.ra_abet), cambios.get("programa", curso.programa))
         for campo, valor in cambios.items():
             setattr(curso, campo, valor)
         self.db.commit()
@@ -103,14 +104,14 @@ class CursoService:
             raise SinPermiso("No tiene permiso para acceder a este curso")
         return curso
 
-    def _validar_ra_abet(self, codigos: List[str] | None) -> None:
+    def _validar_ra_abet(self, codigos: List[str] | None, programa: str | None) -> None:
         """
         Cada código de ra_abet debe existir en ra_abet_catalogo y ser un Resultado de
         Aprendizaje (nivel superior): un curso no selecciona Criterios individuales.
         """
         if not codigos:
             return
-        padres = RaAbetRepository(self.db).padres_de(codigos)
+        padres = RaAbetRepository(self.db).padres_de(codigos, programa or PROGRAMA_DEFAULT)
         desconocidos = [c for c in codigos if c not in padres]
         if desconocidos:
             raise RaAbetDesconocidos(desconocidos)

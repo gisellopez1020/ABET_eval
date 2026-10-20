@@ -61,7 +61,8 @@ class CriterioService:
         if total_peso != Decimal("100"):
             raise PesosRubricaInvalidos(total_peso)
 
-        codigos_ra = self._validar_codigos_abet(a.codigo_abet for a in aspectos)
+        curso = self.cursos.get(actividad.curso_id)
+        codigos_ra = self._validar_codigos_abet((a.codigo_abet for a in aspectos), curso.programa)
         self._agregar_ra_al_curso(actividad, codigos_ra)
 
         self.rubrica.eliminar_aspectos_de(actividad)
@@ -72,6 +73,7 @@ class CriterioService:
                 actividad_id=actividad_id,
                 orden=asp_in.orden if asp_in.orden else orden_asp,
                 codigo_abet=asp_in.codigo_abet,
+                programa_abet=curso.programa if asp_in.codigo_abet is not None else None,
             ))
             for orden_crit, crit_in in enumerate(asp_in.criterios):
                 self.rubrica.agregar_criterio(Criterio(
@@ -116,9 +118,11 @@ class CriterioService:
         if not aspecto or aspecto.actividad_id != actividad_id:
             raise AspectoNoEncontrado()
 
-        codigos_ra = self._validar_codigos_abet([codigo_abet])
+        curso = self.cursos.get(actividad.curso_id)
+        codigos_ra = self._validar_codigos_abet([codigo_abet], curso.programa)
         self._agregar_ra_al_curso(actividad, codigos_ra)
         aspecto.codigo_abet = codigo_abet
+        aspecto.programa_abet = curso.programa if codigo_abet is not None else None
         self.db.commit()
         self.db.refresh(aspecto)
         return aspecto
@@ -128,7 +132,7 @@ class CriterioService:
         if CalificacionRepository(self.db).existen_para_actividad(actividad.id):
             raise RubricaConCalificaciones(actividad.nombre)
 
-    def _validar_codigos_abet(self, codigos: Iterable[Optional[str]]) -> List[str]:
+    def _validar_codigos_abet(self, codigos: Iterable[Optional[str]], programa: str) -> List[str]:
         """
         Cada codigo_abet debe existir en el catálogo y ser un Criterio (tener codigo_padre),
         no un Resultado de Aprendizaje. Devuelve los códigos de los RA padre (sin repetir).
@@ -136,7 +140,7 @@ class CriterioService:
         codigos = [c for c in dict.fromkeys(codigos) if c]
         if not codigos:
             return []
-        padres = RaAbetRepository(self.db).padres_de(codigos)
+        padres = RaAbetRepository(self.db).padres_de(codigos, programa)
         for codigo in codigos:
             if codigo not in padres:
                 raise CodigoAbetDesconocido(codigo)

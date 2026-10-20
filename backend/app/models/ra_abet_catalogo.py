@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import CheckConstraint, Float, ForeignKeyConstraint, String, Text
+from sqlalchemy import CheckConstraint, Float, ForeignKeyConstraint, PrimaryKeyConstraint, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 
@@ -9,7 +9,7 @@ PROGRAMA_DEFAULT = "Ingeniería Informática"
 class RaAbetCatalogo(Base):
     """
     Catálogo de Student Outcomes / Resultados de Aprendizaje ABET del programa.
-    Es global (compartido por todos los docentes).
+    Es compartido por todos los docentes y los códigos son únicos dentro de cada programa.
 
     Dos niveles en la misma tabla:
     - Resultado de Aprendizaje (P.I., ej. "2.1"): codigo_padre y peso en NULL.
@@ -20,8 +20,11 @@ class RaAbetCatalogo(Base):
     """
     __tablename__ = "ra_abet_catalogo"
     __table_args__ = (
+        PrimaryKeyConstraint("programa", "codigo", name="pk_ra_abet_catalogo"),
         ForeignKeyConstraint(
-            ["codigo_padre"], ["ra_abet_catalogo.codigo"], name="fk_ra_abet_catalogo_padre"
+            ["programa", "codigo_padre"],
+            ["ra_abet_catalogo.programa", "ra_abet_catalogo.codigo"],
+            name="fk_ra_abet_catalogo_padre",
         ),
         CheckConstraint("codigo_padre IS NULL OR codigo_padre <> codigo", name="ck_ra_abet_no_autopadre"),
         CheckConstraint(
@@ -31,12 +34,12 @@ class RaAbetCatalogo(Base):
         ),
     )
 
-    codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
+    codigo: Mapped[str] = mapped_column(String(20))
     so: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     competencia: Mapped[str] = mapped_column(Text, nullable=False)
     descripcion: Mapped[str] = mapped_column(Text, nullable=False)
     programa: Mapped[str] = mapped_column(
-        String(200), nullable=False, default=PROGRAMA_DEFAULT, server_default=PROGRAMA_DEFAULT
+        String(200), default=PROGRAMA_DEFAULT, server_default=PROGRAMA_DEFAULT
     )
     codigo_padre: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
     peso: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

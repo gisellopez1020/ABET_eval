@@ -27,6 +27,7 @@ const DETALLE_400 = "El estudiante Ana Pérez ya está en el equipo 'Equipo 1' d
 beforeEach(() => {
   vi.mocked(cursosApi.list).mockResolvedValue([
     { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+      programa: 'Ingeniería Informática',
       ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
   ]);
   vi.mocked(seccionesApi.list).mockResolvedValue([{ id: 10, nombre: 'Grupo A', curso_id: 1, activo: true }]);
@@ -501,12 +502,14 @@ describe('ProjectsPage — búsqueda y filtros', () => {
 describe('ProjectsPage — asignatura y parámetros de la URL', () => {
   const CURSO_2 = {
     id: 2, nombre: 'Bases de Datos', codigo: 'BD1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+    programa: 'Ingeniería Informática',
     ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01',
   };
 
   beforeEach(() => {
     vi.mocked(cursosApi.list).mockResolvedValue([
       { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+        programa: 'Ingeniería Informática',
         ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
       CURSO_2,
     ]);

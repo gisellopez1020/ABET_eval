@@ -82,6 +82,33 @@ def test_cambio_de_nivel_422(client, jerarquia, codigo, cuerpo):
 # ── Importar ─────────────────────────────────────────────────────────────────
 
 class TestImportar:
+    def test_permite_repetir_codigo_en_otra_carrera_sin_reemplazar(self, client, jerarquia):
+        items = [
+            _ra("2.1", programa="Multimedia", descripcion="Resultado de Multimedia"),
+            _crit("2.1.1", "2.1", 1, programa="Multimedia", descripcion="Criterio de Multimedia"),
+        ]
+
+        resp = client.post(f"{URL}/importar", json={"items": items})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"creados": 2, "actualizados": 0}
+        original = client.get(URL, params={"programa": "Ingeniería Informática"}).json()
+        multimedia = client.get(URL, params={"programa": "Multimedia"}).json()
+        assert [r["codigo"] for r in original] == ["2.1", "2.1.1", "2.2"]
+        assert original[0]["descripcion"] == "Descripción 2.1"
+        assert [r["codigo"] for r in multimedia] == ["2.1", "2.1.1"]
+        assert multimedia[0]["descripcion"] == "Resultado de Multimedia"
+
+    def test_no_permite_criterio_con_padre_que_solo_existe_en_otra_carrera(self, client, jerarquia):
+        items = [_crit("8.1.1", "2.1", 1, programa="Multimedia")]
+
+        resp = client.post(f"{URL}/importar", json={"items": items})
+
+        assert _detalle(resp) == (
+            422,
+            "No se importó nada: el RA padre '2.1' de '8.1.1' no existe",
+        )
+
     def test_varios_errores_en_un_solo_mensaje_y_no_guarda_nada(self, client, jerarquia):
         items = [
             _crit("2.2", "2.1", 1),          # 2.2 es un RA en la BD

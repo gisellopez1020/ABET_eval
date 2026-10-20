@@ -30,6 +30,7 @@ vi.mock('../../api/calificaciones', () => ({ calificacionesApi: { equipo: vi.fn(
 
 const curso = (id: number, nombre: string) => ({
   id, nombre, codigo: `C${id}`, periodo: '2026-2', docente_email: 'd@uao.edu.co',
+  programa: 'Ingeniería Informática',
   ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01',
 });
 const seccion = (id: number, nombre: string, curso_id: number): Seccion => ({ id, nombre, curso_id, activo: true });

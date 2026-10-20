@@ -39,8 +39,10 @@ const TOOLTIP = 'Elige una actividad específica (no "Todas") para exportar';
 
 const CURSOS = [
   { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+    programa: 'Ingeniería Informática',
     ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
   { id: 2, nombre: 'Bases de Datos', codigo: 'BD1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+    programa: 'Ingeniería Informática',
     ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
 ];
 

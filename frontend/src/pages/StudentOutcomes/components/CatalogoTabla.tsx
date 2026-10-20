@@ -11,6 +11,7 @@ interface CatalogoTablaProps {
   raices: RaAbet[];
   hijosPorPadre: Map<string, RaAbet[]>;
   loading: boolean;
+  programaSeleccionado: string;
   editing: Editing | null;
   /** La fila en edición (con su key), que se dibuja arriba (nueva) o en lugar de la editada */
   editRow: ReactNode;
@@ -24,6 +25,7 @@ export function CatalogoTabla({
   raices,
   hijosPorPadre,
   loading,
+  programaSeleccionado,
   editing,
   editRow,
   onEdit,
@@ -101,11 +103,17 @@ export function CatalogoTabla({
                         Cargando…
                       </td>
                     </tr>
+                  ) : !programaSeleccionado ? (
+                    <tr>
+                      <td colSpan={COLUMNAS} className="px-4 py-10 text-center text-gray-500">
+                        Selecciona una carrera para ver sus Student Outcomes.
+                      </td>
+                    </tr>
                   ) : catalogo.length === 0 && editing?.codigo !== null ? (
                     <tr>
                       <td colSpan={COLUMNAS} className="px-4 py-10 text-center text-gray-500">
-                        El catálogo está vacío. Impórtalo desde un CSV (Codigo,Competencia,Descripcion,CodigoPadre,Peso)
-                        o agrega los resultados uno a uno.
+                        Esta carrera todavía no tiene Student Outcomes. Impórtalos desde un CSV o agrega los resultados
+                        uno a uno.
                       </td>
                     </tr>
                   ) : (

@@ -1,4 +1,4 @@
-import { RefObject } from 'react';
+import { RefObject, useEffect, useState } from 'react';
 
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
@@ -21,6 +21,9 @@ export interface GrupoVistaPrevia {
 interface ImportRaAbetModalProps {
   open: boolean;
   onClose: () => void;
+  programa: string;
+  onProgramaChange: (programa: string) => void;
+  programas: string[];
   file: File | null;
   onFile: (file: File) => void;
   fileRef: RefObject<HTMLInputElement>;
@@ -47,6 +50,9 @@ const estadoBadge = (estado: 'nuevo' | 'actualiza' | 'existente') =>
 export function ImportRaAbetModal({
   open,
   onClose,
+  programa,
+  onProgramaChange,
+  programas,
   file,
   onFile,
   fileRef,
@@ -59,9 +65,53 @@ export function ImportRaAbetModal({
   loading,
   onImport,
 }: ImportRaAbetModalProps) {
+  const [nuevaCarrera, setNuevaCarrera] = useState(false);
+  const opcionNueva = '__nueva_carrera__';
+
+  useEffect(() => {
+    if (!open) setNuevaCarrera(false);
+  }, [open]);
+
   return (
       <Modal open={open} onClose={onClose} title="Importar Student Outcomes desde CSV" maxWidth="max-w-2xl">
         <div className="space-y-4">
+          <div>
+            <label htmlFor="import-programa" className="mb-2 block text-sm font-medium text-gray-700">
+              Colección de Student Outcomes
+            </label>
+            <select
+              id="import-programa"
+              aria-label="Colección de Student Outcomes"
+              value={nuevaCarrera ? opcionNueva : programa}
+              onChange={(event) => {
+                if (event.target.value === opcionNueva) {
+                  setNuevaCarrera(true);
+                  onProgramaChange('');
+                } else {
+                  setNuevaCarrera(false);
+                  onProgramaChange(event.target.value);
+                }
+              }}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+            >
+              <option value="">Selecciona una colección cargada</option>
+              {programas.map((item) => <option key={item} value={item}>{item}</option>)}
+              <option value={opcionNueva}>Crear una nueva colección…</option>
+            </select>
+            {nuevaCarrera && (
+              <input
+                aria-label="Nombre de la nueva colección"
+                value={programa}
+                onChange={(event) => onProgramaChange(event.target.value)}
+                maxLength={200}
+                placeholder="Nombre de la nueva carrera"
+                className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+              />
+            )}
+            <p className="mt-1 text-xs text-gray-500">
+              Al elegir una colección cargada, el archivo actualizará únicamente sus Student Outcomes.
+            </p>
+          </div>
           <FileDropZone
             fileName={file?.name}
             placeholder="Arrastra un CSV aquí o haz clic para seleccionar"
@@ -70,8 +120,9 @@ export function ImportRaAbetModal({
             inputRef={fileRef}
           >
             <p className="text-xs text-gray-400 mt-1">
-              Formato: Codigo,Competencia,Descripcion,CodigoPadre,Peso (con encabezado). CodigoPadre y Peso van vacíos
-              en los Resultados de Aprendizaje; el peso acepta 0,4 o 40%.
+              Formato: Codigo,Competencia,Descripcion,CodigoPadre,Peso (con encabezado). La carrera elegida se asignará
+              a todos los resultados del archivo. CodigoPadre y Peso van vacíos en los Resultados de Aprendizaje; el peso
+              acepta 0,4 o 40%.
             </p>
           </FileDropZone>
 
@@ -102,7 +153,7 @@ export function ImportRaAbetModal({
                         </span>
                         <span className="flex shrink-0 items-center gap-2">
                           <span className="font-medium text-gray-700">{formatPeso(item.peso ?? 0)}</span>
-                          {estadoBadge(porCodigo.has(item.codigo) ? 'actualiza' : 'nuevo')}
+                          {estadoBadge(porCodigo.get(item.codigo)?.programa === programa ? 'actualiza' : 'nuevo')}
                         </span>
                       </div>
                     ))}
@@ -120,7 +171,7 @@ export function ImportRaAbetModal({
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-            <Button onClick={onImport} loading={loading} disabled={preview.length === 0}>
+            <Button onClick={onImport} loading={loading} disabled={preview.length === 0 || !programa.trim()}>
               Importar
             </Button>
           </div>

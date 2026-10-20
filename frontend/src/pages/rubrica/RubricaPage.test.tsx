@@ -32,6 +32,7 @@ const OTRA_ACTIVIDAD = { ...ACTIVIDAD, id: 200, nombre: 'Parcial' };
 beforeEach(() => {
   vi.mocked(cursosApi.list).mockResolvedValue([
     { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+      programa: 'Ingeniería Informática',
       ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
   ]);
   vi.mocked(actividadesApi.get).mockResolvedValue(ACTIVIDAD);
@@ -208,9 +209,9 @@ describe('RubricaPage — descartar cambios sin guardar', () => {
 // ── Línea base antes de dividir RubricaPage ──────────────────────────────────
 
 const CATALOGO_ABET = [
-  { codigo: '2.1', so: '2', competencia: 'Diseño', descripcion: 'Diseña soluciones de ingeniería', programa: 'X', codigo_padre: null, peso: null },
-  { codigo: '2.1.1', so: '2', competencia: 'Diseño', descripcion: 'Identifica requisitos del problema', programa: 'X', codigo_padre: '2.1', peso: 0.5 },
-  { codigo: '2.1.2', so: '2', competencia: 'Diseño', descripcion: 'Evalúa alternativas', programa: 'X', codigo_padre: '2.1', peso: 0.5 },
+  { codigo: '2.1', so: '2', competencia: 'Diseño', descripcion: 'Diseña soluciones de ingeniería', programa: 'Ingeniería Informática', codigo_padre: null, peso: null },
+  { codigo: '2.1.1', so: '2', competencia: 'Diseño', descripcion: 'Identifica requisitos del problema', programa: 'Ingeniería Informática', codigo_padre: '2.1', peso: 0.5 },
+  { codigo: '2.1.2', so: '2', competencia: 'Diseño', descripcion: 'Evalúa alternativas', programa: 'Ingeniería Informática', codigo_padre: '2.1', peso: 0.5 },
 ];
 // Rúbrica completa al 100 %: Diseño (60 + 40), sin aspectos vacíos
 const RUBRICA_100 = {
@@ -307,8 +308,10 @@ describe('RubricaPage — carga', () => {
   it('cambiar de asignatura carga sus actividades y elige la primera', async () => {
     vi.mocked(cursosApi.list).mockResolvedValue([
       { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+        programa: 'Ingeniería Informática',
         ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
       { id: 2, nombre: 'Bases de Datos', codigo: 'BD1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+        programa: 'Ingeniería Informática',
         ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
     ]);
     const user = userEvent.setup();
