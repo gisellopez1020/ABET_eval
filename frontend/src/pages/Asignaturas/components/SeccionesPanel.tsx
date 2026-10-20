@@ -32,7 +32,8 @@ export function SeccionesPanel({
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="flex items-center justify-between px-5 py-4 border-b">
               <h3 className="font-semibold text-gray-900">Secciones</h3>
-              <Button size="sm" variant="secondary" onClick={() => { setSeccionError(''); setNewSeccionModal(true); }}>
+              <Button size="sm" variant="secondary"   className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+ onClick={() => { setSeccionError(''); setNewSeccionModal(true); }}>
                 + Nueva sección
               </Button>
             </div>

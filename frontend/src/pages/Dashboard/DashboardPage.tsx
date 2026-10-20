@@ -138,7 +138,7 @@ export function DashboardPage() {
     <AppLayout>
       <div className="px-5 py-3">
         <div className="mb-4">
-          <h1 className="mt-1 text-2xl font-semibold text-gray-900">
+          <h1 className="mt-1 text-2xl font-semibold text-[#9E0B0F]">
             Panel general
           </h1>
 

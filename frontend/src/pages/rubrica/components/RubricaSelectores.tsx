@@ -30,7 +30,7 @@ export function RubricaSelectores({
                   const courseId = Number(event.target.value);
                   if (courseId) onCurso(courseId);
                 }}
-                className={SELECT_CLASS}
+                className={`${SELECT_CLASS} `}
               >
                 <option value="">Selecciona una asignatura</option>
                 {cursos.map((curso) => (

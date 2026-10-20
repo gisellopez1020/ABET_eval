@@ -37,18 +37,19 @@ export function CoursesToolbar({
             value={search}
             onChange={(event) => onSearch(event.target.value)}
             placeholder="Buscar por código o nombre de asignatura..."
-            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none  text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10"
           />
         </div>
 
-        <Button
-          variant="secondary"
-          size="md"
-          icon={<Filter size={17} />}
-          onClick={onToggleFilter}
-        >
-          Filtrar
-        </Button>
+      <Button
+        variant="secondary"
+        size="md"
+        icon={<Filter size={17} />}
+        onClick={onToggleFilter}
+        className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10"
+      >
+        Filtrar
+      </Button>
         <button
           type="button"
           onClick={onNew}
@@ -57,7 +58,7 @@ export function CoursesToolbar({
           <Plus size={18} />
           Nueva asignatura
         </button>
-      </div>
+      </div>Ñ
 
       {showFilter && (
         <div className="mb-5 flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-white p-4">

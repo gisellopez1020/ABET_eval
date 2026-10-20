@@ -2,8 +2,7 @@ import { Actividad, Curso } from '../../../types';
 import { ProjectOption } from '../types';
 
 const SELECT_CLASS =
-  'w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-10 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50';
-
+'w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-10 text-sm text-gray-700 outline-none transition hover:border-[#9E0B0F] focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50';
 interface SelectoresEvaluacionProps {
   courses: Curso[];
   curso: Curso | null;

@@ -90,7 +90,7 @@ export default function EvaluacionesPage() {
           <div className="px-5 py-5">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900">Módulo de Evaluación</h2>
+                <h2 className="text-2xl font-semibold text-[#9E0B0F]">Módulo de Evaluación</h2>
                 <p className="mt-1 text-sm text-gray-500">
                   {curso
                     ? `Evaluación bajo los criterios ABET del curso ${curso.nombre}`
@@ -99,9 +99,14 @@ export default function EvaluacionesPage() {
                       : 'Selecciona una asignatura para evaluar sus proyectos.'}
                 </p>
               </div>
-              <Button variant="secondary" size="sm" onClick={() => navigate('/proyectos')}>
-                ← Volver
-              </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate('/proyectos')}
+              className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+            >
+              ← Volver
+            </Button>
             </div>
 
             <SelectoresEvaluacion

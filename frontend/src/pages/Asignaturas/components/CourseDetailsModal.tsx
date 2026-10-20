@@ -117,7 +117,8 @@ export function CourseDetailsModal({ course, stats, onClose, onEdit }: CourseDet
         <Button variant="secondary" onClick={onClose}>
           Cerrar
         </Button>
-        <Button variant="primary" onClick={() => onEdit(course)}>
+        <Button variant="primary"   className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+ onClick={() => onEdit(course)}>
           Editar asignatura
         </Button>
       </div>

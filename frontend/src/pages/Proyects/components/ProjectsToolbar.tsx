@@ -51,10 +51,7 @@ export function ProjectsToolbar({
             className="
                 w-full rounded-xl border border-gray-200
                 bg-white py-2.5 pl-10 pr-4
-                text-sm text-gray-700 shadow-sm
-                outline-none transition
-                focus:border-[#9E0B0F]
-                focus:ring-2 focus:ring-[#9E0B0F]/10
+                text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10
             "
             />
         </div>

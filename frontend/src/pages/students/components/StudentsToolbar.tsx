@@ -6,7 +6,7 @@ import { Curso } from '../../../types';
 import { SectionOption, StudentStatus } from '../types';
 
 const SELECT_CLASS =
-  'rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10';
+  'rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10';
 
 interface StudentsToolbarProps {
   search: string;
@@ -54,14 +54,16 @@ export function StudentsToolbar({
           <div className="relative flex-1">
             <Search
               size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 "
             />
+
 
             <Input
               value={search}
               onChange={(event) => onSearch(event.target.value)}
               placeholder="Buscar por código o nombre del estudiante..."
               leftIcon={<Search size={18} />}
+              className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10"
             />
           </div>
 
@@ -69,7 +71,8 @@ export function StudentsToolbar({
             value={courseFilter ?? ''}
             onChange={(event) => onCourseFilter(event.target.value)}
             aria-label="Filtrar por asignatura"
-            className={`${SELECT_CLASS} md:w-56`}
+            className={`${SELECT_CLASS} md:w-5`}
+            
           >
             {courses.map((course) => (
               <option key={course.id} value={course.id}>
@@ -82,7 +85,7 @@ export function StudentsToolbar({
             value={sectionFilter ?? ''}
             onChange={(event) => onSectionFilter(event.target.value ? Number(event.target.value) : null)}
             aria-label="Filtrar por sección"
-            className={`${SELECT_CLASS} md:w-56`}
+            className={`${SELECT_CLASS} md:w-56 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10`}
           >
             <option value="">Sección: Todas</option>
             {filterSections.map((section) => (
@@ -92,13 +95,15 @@ export function StudentsToolbar({
             ))}
           </select>
 
-          <Button
-              variant="outline"
-              icon={<Filter size={17} />}
-              onClick={onToggleFilter}
-            >
-              Filtrar
-            </Button>
+        <Button
+          variant="secondary"
+          size="md"
+          icon={<Filter size={17} />}
+          onClick={onToggleFilter}
+          className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10"
+        >
+          Filtrar
+        </Button>
 
           <Button
             variant="outline"
@@ -106,6 +111,8 @@ export function StudentsToolbar({
             onClick={onExport}
             loading={exporting}
             title="Exporta los estudiantes de la asignatura y sección filtradas"
+            className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10"
+
           >
             Exportar Excel
           </Button>

@@ -36,7 +36,7 @@ export function RubricaEncabezado({
   return (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Rúbricas y Criterios ABET</h1>
+              <h1 className="text-2xl font-semibold text-[#9E0B0F]">Rúbricas y Criterios ABET</h1>
               <p className="mt-1 text-sm text-gray-500">
                 {selectedActividad
                   ? `${selectedCurso ? `${selectedCurso.nombre} · ` : ''}Actividad: ${selectedActividad.nombre}`
@@ -46,59 +46,57 @@ export function RubricaEncabezado({
 
             <div className="flex flex-wrap items-center gap-2">
               {selectedCursoId && (
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={() => requestDiscard(() => navigate(`/cursos/${selectedCursoId}`))}
-                >
-                  ← Volver al curso
-                </Button>
+          <><Button
+            variant="secondary"
+            size="md"
+            onClick={() => requestDiscard(() => navigate(`/cursos/${selectedCursoId}`))}
+            className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+          >
+            ← Volver al curso
+          </Button><Button
+            variant="outline"
+            size="md"
+            icon={<Plus size={16} />}
+            onClick={() => openAspectoModal()}
+            disabled={!selectedActividad || bloqueada}
+            className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+          >
+              Agregar aspecto
+            </Button><Button
+              variant="outline"
+              size="md"
+              icon={<Upload size={16} />}
+              onClick={() => openImportModal('csv')}
+              disabled={!selectedActividad || bloqueada}
+              className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+            >
+              Importar CSV
+            </Button><Button
+              variant="outline"
+              size="md"
+              icon={<Upload size={16} />}
+              onClick={() => openImportModal('excel')}
+              disabled={!selectedActividad || bloqueada}
+              className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+            >
+              Importar Excel
+            </Button><Button
+              variant="primary"
+              size="md"
+              icon={<Save size={16} />}
+              className="rounded-xl bg-[#9E0B0F] hover:bg-[#82090d]"
+              onClick={saveRubrica}
+              loading={saving}
+              disabled={!canSave}
+              title={bloqueada
+                ? 'La actividad ya tiene calificaciones: la rúbrica no se puede reemplazar'
+                : canSave
+                  ? undefined
+                  : 'La rúbrica debe sumar exactamente 100% y tener cambios sin guardar'}
+            >
+              Guardar rúbrica
+            </Button></>
               )}
-              <Button
-                variant="outline"
-                size="md"
-                icon={<Plus size={16} />}
-                onClick={() => openAspectoModal()}
-                disabled={!selectedActividad || bloqueada}
-              >
-                Agregar aspecto
-              </Button>
-              <Button
-                variant="outline"
-                size="md"
-                icon={<Upload size={16} />}
-                onClick={() => openImportModal('csv')}
-                disabled={!selectedActividad || bloqueada}
-              >
-                Importar CSV
-              </Button>
-              <Button
-                variant="outline"
-                size="md"
-                icon={<Upload size={16} />}
-                onClick={() => openImportModal('excel')}
-                disabled={!selectedActividad || bloqueada}
-              >
-                Importar Excel
-              </Button>
-              <Button
-                variant="primary"
-                size="md"
-                icon={<Save size={16} />}
-                className="rounded-xl bg-[#9E0B0F] hover:bg-[#82090d]"
-                onClick={saveRubrica}
-                loading={saving}
-                disabled={!canSave}
-                title={
-                  bloqueada
-                    ? 'La actividad ya tiene calificaciones: la rúbrica no se puede reemplazar'
-                    : canSave
-                      ? undefined
-                      : 'La rúbrica debe sumar exactamente 100% y tener cambios sin guardar'
-                }
-              >
-                Guardar rúbrica
-              </Button>
             </div>
           </div>
   );

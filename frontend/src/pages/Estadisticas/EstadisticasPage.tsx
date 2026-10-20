@@ -84,7 +84,7 @@ export function EstadisticasPage() {
         <div className="mx-auto max-w-[1280px]">
           <div className="mb-6 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Estadísticas ABET</h1>
+              <h1 className="text-2xl font-semibold text-[#9E0B0F]">Estadísticas ABET</h1>
               <p className="mt-1 text-sm text-gray-500">
                 Distribución de estudiantes por Criterio ABET y por Resultado de Aprendizaje en una actividad.
               </p>
@@ -97,6 +97,8 @@ export function EstadisticasPage() {
                   onClick={handleExportarResumen}
                   loading={exportandoResumen}
                   disabled={sinActividad || exportandoResumen}
+                  className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+
                 >
                   Exportar resumen
                 </Button>

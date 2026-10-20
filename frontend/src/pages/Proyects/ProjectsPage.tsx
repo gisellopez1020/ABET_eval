@@ -199,7 +199,7 @@ export function ProjectsPage() {
         {/* Encabezado */}
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-[#9E0B0F]">
               Proyectos
             </h1>
 

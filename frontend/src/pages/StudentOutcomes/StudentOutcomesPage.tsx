@@ -239,29 +239,39 @@ export function StudentOutcomesPage() {
         <div className="mx-auto max-w-[1280px]">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Student Outcomes</h1>
+              <h1 className="text-2xl font-semibold text-[#9E0B0F]">Student Outcomes</h1>
               <p className="mt-1 text-sm text-gray-500">
                 Catálogo de Resultados de Aprendizaje ABET del programa y sus Criterios de Evaluación, compartido por
                 todas las asignaturas.
               </p>
               <div className="mt-4">
-                <label htmlFor="student-outcomes-programa" className="sr-only">Selecciona la carrera</label>
-                <select
-                  id="student-outcomes-programa"
-                  aria-label="Selecciona la carrera"
-                  value={programaSeleccionado}
-                  onChange={(event) => cambiarPrograma(event.target.value)}
-                  className="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
-                >
-                  <option value="">Selecciona la carrera...</option>
-                  {programas.map((programa) => (
-                    <option key={programa} value={programa}>{programa}</option>
-                  ))}
-                </select>
-              </div>
+              <label
+                htmlFor="student-outcomes-programa"
+                className="sr-only"
+              >
+                Selecciona la carrera
+              </label>
+
+              <select
+                id="student-outcomes-programa"
+                aria-label="Selecciona la carrera"
+                value={programaSeleccionado}
+                onChange={(event) => cambiarPrograma(event.target.value)}
+               className="w-full max-w-xs rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+              >
+                <option value="">Selecciona la carrera...</option>
+
+                {programas.map((programa) => (
+                  <option key={programa} value={programa}>
+                    {programa}
+                  </option>
+                ))}
+              </select>
+            </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="md" icon={<Upload size={16} />} onClick={abrirImportacion}>
+              <Button variant="outline" size="md" icon={<Upload size={16} />} onClick={abrirImportacion}   className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10"
+>
                 Importar CSV
               </Button>
               <AgregarMenu

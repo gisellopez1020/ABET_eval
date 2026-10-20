@@ -1,8 +1,7 @@
 import { Actividad, Curso, Seccion } from '../../../types';
 
-const SELECT_CLASS =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50 disabled:text-gray-400';
-
+export const SELECT_CLASS =
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10';
 interface FiltrosEstadisticasProps {
   cursos: Curso[];
   secciones: Seccion[];

@@ -132,7 +132,7 @@ export function CoursesPage() {
       <main className="p-6">
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Asignaturas</h1>
+            <h1 className="text-2xl font-semibold text-[#9E0B0F]">Asignaturas</h1>
             <p className="mt-1 text-sm text-gray-500">
               {courses.length}{' '}
               {courses.length === 1 ? 'asignatura registrada' : 'asignaturas registradas'}

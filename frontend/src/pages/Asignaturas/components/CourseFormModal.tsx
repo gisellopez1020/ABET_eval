@@ -197,7 +197,8 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
         <button
           type="button"
           onClick={onClose}
-      className="rounded-lg border border-[#9E0B0F] bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-red-50"          >
+        className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+         >
           Cancelar
         </button>
         <button
