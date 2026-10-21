@@ -124,7 +124,9 @@ export function CoursePage() {
             <p className="text-sm text-gray-500">{curso.codigo} · {curso.periodo}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" icon={<Pencil size={14} />} onClick={() => setEditModal(true)}>
+            <Button variant="secondary" size="sm" 
+              className="rounded-lg border border-gray-200 bg-white text-gray-700 outline-none transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
+              icon={<Pencil size={14} />} onClick={() => setEditModal(true)}>
               Editar asignatura
             </Button>
             <Button variant="primary" size="sm" onClick={() => navigate(`/cursos/${id}/reportes`)}>

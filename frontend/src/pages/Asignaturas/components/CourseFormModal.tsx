@@ -117,8 +117,7 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-        >
+          className="rounded-full border border-gray-200 bg-white p-2 text-gray-500 transition hover:border-[#9E0B0F] hover:bg-white hover:text-[#9E0B0F] focus:outline-none focus:ring-2 focus:ring-[#9E0B0F]/10"        >
           <X size={19} />
         </button>
       </div>
@@ -197,8 +196,8 @@ export function CourseFormModal({ open, mode, course, onClose, onSaved }: Course
         <button
           type="button"
           onClick={onClose}
-        className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
-         >
+          className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus:outline-none focus:ring-2 focus:ring-[#9E0B0F]/10"
+        >
           Cancelar
         </button>
         <button

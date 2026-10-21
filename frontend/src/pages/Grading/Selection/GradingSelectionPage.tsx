@@ -125,10 +125,11 @@ export function GradingSelectionPage() {
       <div className="p-6">
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-uao-dark">{actividad?.nombre}</h2>
+            <h2 className="text-2xl font-semibold text-[#9E0B0F]">{actividad?.nombre}</h2>
             <p className="text-sm text-gray-500 mt-0.5">{seccionNombre} · {esGrupal ? 'Actividad grupal' : 'Actividad individual'}</p>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => navigate(`/cursos/${actividad?.curso_id}`)}>
+          <Button variant="secondary" size="sm"   className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+         onClick={() => navigate(`/cursos/${actividad?.curso_id}`)}>
             ← Volver
           </Button>
         </div>
@@ -147,7 +148,7 @@ export function GradingSelectionPage() {
         {/* Controles */}
         <div className="flex gap-3 mb-4">
           <input
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-uao-mid"
+            className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 outline-none transition hover:border-[#9E0B0F] focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"            
             placeholder={`Buscar ${esGrupal ? 'equipo o integrante' : 'estudiante'}…`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -201,6 +202,7 @@ export function GradingSelectionPage() {
                 <Button
                   variant={item.calificado ? 'secondary' : 'primary'}
                   size="sm"
+                  className="rounded-lg border border-gray-200 bg-white text-gray-700 outline-none transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
                   onClick={() => goToTemplate(item, originalIndex)}
                 >
                   {item.calificado ? 'Revisar' : 'Calificar'}

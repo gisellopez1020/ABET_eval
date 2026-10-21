@@ -220,6 +220,7 @@ export function GradingTemplatePage() {
         <div className="flex justify-between">
           <Button
             variant="secondary"
+            className="rounded-lg border border-gray-200 bg-white text-gray-700 outline-none transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
             onClick={() => navigate(`/actividades/${actId}/calificar/${secId}`, { state: null })}
           >
             ← Volver a la lista

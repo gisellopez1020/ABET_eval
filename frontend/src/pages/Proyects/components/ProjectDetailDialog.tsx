@@ -34,9 +34,9 @@ export function ProjectDetailDialog({ project, onClose, onDelete, onEdit, onEval
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
-              aria-label="Cerrar modal"
-            >
+             className="rounded-full border border-gray-200 bg-white p-2 text-gray-500 transition hover:border-[#9E0B0F] hover:bg-white hover:text-[#9E0B0F] focus:outline-none focus:ring-2 focus:ring-[#9E0B0F]/10"        >
+              
+            
               <X size={18} />
             </button>
           </div>
@@ -103,13 +103,22 @@ export function ProjectDetailDialog({ project, onClose, onDelete, onEdit, onEval
               <Trash2 size={16} />
               Eliminar equipo
             </Button>
-            <Button variant="secondary" onClick={onClose}>
-              Cerrar
-            </Button>
-            <Button variant="outline" onClick={onEdit}>
-              <Pencil size={16} />
-              Editar equipo
-            </Button>
+<Button
+  variant="secondary"
+  onClick={onClose}
+  className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+    >
+      Cerrar
+    </Button>
+
+      <Button
+        variant="outline"
+        onClick={onEdit}
+        className="rounded-xl border border-[#9E0B0F] !bg-white !text-gray-800 transition hover:!border-[#82090d] hover:!bg-white hover:!text-[#9E0B0F]"
+      >
+        <Pencil size={16} />
+        Editar equipo
+      </Button>
             <Button variant="primary" onClick={onEvaluate}>
               Evaluar Proyecto
             </Button>

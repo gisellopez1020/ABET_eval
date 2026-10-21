@@ -100,8 +100,8 @@ export function EditProjectModal({ project, onClose, onSave }: EditProjectModalP
           onClick={onClose}
           disabled={loading}
           aria-label="Cerrar diálogo"
-          className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
-        >
+          className="rounded-full border border-gray-200 bg-white p-2 text-gray-500 transition hover:border-[#9E0B0F] hover:bg-white hover:text-[#9E0B0F] focus:outline-none focus:ring-2 focus:ring-[#9E0B0F]/10"        >
+        
           <X size={18} />
         </button>
       </div>

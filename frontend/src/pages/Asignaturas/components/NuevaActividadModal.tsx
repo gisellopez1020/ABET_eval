@@ -61,7 +61,8 @@ export function NuevaActividadModal({
           />
           {actError && <p className="text-sm text-uao-accent">{actError}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setNewActModal(false)}>Cancelar</Button>
+            <Button variant="secondary"  className="rounded-xl border border-gray-200 bg-white text-gray-800 transition hover:border-[#9E0B0F] hover:bg-white"
+             onClick={() => setNewActModal(false)}>Cancelar</Button>
             <Button onClick={handleCreateActividad} loading={newActLoading}>Crear</Button>
           </div>
         </div>

@@ -86,8 +86,8 @@ export default function EvaluacionesPage() {
   return (
     <AppLayout>
       <div className="min-h-screen p-6">
-        <div className="mx-auto max-w-[1400px] p-0 shadow-sm">
-          <div className="px-5 py-5">
+        <div className="shadow-sm">
+          <div className="py-5">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-semibold text-[#9E0B0F]">Módulo de Evaluación</h2>

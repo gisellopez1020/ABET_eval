@@ -81,7 +81,7 @@ export function EstadisticasPage() {
   return (
     <AppLayout>
       <div className="p-6">
-        <div className="mx-auto max-w-[1280px]">
+        <div>
           <div className="mb-6 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-[#9E0B0F]">Estadísticas ABET</h1>

@@ -236,7 +236,7 @@ export function StudentOutcomesPage() {
   return (
     <AppLayout>
       <div className="min-h-screen bg-white p-6">
-        <div className="mx-auto max-w-[1280px]">
+        <div>
           <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-[#9E0B0F]">Student Outcomes</h1>

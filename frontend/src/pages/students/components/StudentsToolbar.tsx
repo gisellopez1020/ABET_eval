@@ -71,7 +71,7 @@ export function StudentsToolbar({
             value={courseFilter ?? ''}
             onChange={(event) => onCourseFilter(event.target.value)}
             aria-label="Filtrar por asignatura"
-            className={`${SELECT_CLASS} md:w-5`}
+            className={`${SELECT_CLASS} md:w-56`}
             
           >
             {courses.map((course) => (

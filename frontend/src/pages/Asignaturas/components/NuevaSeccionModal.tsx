@@ -36,8 +36,14 @@ export function NuevaSeccionModal({
           />
           {seccionError && <p className="text-sm text-uao-accent">{seccionError}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setNewSeccionModal(false)}>Cancelar</Button>
-            <Button onClick={handleCreateSeccion} loading={newSeccionLoading}>Crear</Button>
+          <Button
+            variant="secondary"
+            onClick={() => setNewSeccionModal(false)}
+            className="rounded-xl border border-gray-200 bg-white text-gray-800 transition hover:border-[#9E0B0F] hover:bg-white"
+          >
+            Cancelar
+          </Button>        
+         <Button onClick={handleCreateSeccion} loading={newSeccionLoading}>Crear</Button>
           </div>
         </div>
       </Modal>

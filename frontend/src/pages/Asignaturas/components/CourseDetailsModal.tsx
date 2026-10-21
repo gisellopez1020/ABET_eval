@@ -41,8 +41,7 @@ export function CourseDetailsModal({ course, stats, onClose, onEdit }: CourseDet
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full p-2 text-gray-500 transition hover:bg-gray-200 hover:text-gray-800"
-          aria-label="Cerrar detalle de asignatura"
+    className="rounded-full border border-gray-200 bg-white p-2 text-gray-500 transition hover:border-[#9E0B0F] hover:bg-white hover:text-[#9E0B0F] focus:outline-none focus:ring-2 focus:ring-[#9E0B0F]/10"          aria-label="Cerrar detalle de asignatura"
         >
           <X size={18} />
         </button>
@@ -114,13 +113,21 @@ export function CourseDetailsModal({ course, stats, onClose, onEdit }: CourseDet
       </div>
 
       <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4">
-        <Button variant="secondary" onClick={onClose}>
-          Cerrar
-        </Button>
-        <Button variant="primary"   className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
- onClick={() => onEdit(course)}>
-          Editar asignatura
-        </Button>
+        <Button
+        variant="secondary"
+        onClick={onClose}
+        className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+      >
+        Cerrar
+      </Button>
+
+<Button
+  variant="secondary"
+  className="rounded-lg border border-[#9E0B0F] !bg-[#9E0B0F] px-4 py-2 text-sm font-medium !text-white transition hover:!border-[#82090d] hover:!bg-[#82090d] disabled:cursor-not-allowed disabled:opacity-70"
+  onClick={() => onEdit(course)}
+>
+  Editar asignatura
+</Button>
       </div>
     </Dialog>
   );

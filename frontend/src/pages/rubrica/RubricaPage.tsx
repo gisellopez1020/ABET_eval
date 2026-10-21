@@ -328,7 +328,7 @@ export default function RubricaPage() {
     return (
       <AppLayout>
         <div className="min-h-screen bg-[#f3f3f3] p-6">
-          <div className="mx-auto max-w-[1200px] rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="h-8 w-56 animate-pulse rounded bg-gray-200" />
           </div>
         </div>
@@ -339,7 +339,7 @@ export default function RubricaPage() {
   return (
     <AppLayout>
       <div className="p-6">
-        <div className="mx-auto max-w-[1280px]">
+        <div>
           <RubricaEncabezado
             selectedActividad={selectedActividad}
             selectedCurso={selectedCurso}
