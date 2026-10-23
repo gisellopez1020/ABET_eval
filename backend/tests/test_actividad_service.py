@@ -8,12 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from app.models import Actividad
+from pydantic import ValidationError
+
+from app.models import Actividad, EquipoTrabajo, Seccion
 from app.models.actividad import TipoActividad
-from app.schemas.actividad import ActividadDetalleOut
+from app.schemas.actividad import ActividadCreate, ActividadDetalleOut, ActividadUpdate
 from app.services.actividades import ActividadService
 from app.services.errores import (
-    ActividadConCalificaciones, ActividadNoEncontrada, Conflicto, CursoNoEncontrado, SinPermiso,
+    ActividadConCalificaciones, ActividadNoEncontrada, Conflicto, CursoNoEncontrado, DatosInvalidos,
+    SeccionConTrabajoEnActividad, SeccionesFueraDelCurso, SinPermiso,
 )
 from tests.test_catalogo_ra_abet import MOCK_USER, db_session  # noqa: F401 (fixtures)
 from tests.test_exportar_estudiantes import _curso, _est
@@ -146,6 +149,155 @@ def test_eliminar_con_calificaciones_lanza_conflicto_y_no_borra(servicio, db_ses
     assert str(exc.value) == "No se puede eliminar 'Act' porque ya tiene calificaciones registradas."
     assert isinstance(exc.value, Conflicto)
     assert db_session.get(Actividad, act.id) is not None
+
+
+# ── Alcance de secciones: crear ──────────────────────────────────────────────
+
+def _crear(servicio, curso, **alcance):
+    """Crea pasando por el schema, como el router (que valida y quita repetidos)."""
+    return servicio.crear(curso.id, EMAIL, ActividadCreate(**NUEVA, **alcance).model_dump())
+
+
+@pytest.fixture()
+def tres(db_session):
+    """Curso con S1, S2 y S3."""
+    return _curso(db_session, "Redes", "R-2", secciones=("S1", "S2", "S3"))
+
+
+class TestCrearConAlcance:
+    def test_sin_especificar_aplica_a_todas_incluso_a_una_seccion_nueva(self, servicio, db_session, tres):
+        curso, [s1, _, _] = tres
+        actividad = _crear(servicio, curso)
+        nueva = Seccion(nombre="S4", curso_id=curso.id)
+        db_session.add(nueva)
+        db_session.commit()
+        assert (actividad.aplica_todas_secciones, actividad.secciones_ids) == (True, [])
+        assert actividad.aplica_en(s1.id) and actividad.aplica_en(nueva.id)
+
+    def test_con_secciones_especificas(self, servicio, db_session, tres):
+        curso, [s1, s2, s3] = tres
+        actividad = _crear(servicio, curso, aplica_todas_secciones=False, secciones_ids=[s3.id, s1.id, s3.id])
+        db_session.expire_all()
+        guardada = db_session.get(Actividad, actividad.id)
+        assert (guardada.aplica_todas_secciones, guardada.secciones_ids) == (False, [s1.id, s3.id])
+        assert [guardada.aplica_en(s.id) for s in (s1, s2, s3)] == [True, False, True]
+
+    @pytest.mark.parametrize("cual", ["inexistente", "de_otro_curso"])
+    def test_seccion_fuera_del_curso_no_crea_nada(self, servicio, db_session, tres, cual):
+        curso, [s1, _, _] = tres
+        _, [ajena] = _curso(db_session, "Otro", "O-1")
+        fuera = 99999 if cual == "inexistente" else ajena.id
+        with pytest.raises(SeccionesFueraDelCurso) as exc:
+            _crear(servicio, curso, aplica_todas_secciones=False, secciones_ids=[s1.id, fuera])
+        assert exc.value.seccion_ids == [fuera]
+        assert str(exc.value) == f"Secciones que no son de este curso: {fuera}"
+        assert isinstance(exc.value, DatosInvalidos)
+        assert db_session.query(Actividad).count() == 0
+
+
+class TestSchemaAlcance:
+    """'Todas' y 'específicas' son estados distintos: una lista vacía no significa 'todas'."""
+
+    def test_especificas_sin_secciones(self):
+        with pytest.raises(ValidationError, match="Elija al menos una sección"):
+            ActividadCreate(**NUEVA, aplica_todas_secciones=False, secciones_ids=[])
+
+    def test_todas_con_secciones(self):
+        with pytest.raises(ValidationError, match="solo se envía con aplica_todas_secciones en false"):
+            ActividadCreate(**NUEVA, secciones_ids=[1])
+
+    @pytest.mark.parametrize("cuerpo", [{"secciones_ids": [1]}, {"aplica_todas_secciones": False}])
+    def test_editar_exige_el_alcance_completo(self, cuerpo):
+        with pytest.raises(ValidationError):
+            ActividadUpdate(**cuerpo)
+
+    def test_editar_sin_alcance_no_lo_toca(self):
+        assert ActividadUpdate(nombre="X").model_dump(exclude_none=True) == {"nombre": "X"}
+
+
+# ── Alcance de secciones: editar ─────────────────────────────────────────────
+
+def _alcance(servicio, actividad, *secciones):
+    """Edita el alcance como el router: sin secciones es 'todas'."""
+    cuerpo = {"aplica_todas_secciones": not secciones, "secciones_ids": [s.id for s in secciones] or None}
+    return servicio.editar(actividad.id, EMAIL, ActividadUpdate(**cuerpo).model_dump(exclude_none=True))
+
+
+class TestEditarAlcance:
+    def test_ampliar_y_volver_a_todas(self, servicio, tres):
+        curso, [s1, s2, _] = tres
+        actividad = _crear(servicio, curso, aplica_todas_secciones=False, secciones_ids=[s1.id])
+        assert _alcance(servicio, actividad, s1, s2).secciones_ids == [s1.id, s2.id]
+        editada = _alcance(servicio, actividad)
+        assert (editada.aplica_todas_secciones, editada.secciones_ids) == (True, [])
+
+    def test_quitar_una_seccion_sin_trabajo(self, servicio, tres):
+        curso, [_, s2, _] = tres
+        actividad = _crear(servicio, curso)
+        editada = _alcance(servicio, actividad, s2)
+        assert (editada.aplica_todas_secciones, editada.secciones_ids) == (False, [s2.id])
+
+    def test_editar_otros_campos_conserva_el_alcance(self, servicio, tres):
+        curso, [s1, _, _] = tres
+        actividad = _crear(servicio, curso, aplica_todas_secciones=False, secciones_ids=[s1.id])
+        assert servicio.editar(actividad.id, EMAIL, {"nombre": "Otro"}).secciones_ids == [s1.id]
+
+    def test_seccion_de_otro_curso(self, servicio, db_session, tres):
+        curso, _ = tres
+        _, [ajena] = _curso(db_session, "Otro", "O-1")
+        actividad = _crear(servicio, curso)
+        with pytest.raises(SeccionesFueraDelCurso):
+            _alcance(servicio, actividad, ajena)
+
+    @pytest.mark.parametrize("trabajo", ["equipo_sin_calificar", "calificacion_individual"])
+    def test_quitar_una_seccion_con_trabajo_es_conflicto_y_no_cambia(self, servicio, db_session, tres, trabajo):
+        curso, [s1, s2, _] = tres
+        if trabajo == "equipo_sin_calificar":
+            actividad, _ = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
+            db_session.add(EquipoTrabajo(nombre="E1", actividad_id=actividad.id, seccion_id=s1.id))
+            db_session.commit()
+        else:
+            actividad, [criterios] = _actividad(db_session, curso, [(None, [100])])
+            _calificar(db_session, criterios, [1], estudiante=_est(db_session, s1, "Ana", "1"))
+        with pytest.raises(SeccionConTrabajoEnActividad) as exc:
+            _alcance(servicio, actividad, s2)
+        assert str(exc.value) == (
+            "No se puede quitar la sección 'S1' de 'Act' porque ya tiene equipos o "
+            "calificaciones en esa actividad. Elimínelos primero."
+        )
+        assert isinstance(exc.value, Conflicto)
+        db_session.expire_all()
+        assert db_session.get(Actividad, actividad.id).aplica_todas_secciones is True
+        # Ampliar, o conservar la sección con trabajo, sí se puede
+        assert _alcance(servicio, actividad, s1, s2).secciones_ids == [s1.id, s2.id]
+
+    def test_trabajo_en_otra_actividad_no_bloquea(self, servicio, db_session, tres):
+        curso, [s1, s2, _] = tres
+        _, [criterios] = _actividad(db_session, curso, [(None, [100])])
+        _calificar(db_session, criterios, [1], estudiante=_est(db_session, s1, "Ana", "1"))
+        actividad = _crear(servicio, curso)
+        assert _alcance(servicio, actividad, s2).secciones_ids == [s2.id]
+
+
+def test_borrar_la_unica_seccion_especifica_no_abre_la_actividad_a_todas(servicio, db_session, tres):
+    """Sin filas en actividad_secciones y con aplica_todas_secciones en False: no aplica a ninguna."""
+    curso, [s1, s2, _] = tres
+    actividad = _crear(servicio, curso, aplica_todas_secciones=False, secciones_ids=[s1.id])
+    db_session.delete(db_session.get(Seccion, s1.id))
+    db_session.commit()
+    db_session.expire_all()
+    guardada = db_session.get(Actividad, actividad.id)
+    assert (guardada.aplica_todas_secciones, guardada.secciones_ids) == (False, [])
+    assert not guardada.aplica_en(s2.id)
+
+
+def test_listar_y_obtener_exponen_el_alcance(servicio, tres):
+    curso, [s1, _, _] = tres
+    todas = _crear(servicio, curso)
+    especifica = _crear(servicio, curso, aplica_todas_secciones=False, secciones_ids=[s1.id])
+    alcance = {a.id: (a.aplica_todas_secciones, a.secciones_ids) for a in servicio.listar(curso.id, EMAIL)}
+    assert alcance == {todas.id: (True, []), especifica.id: (False, [s1.id])}
+    assert servicio.obtener(especifica.id, EMAIL).secciones_ids == [s1.id]
 
 
 # ── Independencia de FastAPI ─────────────────────────────────────────────────

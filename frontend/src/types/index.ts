@@ -73,10 +73,19 @@ export interface Actividad {
   created_at: string;
   /** Suma de pesos de la rúbrica. El backend lo envía como Decimal serializado ("100.00"). */
   total_peso_criterios: number | string;
+  /** true: aplica a todas las secciones del curso, también a las que se creen después. */
+  aplica_todas_secciones: boolean;
+  /** Secciones del alcance específico; vacío si aplica a todas. */
+  secciones_ids: number[];
 }
 
 export function rubricaCompleta(a: Actividad): boolean {
   return Number(a.total_peso_criterios) === 100;
+}
+
+/** Si la actividad se puede calificar (o tener equipos) en la sección. */
+export function aplicaEnSeccion(a: Actividad, seccionId: number): boolean {
+  return a.aplica_todas_secciones || a.secciones_ids.includes(seccionId);
 }
 
 export interface Criterio {

@@ -16,6 +16,10 @@ import { NuevaSeccionModal } from './components/NuevaSeccionModal';
 import { SeccionesPanel } from './components/SeccionesPanel';
 import { apiErrorMessage } from '../../api/errors';
 
+const ACTIVIDAD_NUEVA: ActividadCreate = {
+  nombre: '', tipo: 'individual', peso_nota_final: 20, aplica_todas_secciones: true, secciones_ids: [],
+};
+
 export function CoursePage() {
   const { cursoId } = useParams<{ cursoId: string }>();
   const id = Number(cursoId);
@@ -35,7 +39,7 @@ export function CoursePage() {
   const [seccionError, setSeccionError] = useState('');
 
   const [newActModal, setNewActModal] = useState(false);
-  const [newAct, setNewAct] = useState<ActividadCreate>({ nombre: '', tipo: 'individual', peso_nota_final: 20 });
+  const [newAct, setNewAct] = useState<ActividadCreate>(ACTIVIDAD_NUEVA);
   const [newActLoading, setNewActLoading] = useState(false);
   const [actError, setActError] = useState('');
 
@@ -86,12 +90,16 @@ export function CoursePage() {
     setNewActLoading(true);
     setActError('');
     try {
-      const a = await actividadesApi.create(id, newAct);
+      // Con una sola sección el modal no pregunta el alcance: aplica a todas
+      const datos = secciones.length > 1 && !newAct.aplica_todas_secciones
+        ? newAct
+        : { ...newAct, aplica_todas_secciones: true, secciones_ids: [] };
+      const a = await actividadesApi.create(id, datos);
       setActividades((prev) => [...prev, a]);
       setNewActModal(false);
-      setNewAct({ nombre: '', tipo: 'individual', peso_nota_final: 20 });
-    } catch (e: any) {
-      setActError(e?.response?.data?.detail || 'Error al crear actividad');
+      setNewAct(ACTIVIDAD_NUEVA);
+    } catch (e) {
+      setActError(apiErrorMessage(e, 'Error al crear actividad'));
     } finally {
       setNewActLoading(false);
     }
@@ -150,6 +158,7 @@ export function CoursePage() {
           {/* Actividades */}
           <ActividadesPanel
             actividades={actividades}
+            secciones={secciones}
             selectedSeccion={selectedSeccion}
             setNewActModal={setNewActModal}
           />
@@ -173,6 +182,7 @@ export function CoursePage() {
         setNewActModal={setNewActModal}
         newAct={newAct}
         setNewAct={setNewAct}
+        secciones={secciones}
         actError={actError}
         newActLoading={newActLoading}
         handleCreateActividad={handleCreateActividad}

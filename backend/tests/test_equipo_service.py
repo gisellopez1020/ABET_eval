@@ -12,12 +12,12 @@ from app.models import EquipoTrabajo, MiembroEquipo
 from app.models.actividad import TipoActividad
 from app.repositories.seccion import SeccionRepository
 from app.schemas.equipo import EquipoCreate
-from app.services.acceso import seccion_del_curso
+from app.services.acceso import seccion_de_la_actividad, seccion_del_curso
 from app.services.equipos import EquipoService
 from app.services.errores import (
-    ActividadNoEncontrada, ActividadNoGrupal, EquipoNoEncontrado, EstudianteEnDosEquipos,
-    EstudianteFueraDeSeccion, EstudianteRepetidoEnEquipo, EstudianteYaEnOtroEquipo, SeccionFueraDelCurso,
-    SinPermiso, SolicitudInvalida,
+    ActividadNoAplicaEnSeccion, ActividadNoEncontrada, ActividadNoGrupal, EquipoNoEncontrado,
+    EstudianteEnDosEquipos, EstudianteFueraDeSeccion, EstudianteRepetidoEnEquipo, EstudianteYaEnOtroEquipo,
+    NoEncontrado, SeccionFueraDelCurso, SinPermiso, SolicitudInvalida,
 )
 from tests.test_catalogo_ra_abet import MOCK_USER, db_session  # noqa: F401 (fixtures)
 from tests.test_exportar_estudiantes import _curso, _est
@@ -181,10 +181,60 @@ class TestModoCalificacion:
         assert (modo.tipo, [i.nombre for i in modo.items], modo.calificados) == ("individual", ["Ana", "Beto"], 0)
 
 
+# ── Alcance de secciones de la actividad ─────────────────────────────────────
+
+def _solo_en(db_session, actividad, *secciones):
+    actividad.aplica_todas_secciones = False
+    actividad.secciones = list(secciones)
+    db_session.commit()
+
+
+POR_SECCION = {
+    "listar": lambda s, aid, sid: s.listar(aid, sid, EMAIL),
+    "crear": lambda s, aid, sid: s.crear(aid, sid, EMAIL, [EquipoCreate(nombre="E1", estudiante_ids=[])]),
+    "modo_calificacion": lambda s, aid, sid: s.modo_calificacion(aid, sid, EMAIL),
+}
+
+
+class TestAlcance:
+    @pytest.mark.parametrize("operacion", POR_SECCION)
+    def test_seccion_fuera_del_alcance(self, servicio, db_session, contexto, operacion):
+        _solo_en(db_session, contexto["act"], contexto["s1"])
+        with pytest.raises(ActividadNoAplicaEnSeccion, match="^Esta actividad no aplica a esta sección$"):
+            POR_SECCION[operacion](servicio, contexto["act"].id, contexto["s2"].id)
+        assert _n_equipos(db_session, contexto["act"]) == 0
+
+    @pytest.mark.parametrize("operacion", POR_SECCION)
+    def test_seccion_del_alcance(self, servicio, db_session, contexto, operacion):
+        _solo_en(db_session, contexto["act"], contexto["s1"])
+        POR_SECCION[operacion](servicio, contexto["act"].id, contexto["s1"].id)
+
+    def test_individual_fuera_del_alcance(self, servicio, db_session, contexto):
+        individual, _ = _actividad(db_session, contexto["curso"], [(None, [100])])
+        _solo_en(db_session, individual, contexto["s2"])
+        with pytest.raises(ActividadNoAplicaEnSeccion):
+            servicio.modo_calificacion(individual.id, contexto["s1"].id, EMAIL)
+
+    def test_de_otro_curso_sigue_siendo_seccion_fuera_del_curso(self, servicio, db_session, contexto):
+        """El chequeo del curso va primero: una sección ajena no es 'fuera del alcance'."""
+        _solo_en(db_session, contexto["act"], contexto["s1"])
+        _, [ajena] = _curso(db_session, "Otro", "O-1")
+        with pytest.raises(SeccionFueraDelCurso):
+            servicio.listar(contexto["act"].id, ajena.id, EMAIL)
+
+    def test_seccion_de_la_actividad_en_acceso(self, db_session, contexto):
+        repo = SeccionRepository(db_session)
+        assert seccion_de_la_actividad(repo, contexto["act"], contexto["s2"].id) is contexto["s2"]
+        _solo_en(db_session, contexto["act"], contexto["s1"])
+        with pytest.raises(ActividadNoAplicaEnSeccion):
+            seccion_de_la_actividad(repo, contexto["act"], contexto["s2"].id)
+
+
 def test_categorias():
     for clase in (ActividadNoGrupal, EstudianteFueraDeSeccion, EstudianteRepetidoEnEquipo,
                   EstudianteEnDosEquipos, EstudianteYaEnOtroEquipo):
         assert issubclass(clase, SolicitudInvalida)
+    assert issubclass(ActividadNoAplicaEnSeccion, NoEncontrado)
 
 
 # ── Independencia de FastAPI ─────────────────────────────────────────────────

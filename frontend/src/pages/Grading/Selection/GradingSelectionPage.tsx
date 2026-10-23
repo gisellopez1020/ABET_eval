@@ -27,6 +27,8 @@ export function GradingSelectionPage() {
   const [seccionNombre, setSeccionNombre] = useState('');
   const [modo, setModo] = useState<ModoCalificacionResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // Por ejemplo, la actividad no aplica a la sección de la URL (404 del backend)
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [soloSinCalificar, setSoloSinCalificar] = useState(false);
 
@@ -37,17 +39,24 @@ export function GradingSelectionPage() {
   const [masivoError, setMasivoError] = useState('');
 
   useEffect(() => {
+    setLoadError('');
+    // La actividad se guarda aunque falle el modo: el error ofrece volver a su curso
+    const actividadCargada = actividadesApi.get(actId).then((a) => {
+      setActividad(a);
+      return a;
+    });
     Promise.all([
-      actividadesApi.get(actId),
+      actividadCargada,
       equiposApi.modoCalificacion(actId, secId),
     ]).then(([a, m]) => {
-      setActividad(a);
       setModo(m);
       cursosApi.get(a.curso_id).then((c) => setCursoNombre(c.nombre));
       seccionesApi.list(a.curso_id).then((ss) => {
         const s = ss.find((x) => x.id === secId);
         if (s) setSeccionNombre(s.nombre);
       });
+    }).catch((e) => {
+      setLoadError(apiErrorMessage(e, 'No se pudo cargar la calificación de esta sección'));
     }).finally(() => setLoading(false));
   }, [actId, secId]);
 
@@ -105,6 +114,26 @@ export function GradingSelectionPage() {
       <AppLayout crumbs={[{ label: 'Mis cursos', to: '/dashboard' }, { label: '…' }]}>
         <div className="p-6 space-y-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <AppLayout crumbs={[{ label: 'Mis cursos', to: '/dashboard' }, { label: actividad?.nombre || 'Calificar' }]}>
+        <div className="p-6">
+          <div role="alert" className="bg-white rounded-xl border border-gray-200 p-6 text-center">
+            <p className="text-sm text-uao-accent mb-4">{loadError}</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
+              onClick={() => navigate(actividad ? `/cursos/${actividad.curso_id}` : '/dashboard')}
+            >
+              {actividad ? '← Volver al curso' : '← Volver a mis cursos'}
+            </Button>
+          </div>
         </div>
       </AppLayout>
     );

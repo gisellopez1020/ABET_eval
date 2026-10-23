@@ -8,7 +8,7 @@ Reutiliza las fixtures y utilidades de test_reportes (SQLite en memoria).
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import EquipoTrabajo, Estudiante, MiembroEquipo
+from app.models import Actividad, EquipoTrabajo, Estudiante, MiembroEquipo
 from app.models.actividad import TipoActividad
 from tests.test_catalogo_ra_abet import MOCK_USER, client, db_session  # noqa: F401 (fixtures)
 from tests.test_reportes import _actividad, _calificar, _estudiante, _seccion, curso  # noqa: F401
@@ -317,3 +317,46 @@ class TestModoCalificacion:
         datos = _modo(client, act, _seccion(db_session, curso)).json()
         assert datos["calificados"] == 0
         assert datos["items"][0]["calificado"] is False
+
+
+# ── Flujo completo: actividad con secciones específicas ──────────────────────
+
+class TestAlcanceDeSecciones:
+    """Crear con alcance en S1, intentar calificar en S2 y ver el error; luego ampliar el alcance."""
+
+    def test_calificar_fuera_del_alcance_y_ampliar(self, client, db_session, curso):
+        s1, s2 = _seccion(db_session, curso), _seccion(db_session, curso, "S2")
+        dani = _estudiante(db_session, curso, "Dani", seccion="S2")
+        resp = client.post(f"/cursos/{curso.id}/actividades", json={
+            "nombre": "Lab", "tipo": "individual", "peso_nota_final": 20,
+            "aplica_todas_secciones": False, "secciones_ids": [s1.id],
+        })
+        assert resp.status_code == 201
+        act = db_session.get(Actividad, resp.json()["id"])
+        aspectos = client.put(f"/actividades/{act.id}/criterios", json={"aspectos": [
+            {"nombre": "A", "criterios": [{"texto": "C", "peso_porcentaje": 100}]},
+        ]})
+        assert aspectos.status_code in (200, 201), aspectos.text
+        [criterio] = [c for a in client.get(f"/actividades/{act.id}").json()["aspectos"] for c in a["criterios"]]
+
+        no_aplica = {"detail": "Esta actividad no aplica a esta sección"}
+        assert (_modo(client, act, s2).status_code, _modo(client, act, s2).json()) == (404, no_aplica)
+        assert client.get(f"/actividades/{act.id}/calificaciones/{s2.id}").status_code == 404
+        guardar = client.post("/calificaciones", json={
+            "actividad_id": act.id, "estudiante_id": dani.id, "criterios": [{"criterio_id": criterio["id"], "valor": 1}],
+        })
+        assert (guardar.status_code, guardar.json()) == (400, {"detail": "La actividad no aplica a la sección del estudiante"})
+        assert _modo(client, act, s1).status_code == 200
+
+        # Al ampliar el alcance, S2 se puede calificar
+        assert client.put(f"/actividades/{act.id}", json={"aplica_todas_secciones": True}).status_code == 200
+        assert _modo(client, act, s2).json()["items"][0]["nombre"] == "Dani"
+
+    def test_equipos_fuera_del_alcance(self, client, db_session, curso, grupal):
+        act, _ = grupal
+        s2 = _seccion(db_session, curso, "S2")
+        act.aplica_todas_secciones = False
+        act.secciones = [_seccion(db_session, curso)]
+        db_session.commit()
+        assert client.get(_url(act, s2)).status_code == 404
+        assert _crear(client, act, s2, ("E1", [])).status_code == 404

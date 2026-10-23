@@ -20,10 +20,11 @@ from app.repositories.estudiante import EstudianteRepository
 from app.repositories.rubrica import RubricaRepository
 from app.repositories.seccion import SeccionRepository
 from app.schemas.calificacion import CalificacionOut, ResumenCalificacion, ValorCriterio
-from app.services.acceso import actividad_del_docente, seccion_del_curso
+from app.services.acceso import actividad_del_docente, seccion_de_la_actividad
 from app.services.errores import (
     CalificacionNoEncontrada, CriterioFueraDeActividad, EquipoFueraDeActividad, EquipoNoPerteneceAActividad,
-    EstudianteFueraDelCurso, EstudianteNoEncontrado, EstudianteNoPerteneceAlCurso, SinPermiso,
+    EstudianteFueraDeAlcance, EstudianteFueraDelCurso, EstudianteNoEncontrado, EstudianteNoPerteneceAlCurso,
+    SinPermiso,
 )
 from app.utils.calculo import calcular_nota_parcial
 
@@ -42,7 +43,7 @@ class CalificacionService:
     def resumen(self, actividad_id: int, seccion_id: int, docente_email: str) -> List[ResumenCalificacion]:
         """Estado de calificación de cada equipo (grupal) o estudiante (individual) de la sección."""
         actividad = actividad_del_docente(self.actividades, self.cursos, actividad_id, docente_email)
-        seccion_del_curso(self.secciones, seccion_id, actividad.curso_id)
+        seccion_de_la_actividad(self.secciones, actividad, seccion_id)
 
         total_criterios = self.rubrica.contar_criterios(actividad_id)
         resultado: List[ResumenCalificacion] = []
@@ -114,6 +115,8 @@ class CalificacionService:
             seccion = self.secciones.get(est.seccion_id)
             if not seccion or seccion.curso_id != actividad.curso_id:
                 raise EstudianteNoPerteneceAlCurso()
+            if not actividad.aplica_en(seccion.id):
+                raise EstudianteFueraDeAlcance()
 
         criterios_map = {c.id: c for c in self.rubrica.criterios_de_actividad(actividad_id)}
         # Validar todos los criterios antes de escribir ninguno (el primero inválido, en orden)
@@ -167,7 +170,7 @@ class CalificacionService:
         de la actividad se ignoran.
         """
         actividad = actividad_del_docente(self.actividades, self.cursos, actividad_id, docente_email)
-        seccion_del_curso(self.secciones, seccion_id, actividad.curso_id)
+        seccion_de_la_actividad(self.secciones, actividad, seccion_id)
 
         equipos = self.equipos.de_actividad_y_seccion(actividad_id, seccion_id)
         criterios_map = {c.id: c for c in self.rubrica.criterios_de_actividad(actividad_id)}

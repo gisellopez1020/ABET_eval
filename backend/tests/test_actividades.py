@@ -92,6 +92,64 @@ class TestCrear:
         assert db_session.get(Actividad, cuerpo["id"]) is not None
 
 
+# ── Alcance de secciones ─────────────────────────────────────────────────────
+
+@pytest.fixture()
+def dos_secciones(db_session):
+    return _curso(db_session, "Bases", "BD-1", secciones=("S1", "S2"))
+
+
+class TestAlcanceHttp:
+    def test_sin_alcance_aplica_a_todas(self, client, dos_secciones):
+        curso, _ = dos_secciones
+        cuerpo = client.post(f"/cursos/{curso.id}/actividades", json=NUEVA).json()
+        assert (cuerpo["aplica_todas_secciones"], cuerpo["secciones_ids"]) == (True, [])
+
+    def test_con_secciones_especificas_en_listar_y_detalle(self, client, dos_secciones):
+        curso, [s1, _] = dos_secciones
+        resp = client.post(f"/cursos/{curso.id}/actividades",
+                           json={**NUEVA, "aplica_todas_secciones": False, "secciones_ids": [s1.id]})
+        assert resp.status_code == 201
+        assert (resp.json()["aplica_todas_secciones"], resp.json()["secciones_ids"]) == (False, [s1.id])
+        [listada] = client.get(f"/cursos/{curso.id}/actividades").json()
+        detalle = client.get(f"/actividades/{listada['id']}").json()
+        assert listada["secciones_ids"] == detalle["secciones_ids"] == [s1.id]
+
+    def test_seccion_de_otro_curso_422(self, client, db_session, dos_secciones):
+        curso, _ = dos_secciones
+        _, [ajena] = _curso(db_session, "Otro", "O-1")
+        resp = client.post(f"/cursos/{curso.id}/actividades",
+                           json={**NUEVA, "aplica_todas_secciones": False, "secciones_ids": [ajena.id]})
+        assert (resp.status_code, resp.json()) == (422, {"detail": f"Secciones que no son de este curso: {ajena.id}"})
+        assert db_session.query(Actividad).count() == 0
+
+    @pytest.mark.parametrize("alcance", [
+        {"aplica_todas_secciones": False, "secciones_ids": []},
+        {"aplica_todas_secciones": False},
+        {"secciones_ids": [1]},
+    ], ids=["especificas_vacia", "especificas_sin_lista", "lista_sin_especificas"])
+    def test_alcance_incoherente_422(self, client, db_session, dos_secciones, alcance):
+        curso, _ = dos_secciones
+        resp = client.post(f"/cursos/{curso.id}/actividades", json={**NUEVA, **alcance})
+        assert resp.status_code == 422
+        assert db_session.query(Actividad).count() == 0
+
+    def test_editar_quitar_seccion_con_calificaciones_409(self, client, db_session, dos_secciones):
+        curso, [s1, s2] = dos_secciones
+        act, [criterios] = _actividad(db_session, curso, [(None, [100])])
+        _calificar(db_session, criterios, [1], estudiante=_est(db_session, s1, "Ana", "1"))
+        resp = client.put(f"/actividades/{act.id}", json={"aplica_todas_secciones": False, "secciones_ids": [s2.id]})
+        assert resp.status_code == 409
+        assert resp.json()["detail"].startswith("No se puede quitar la sección 'S1' de 'Act'")
+
+    def test_editar_alcance(self, client, db_session, dos_secciones):
+        curso, [_, s2] = dos_secciones
+        act, _ = _actividad(db_session, curso, [])
+        resp = client.put(f"/actividades/{act.id}", json={"aplica_todas_secciones": False, "secciones_ids": [s2.id]})
+        assert resp.status_code == 200
+        assert (resp.json()["aplica_todas_secciones"], resp.json()["secciones_ids"]) == (False, [s2.id])
+
+
 # ── Por actividad: obtener, editar y eliminar ────────────────────────────────
 
 POR_ACTIVIDAD = [

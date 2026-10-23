@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
-import { Actividad, rubricaCompleta } from '../../../types';
+import { Actividad, Seccion, aplicaEnSeccion, rubricaCompleta } from '../../../types';
 
 function estadoActividad(a: Actividad): { label: string; variant: 'neutral' | 'warning' | 'info' | 'success' } {
   return { label: a.tipo === 'grupal' ? 'Grupal' : 'Individual', variant: 'info' };
@@ -11,13 +11,15 @@ function estadoActividad(a: Actividad): { label: string; variant: 'neutral' | 'w
 
 interface ActividadesPanelProps {
   actividades: Actividad[];
+  /** Para nombrar las secciones de las actividades con alcance específico */
+  secciones: Seccion[];
   /** Sin sección elegida no se ofrece "Calificar" */
   selectedSeccion: number | null;
   setNewActModal: Dispatch<SetStateAction<boolean>>;
 }
 
 // Panel "Actividades" del curso: abrir la rúbrica, calificar en la sección elegida o crear una nueva
-export function ActividadesPanel({ actividades, selectedSeccion, setNewActModal }: ActividadesPanelProps) {
+export function ActividadesPanel({ actividades, secciones, selectedSeccion, setNewActModal }: ActividadesPanelProps) {
   const navigate = useNavigate();
 
   return (
@@ -38,6 +40,10 @@ export function ActividadesPanel({ actividades, selectedSeccion, setNewActModal 
               {actividades.map((a) => {
                 const { label, variant } = estadoActividad(a);
                 const tieneRubrica = rubricaCompleta(a);
+                const aplica = selectedSeccion !== null && aplicaEnSeccion(a, selectedSeccion);
+                const nombresSecciones = secciones
+                  .filter((s) => a.secciones_ids.includes(s.id))
+                  .map((s) => s.nombre);
                 return (
                   <div
                     key={a.id}
@@ -50,6 +56,11 @@ export function ActividadesPanel({ actividades, selectedSeccion, setNewActModal 
                     <div>
                       <p className="font-medium text-gray-900 text-sm">{a.nombre}</p>
                       <p className="text-xs text-gray-500">Peso: {Number(a.peso_nota_final)}%</p>
+                      {!a.aplica_todas_secciones && (
+                        <p className="text-xs text-gray-500">
+                          {nombresSecciones.length > 0 ? `Secciones: ${nombresSecciones.join(', ')}` : 'Sin secciones asignadas'}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {!tieneRubrica && <Badge variant="warning">Sin rúbrica</Badge>}
@@ -57,12 +68,15 @@ export function ActividadesPanel({ actividades, selectedSeccion, setNewActModal 
                       {selectedSeccion && (
                         <span
                           onClick={(e) => e.stopPropagation()}
-                          title={tieneRubrica ? undefined : 'Define la rúbrica (100%) antes de calificar'}
+                          title={
+                            !aplica ? 'Esta actividad no aplica a la sección seleccionada'
+                              : tieneRubrica ? undefined : 'Define la rúbrica (100%) antes de calificar'
+                          }
                         >
                           <Button
                             size="sm"
                             variant="primary"
-                            disabled={!tieneRubrica}
+                            disabled={!aplica || !tieneRubrica}
                             onClick={() => navigate(`/actividades/${a.id}/calificar/${selectedSeccion}`)}
                           >
                             Calificar

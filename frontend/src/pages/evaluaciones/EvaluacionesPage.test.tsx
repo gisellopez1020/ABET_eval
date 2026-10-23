@@ -35,7 +35,7 @@ const curso = (id: number, nombre: string) => ({
 });
 const seccion = (id: number, nombre: string, curso_id: number): Seccion => ({ id, nombre, curso_id, activo: true });
 const actividad = (id: number, nombre: string, curso_id: number, tipo: 'grupal' | 'individual' = 'grupal'): Actividad => ({
-  id, nombre, tipo, peso_nota_final: 30, curso_id, created_at: '2026-01-01', total_peso_criterios: '100.00',
+  id, nombre, tipo, peso_nota_final: 30, curso_id, created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [],
 });
 const equipo = (id: number, nombre: string, actividad_id: number, seccion_id: number, miembros: string[] = []): EquipoTrabajo => ({
   id, nombre, actividad_id, seccion_id, calificado: false, nota_total: null,

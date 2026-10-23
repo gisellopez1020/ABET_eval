@@ -339,8 +339,8 @@ def test_migracion_0006_downgrade_quita_email():
     assert "ALTER TABLE estudiantes DROP COLUMN email;" in sql
 
 
-def test_0008_es_la_ultima_revision():
-    assert "0008 (head)" in subprocess.run(
+def test_0009_es_la_ultima_revision():
+    assert "0009 (head)" in subprocess.run(
         [str(Path(sys.executable).parent / ("alembic.exe" if os.name == "nt" else "alembic")), "heads"],
         cwd=BACKEND, capture_output=True, text=True, timeout=60,
     ).stdout

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,13 @@ class SeccionRepository:
 
     def get(self, seccion_id: int) -> Optional[Seccion]:
         return self.db.get(Seccion, seccion_id)
+
+    def de_curso(self, curso_id: int, ids: Optional[Iterable[int]] = None) -> List[Seccion]:
+        """Secciones del curso (activas o no), solo las de `ids` si se dan, por id."""
+        query = self.db.query(Seccion).filter(Seccion.curso_id == curso_id)
+        if ids is not None:
+            query = query.filter(Seccion.id.in_(list(ids)))
+        return query.order_by(Seccion.id).all()
 
     def activas_de_curso(self, curso_id: int) -> List[Seccion]:
         return (

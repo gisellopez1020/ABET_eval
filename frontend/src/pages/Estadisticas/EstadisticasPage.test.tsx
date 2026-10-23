@@ -70,9 +70,9 @@ beforeEach(() => {
   vi.mocked(actividadesApi.list).mockImplementation(async (cursoId) =>
     cursoId === 1
       ? [{ id: 100, nombre: 'Proyecto final', tipo: 'grupal', peso_nota_final: 30, curso_id: 1,
-           created_at: '2026-01-01', total_peso_criterios: '100.00' }]
+           created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [] }]
       : [{ id: 200, nombre: 'Parcial', tipo: 'individual', peso_nota_final: 20, curso_id: 2,
-           created_at: '2026-01-01', total_peso_criterios: '100.00' }]
+           created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [] }]
   );
   vi.mocked(reportesApi.abet).mockResolvedValue(reporte(['2.1.1'], ['2.1']));
   vi.mocked(reportesApi.actividad).mockResolvedValue({

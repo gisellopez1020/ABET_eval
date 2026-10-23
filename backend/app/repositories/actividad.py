@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import List, Optional, Tuple
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import Actividad, Aspecto, Criterio
 
@@ -21,6 +21,7 @@ class ActividadRepository:
             .outerjoin(Aspecto, Aspecto.actividad_id == Actividad.id)
             .outerjoin(Criterio, Criterio.aspecto_id == Aspecto.id)
             .filter(Actividad.curso_id == curso_id)
+            .options(selectinload(Actividad.secciones))  # alcance de todas en una consulta más
             .group_by(Actividad.id)
             .order_by(Actividad.created_at)
             .all()

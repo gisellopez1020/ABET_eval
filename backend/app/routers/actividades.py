@@ -43,8 +43,10 @@ def crear_actividad(
     usuario: dict = Depends(get_current_user),
 ):
     """
-    Crea una actividad (individual o grupal) dentro del curso.
-    404 si el curso no existe, 403 si es de otro docente.
+    Crea una actividad (individual o grupal) dentro del curso. Por defecto aplica a
+    todas las secciones del curso (también a las que se creen después); con
+    aplica_todas_secciones=false, solo a las de secciones_ids (al menos una).
+    422 si alguna sección no es del curso, 404 si el curso no existe, 403 si es de otro docente.
     """
     return ActividadService(db).crear(curso_id, usuario["email"], body.model_dump())
 
@@ -81,9 +83,11 @@ def editar_actividad(
     usuario: dict = Depends(get_current_user),
 ):
     """
-    Edita el nombre y/o el peso en la nota final; solo cambia los campos enviados.
-    El tipo (individual/grupal) no es editable.
-    404 si la actividad no existe, 403 si es de otro docente.
+    Edita el nombre, el peso en la nota final y/o el alcance de secciones; solo cambia
+    los campos enviados. El tipo (individual/grupal) no es editable.
+    422 si alguna sección no es del curso; 409 si se quita del alcance una sección que
+    ya tiene equipos o calificaciones de la actividad; 404 si la actividad no existe,
+    403 si es de otro docente.
     """
     return ActividadService(db).editar(actividad_id, usuario["email"], body.model_dump(exclude_none=True))
 
