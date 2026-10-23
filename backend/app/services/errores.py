@@ -93,15 +93,22 @@ class SeccionesFueraDelCurso(DatosInvalidos):
 
 
 class SeccionConTrabajoEnActividad(Conflicto):
-    """Quitar la sección del alcance dejaría fuera equipos o calificaciones que ya tiene."""
+    """
+    Quitar la sección del alcance dejaría fuera equipos o calificaciones que ya tiene.
+    Solo los equipos sin calificar se pueden eliminar: con calificaciones el mensaje no
+    pide eliminarlas (no hay forma de hacerlo).
+    """
 
-    def __init__(self, actividad: str, seccion: str):
+    def __init__(self, actividad: str, seccion: str, con_calificaciones: bool):
         self.actividad = actividad
         self.seccion = seccion
-        super().__init__(
-            f"No se puede quitar la sección '{seccion}' de '{actividad}' porque ya tiene "
-            "equipos o calificaciones en esa actividad. Elimínelos primero."
+        self.con_calificaciones = con_calificaciones
+        motivo = (
+            "calificaciones registradas en esa actividad."
+            if con_calificaciones
+            else "equipos en esa actividad. Elimínelos primero."
         )
+        super().__init__(f"No se puede quitar la sección '{seccion}' de '{actividad}' porque ya tiene {motivo}")
 
 
 class RaAbetDesconocidos(DatosInvalidos):

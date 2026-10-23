@@ -1,4 +1,3 @@
-import { Dispatch, SetStateAction } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '../../../components/ui/Badge';
@@ -15,11 +14,12 @@ interface ActividadesPanelProps {
   secciones: Seccion[];
   /** Sin sección elegida no se ofrece "Calificar" */
   selectedSeccion: number | null;
-  setNewActModal: Dispatch<SetStateAction<boolean>>;
+  onNueva: () => void;
+  onEditar: (actividad: Actividad) => void;
 }
 
-// Panel "Actividades" del curso: abrir la rúbrica, calificar en la sección elegida o crear una nueva
-export function ActividadesPanel({ actividades, secciones, selectedSeccion, setNewActModal }: ActividadesPanelProps) {
+// Panel "Actividades" del curso: abrir la rúbrica, editar, calificar en la sección elegida o crear una nueva
+export function ActividadesPanel({ actividades, secciones, selectedSeccion, onNueva, onEditar }: ActividadesPanelProps) {
   const navigate = useNavigate();
 
   return (
@@ -27,7 +27,7 @@ export function ActividadesPanel({ actividades, secciones, selectedSeccion, setN
             <div className="flex items-center justify-between px-5 py-4 border-b">
               <h3 className="font-semibold text-gray-900">Actividades</h3>
               <Button size="sm" variant="secondary"   className="rounded-xl border border-gray-200 bg-white text-gray-700 transition hover:border-[#9E0B0F] hover:bg-white active:bg-white"
-               onClick={() => setNewActModal(true)}>
+               onClick={onNueva}>
                 + Nueva actividad
               </Button>
             </div>
@@ -65,9 +65,17 @@ export function ActividadesPanel({ actividades, secciones, selectedSeccion, setN
                     <div className="flex items-center gap-2">
                       {!tieneRubrica && <Badge variant="warning">Sin rúbrica</Badge>}
                       <Badge variant={variant}>{label}</Badge>
+                      {/* Los botones no activan la fila (que abre la rúbrica), ni con clic ni con teclado */}
+                      <span
+                        className="flex items-center gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        <Button size="sm" variant="ghost" onClick={() => onEditar(a)} aria-label={`Editar ${a.nombre}`}>
+                          Editar
+                        </Button>
                       {selectedSeccion && (
                         <span
-                          onClick={(e) => e.stopPropagation()}
                           title={
                             !aplica ? 'Esta actividad no aplica a la sección seleccionada'
                               : tieneRubrica ? undefined : 'Define la rúbrica (100%) antes de calificar'
@@ -83,6 +91,7 @@ export function ActividadesPanel({ actividades, secciones, selectedSeccion, setN
                           </Button>
                         </span>
                       )}
+                      </span>
                     </div>
                   </div>
                 );

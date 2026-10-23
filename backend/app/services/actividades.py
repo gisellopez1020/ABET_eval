@@ -91,8 +91,9 @@ class ActividadService:
     def _cambiar_alcance(self, actividad: Actividad, aplica_todas: bool, secciones_ids: List[int]) -> None:
         """
         Valida todo antes de cambiar nada. Cada sección que sale del alcance (con "todas"
-        antes, cualquiera del curso que no quede) no puede tener equipos de la actividad ni
-        calificaciones individuales de sus estudiantes: SeccionConTrabajoEnActividad (409).
+        antes, cualquiera del curso que no quede) no puede tener calificaciones de la actividad
+        (de sus estudiantes o de sus equipos) ni equipos: SeccionConTrabajoEnActividad (409).
+        Las calificaciones se revisan primero: el mensaje no pide eliminar lo que no se puede.
         """
         nuevas: List[Seccion] = [] if aplica_todas else self._secciones_del_curso(actividad.curso_id, secciones_ids)
         if not aplica_todas:
@@ -106,9 +107,10 @@ class ActividadService:
             for seccion in actuales:
                 if seccion.id in quedan:
                     continue
-                if (equipos.de_actividad_y_seccion(actividad.id, seccion.id)
-                        or calificaciones.existen_de_estudiantes_de_seccion(actividad.id, seccion.id)):
-                    raise SeccionConTrabajoEnActividad(actividad.nombre, seccion.nombre)
+                if calificaciones.existen_en_seccion(actividad.id, seccion.id):
+                    raise SeccionConTrabajoEnActividad(actividad.nombre, seccion.nombre, con_calificaciones=True)
+                if equipos.de_actividad_y_seccion(actividad.id, seccion.id):
+                    raise SeccionConTrabajoEnActividad(actividad.nombre, seccion.nombre, con_calificaciones=False)
         actividad.aplica_todas_secciones = aplica_todas
         actividad.secciones = nuevas
 

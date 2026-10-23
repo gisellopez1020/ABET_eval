@@ -249,22 +249,30 @@ class TestEditarAlcance:
         with pytest.raises(SeccionesFueraDelCurso):
             _alcance(servicio, actividad, ajena)
 
-    @pytest.mark.parametrize("trabajo", ["equipo_sin_calificar", "calificacion_individual"])
-    def test_quitar_una_seccion_con_trabajo_es_conflicto_y_no_cambia(self, servicio, db_session, tres, trabajo):
+    @pytest.mark.parametrize("trabajo,mensaje", [
+        ("equipo_sin_calificar", "equipos en esa actividad. Elimínelos primero."),
+        ("equipo_calificado", "calificaciones registradas en esa actividad."),
+        ("calificacion_individual", "calificaciones registradas en esa actividad."),
+    ])
+    def test_quitar_una_seccion_con_trabajo_es_conflicto_y_no_cambia(
+        self, servicio, db_session, tres, trabajo, mensaje,
+    ):
+        """Con calificaciones el mensaje no pide eliminarlas: no hay forma de hacerlo."""
         curso, [s1, s2, _] = tres
-        if trabajo == "equipo_sin_calificar":
-            actividad, _ = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
-            db_session.add(EquipoTrabajo(nombre="E1", actividad_id=actividad.id, seccion_id=s1.id))
+        if trabajo.startswith("equipo"):
+            actividad, [criterios] = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
+            equipo = EquipoTrabajo(nombre="E1", actividad_id=actividad.id, seccion_id=s1.id)
+            db_session.add(equipo)
             db_session.commit()
+            if trabajo == "equipo_calificado":
+                _calificar(db_session, criterios, [1], equipo=equipo)
         else:
             actividad, [criterios] = _actividad(db_session, curso, [(None, [100])])
             _calificar(db_session, criterios, [1], estudiante=_est(db_session, s1, "Ana", "1"))
         with pytest.raises(SeccionConTrabajoEnActividad) as exc:
             _alcance(servicio, actividad, s2)
-        assert str(exc.value) == (
-            "No se puede quitar la sección 'S1' de 'Act' porque ya tiene equipos o "
-            "calificaciones en esa actividad. Elimínelos primero."
-        )
+        assert str(exc.value) == f"No se puede quitar la sección 'S1' de 'Act' porque ya tiene {mensaje}"
+        assert exc.value.con_calificaciones is (trabajo != "equipo_sin_calificar")
         assert isinstance(exc.value, Conflicto)
         db_session.expire_all()
         assert db_session.get(Actividad, actividad.id).aplica_todas_secciones is True
@@ -313,3 +321,14 @@ def test_no_depende_de_fastapi():
             importados.add(nodo.module)
     raices = {nombre.split(".")[0] for nombre in importados}
     assert not raices & {"fastapi", "starlette"}
+
+
+def test_calificaciones_de_equipos_de_otra_seccion_no_bloquean(servicio, db_session, tres):
+    """Las calificaciones de un equipo cuentan solo en la sección de ese equipo."""
+    curso, [s1, s2, _] = tres
+    actividad, [criterios] = _actividad(db_session, curso, [(None, [100])], tipo=TipoActividad.grupal)
+    equipo = EquipoTrabajo(nombre="E2", actividad_id=actividad.id, seccion_id=s2.id)
+    db_session.add(equipo)
+    db_session.commit()
+    _calificar(db_session, criterios, [1], equipo=equipo)
+    assert _alcance(servicio, actividad, s2).secciones_ids == [s2.id]

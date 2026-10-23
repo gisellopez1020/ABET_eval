@@ -20,7 +20,7 @@ vi.mock('../../components/Layout/AppLayout', () => ({
 }));
 vi.mock('../../api/cursos', () => ({ cursosApi: { get: vi.fn(), update: vi.fn() } }));
 vi.mock('../../api/secciones', () => ({ seccionesApi: { list: vi.fn(), create: vi.fn() } }));
-vi.mock('../../api/actividades', () => ({ actividadesApi: { list: vi.fn(), create: vi.fn() } }));
+vi.mock('../../api/actividades', () => ({ actividadesApi: { list: vi.fn(), create: vi.fn(), update: vi.fn() } }));
 vi.mock('../../api/estudiantes', () => ({ estudiantesApi: { list: vi.fn() } }));
 vi.mock('../../api/catalogo', () => ({ catalogoRaAbetApi: { list: vi.fn() } }));
 
@@ -369,5 +369,155 @@ describe('CoursePage — editar asignatura', () => {
 
     expect(await screen.findByRole('heading', { name: 'Ingeniería de Software II' })).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('CoursePage — editar actividad', () => {
+  const abrirEditar = async (user: ReturnType<typeof userEvent.setup>, nombre: string) => {
+    await user.click(within(fila(nombre)).getByRole('button', { name: `Editar ${nombre}` }));
+    return within(screen.getByRole('dialog', { name: 'Editar actividad' }));
+  };
+
+  it('"Editar" abre el modal con los datos de la actividad, el tipo de solo lectura, sin abrir la rúbrica', async () => {
+    vi.mocked(actividadesApi.list).mockResolvedValue([
+      // El backend envía el peso como Decimal serializado
+      { ...actividad(100, 'Proyecto final', 'grupal', '100.00'), peso_nota_final: '30.00' as unknown as number,
+        aplica_todas_secciones: false, secciones_ids: [11] },
+    ]);
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    const d = await abrirEditar(user, 'Proyecto final');
+    expect(screen.queryByTestId('ubicacion')).toBeNull();
+    expect((d.getByPlaceholderText('Ej: Lab1: Cálculo de subredes') as HTMLInputElement).value).toBe('Proyecto final');
+    expect((d.getByRole('spinbutton') as HTMLInputElement).value).toBe('30');
+    expect(d.queryByRole('radio', { name: 'grupal' })).toBeNull();
+    expect(d.getByText('grupal')).toBeTruthy();
+    expect((d.getByRole('radio', { name: 'Secciones específicas' }) as HTMLInputElement).checked).toBe(true);
+    expect((d.getByRole('checkbox', { name: 'Grupo A' }) as HTMLInputElement).checked).toBe(false);
+    expect((d.getByRole('checkbox', { name: 'Grupo B' }) as HTMLInputElement).checked).toBe(true);
+    expect(d.getByRole('button', { name: 'Guardar cambios' })).toBeTruthy();
+  });
+
+  it('sin tocar el alcance envía solo nombre y peso, y actualiza la fila sin recargar', async () => {
+    vi.mocked(actividadesApi.update).mockResolvedValue({ ...actividad(101, 'Parcial 1', 'individual', '60.00'), peso_nota_final: 25 });
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    const d = await abrirEditar(user, 'Parcial');
+    const nombre = d.getByPlaceholderText('Ej: Lab1: Cálculo de subredes');
+    await user.clear(nombre);
+    await user.type(nombre, 'Parcial 1');
+    const peso = d.getByRole('spinbutton');
+    await user.clear(peso);
+    await user.type(peso, '25');
+    await user.click(d.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(actividadesApi.update).toHaveBeenCalledWith(101, { nombre: 'Parcial 1', peso_nota_final: 25 });
+    expect(within(fila('Parcial 1')).getByText('Peso: 25%')).toBeTruthy();
+    expect(actividadesApi.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('cambiar el alcance lo envía completo y conserva una sección que no está a la vista (archivada)', async () => {
+    vi.mocked(actividadesApi.list).mockResolvedValue([
+      { ...actividad(100, 'Proyecto final', 'grupal', '100.00'), aplica_todas_secciones: false, secciones_ids: [11, 99] },
+    ]);
+    vi.mocked(actividadesApi.update).mockResolvedValue(
+      { ...actividad(100, 'Proyecto final', 'grupal', '100.00'), aplica_todas_secciones: false, secciones_ids: [10, 11, 99] },
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    const d = await abrirEditar(user, 'Proyecto final');
+    await user.click(d.getByRole('checkbox', { name: 'Grupo A' }));
+    await user.click(d.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(actividadesApi.update).toHaveBeenCalledWith(100, {
+      nombre: 'Proyecto final', peso_nota_final: 30, aplica_todas_secciones: false, secciones_ids: [11, 99, 10],
+    }));
+    expect(await within(fila('Proyecto final')).findByText('Secciones: Grupo A, Grupo B')).toBeTruthy();
+  });
+
+  it('pasar a "Todas las secciones" no envía secciones_ids', async () => {
+    vi.mocked(actividadesApi.list).mockResolvedValue([
+      { ...actividad(100, 'Proyecto final', 'grupal', '100.00'), aplica_todas_secciones: false, secciones_ids: [11] },
+    ]);
+    vi.mocked(actividadesApi.update).mockResolvedValue(actividad(100, 'Proyecto final', 'grupal', '100.00'));
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    const d = await abrirEditar(user, 'Proyecto final');
+    await user.click(d.getByRole('radio', { name: 'Todas las secciones' }));
+    await user.click(d.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(actividadesApi.update).toHaveBeenCalledWith(100, {
+      nombre: 'Proyecto final', peso_nota_final: 30, aplica_todas_secciones: true,
+    }));
+    await waitFor(() => expect(screen.queryByText(/^Secciones:/)).toBeNull());
+  });
+
+  it('un 409 al quitar una sección se muestra tal cual y el modal sigue abierto con lo elegido', async () => {
+    const detalle = "No se puede quitar la sección 'Grupo A' de 'Proyecto final' porque ya tiene calificaciones registradas en esa actividad.";
+    vi.mocked(actividadesApi.update).mockRejectedValue({ response: { status: 409, data: { detail: detalle } } });
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    const d = await abrirEditar(user, 'Proyecto final');
+    await user.click(d.getByRole('radio', { name: 'Secciones específicas' }));
+    await user.click(d.getByRole('checkbox', { name: 'Grupo B' }));
+    await user.click(d.getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(await d.findByText(detalle)).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Editar actividad' })).toBeTruthy();
+    expect((d.getByRole('checkbox', { name: 'Grupo B' }) as HTMLInputElement).checked).toBe(true);
+    expect(within(fila('Proyecto final')).queryByText(/^Secciones:/)).toBeNull();
+  });
+
+  it('con alcance específico muestra el control aunque el curso tenga una sola sección', async () => {
+    vi.mocked(seccionesApi.list).mockResolvedValue([{ id: 10, nombre: 'Grupo A', curso_id: 1, activo: true }]);
+    vi.mocked(actividadesApi.list).mockResolvedValue([
+      { ...actividad(100, 'Proyecto final', 'grupal', '100.00'), aplica_todas_secciones: false, secciones_ids: [10] },
+      actividad(101, 'Parcial', 'individual', '60.00'),
+    ]);
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    const d = await abrirEditar(user, 'Proyecto final');
+    expect(d.getByRole('radio', { name: 'Todas las secciones' })).toBeTruthy();
+    await user.click(d.getByRole('button', { name: 'Cancelar' }));
+
+    // Una que aplica a todas, con una sola sección, no lo pregunta
+    const otra = await abrirEditar(user, 'Parcial');
+    expect(otra.queryByRole('radio', { name: 'Todas las secciones' })).toBeNull();
+  });
+
+  it('al reabrir "Nueva actividad" tras editar, el formulario está vacío', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    const d = await abrirEditar(user, 'Parcial');
+    await user.click(d.getByRole('button', { name: 'Cancelar' }));
+    await user.click(screen.getByRole('button', { name: '+ Nueva actividad' }));
+    const nueva = within(screen.getByRole('dialog', { name: 'Nueva actividad' }));
+    expect((nueva.getByPlaceholderText('Ej: Lab1: Cálculo de subredes') as HTMLInputElement).value).toBe('');
+    expect((nueva.getByRole('radio', { name: 'individual' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('Enter sobre "Calificar" califica, no abre la rúbrica de la fila', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    within(fila('Proyecto final')).getByRole('button', { name: 'Calificar' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByTestId('ubicacion').textContent).toBe('/actividades/100/calificar/10');
   });
 });

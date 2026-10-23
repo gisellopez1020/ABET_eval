@@ -1,10 +1,10 @@
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import exists, func
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import Actividad, Aspecto, Calificacion, Criterio, Estudiante
+from app.models import Actividad, Aspecto, Calificacion, Criterio, EquipoTrabajo, Estudiante
 
 
 class CalificacionRepository:
@@ -128,15 +128,25 @@ class CalificacionRepository:
             )
         ).scalar()
 
-    def existen_de_estudiantes_de_seccion(self, actividad_id: int, seccion_id: int) -> bool:
-        """Si algún estudiante de la sección tiene calificaciones individuales en la actividad."""
+    def existen_en_seccion(self, actividad_id: int, seccion_id: int) -> bool:
+        """
+        Si la actividad tiene calificaciones en la sección: individuales de sus estudiantes
+        o de sus equipos.
+        """
+        de_la_seccion = or_(
+            Calificacion.estudiante_id.in_(select(Estudiante.id).where(Estudiante.seccion_id == seccion_id)),
+            Calificacion.equipo_id.in_(
+                select(EquipoTrabajo.id).where(
+                    EquipoTrabajo.seccion_id == seccion_id, EquipoTrabajo.actividad_id == actividad_id,
+                )
+            ),
+        )
         return self.db.query(
             exists().where(
                 Calificacion.criterio_id == Criterio.id,
                 Criterio.aspecto_id == Aspecto.id,
                 Aspecto.actividad_id == actividad_id,
-                Calificacion.estudiante_id == Estudiante.id,
-                Estudiante.seccion_id == seccion_id,
+                de_la_seccion,
             )
         ).scalar()
 

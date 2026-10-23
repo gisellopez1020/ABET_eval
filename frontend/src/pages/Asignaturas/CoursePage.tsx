@@ -6,19 +6,15 @@ import { Button } from '../../components/ui/Button';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { cursosApi } from '../../api/cursos';
 import { seccionesApi } from '../../api/secciones';
-import { actividadesApi, ActividadCreate } from '../../api/actividades';
+import { actividadesApi } from '../../api/actividades';
 import { estudiantesApi } from '../../api/estudiantes';
 import { Curso, Seccion, Actividad } from '../../types';
 import { ActividadesPanel } from './components/ActividadesPanel';
+import { ActividadFormModal } from './components/ActividadFormModal';
 import { CourseFormModal } from './components/CourseFormModal';
-import { NuevaActividadModal } from './components/NuevaActividadModal';
 import { NuevaSeccionModal } from './components/NuevaSeccionModal';
 import { SeccionesPanel } from './components/SeccionesPanel';
 import { apiErrorMessage } from '../../api/errors';
-
-const ACTIVIDAD_NUEVA: ActividadCreate = {
-  nombre: '', tipo: 'individual', peso_nota_final: 20, aplica_todas_secciones: true, secciones_ids: [],
-};
 
 export function CoursePage() {
   const { cursoId } = useParams<{ cursoId: string }>();
@@ -38,10 +34,10 @@ export function CoursePage() {
   const [newSeccionLoading, setNewSeccionLoading] = useState(false);
   const [seccionError, setSeccionError] = useState('');
 
-  const [newActModal, setNewActModal] = useState(false);
-  const [newAct, setNewAct] = useState<ActividadCreate>(ACTIVIDAD_NUEVA);
-  const [newActLoading, setNewActLoading] = useState(false);
-  const [actError, setActError] = useState('');
+  // Modal de actividad: crear una nueva o editar una existente (null = cerrado)
+  const [actividadModal, setActividadModal] = useState<
+    { mode: 'create' } | { mode: 'edit'; actividad: Actividad } | null
+  >(null);
 
   useEffect(() => {
     Promise.all([
@@ -85,24 +81,12 @@ export function CoursePage() {
     }
   };
 
-  const handleCreateActividad = async () => {
-    if (!newAct.nombre.trim()) { setActError('El nombre es obligatorio'); return; }
-    setNewActLoading(true);
-    setActError('');
-    try {
-      // Con una sola sección el modal no pregunta el alcance: aplica a todas
-      const datos = secciones.length > 1 && !newAct.aplica_todas_secciones
-        ? newAct
-        : { ...newAct, aplica_todas_secciones: true, secciones_ids: [] };
-      const a = await actividadesApi.create(id, datos);
-      setActividades((prev) => [...prev, a]);
-      setNewActModal(false);
-      setNewAct(ACTIVIDAD_NUEVA);
-    } catch (e) {
-      setActError(apiErrorMessage(e, 'Error al crear actividad'));
-    } finally {
-      setNewActLoading(false);
-    }
+  // La lista se actualiza con lo que devuelve el backend, sin recargar la página
+  const handleActividadGuardada = (a: Actividad) => {
+    setActividades((prev) =>
+      prev.some((x) => x.id === a.id) ? prev.map((x) => (x.id === a.id ? a : x)) : [...prev, a]
+    );
+    setActividadModal(null);
   };
 
   if (loading) {
@@ -160,7 +144,8 @@ export function CoursePage() {
             actividades={actividades}
             secciones={secciones}
             selectedSeccion={selectedSeccion}
-            setNewActModal={setNewActModal}
+            onNueva={() => setActividadModal({ mode: 'create' })}
+            onEditar={(actividad) => setActividadModal({ mode: 'edit', actividad })}
           />
         </div>
       </div>
@@ -176,16 +161,15 @@ export function CoursePage() {
         handleCreateSeccion={handleCreateSeccion}
       />
 
-      {/* Modal nueva actividad */}
-      <NuevaActividadModal
-        newActModal={newActModal}
-        setNewActModal={setNewActModal}
-        newAct={newAct}
-        setNewAct={setNewAct}
+      {/* Modal nueva actividad / editar actividad */}
+      <ActividadFormModal
+        open={actividadModal !== null}
+        mode={actividadModal?.mode ?? 'create'}
+        cursoId={id}
+        actividad={actividadModal?.mode === 'edit' ? actividadModal.actividad : null}
         secciones={secciones}
-        actError={actError}
-        newActLoading={newActLoading}
-        handleCreateActividad={handleCreateActividad}
+        onClose={() => setActividadModal(null)}
+        onSaved={handleActividadGuardada}
       />
 
       <CourseFormModal
