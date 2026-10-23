@@ -684,3 +684,55 @@ function UbicacionEvaluaciones() {
   const location = useLocation();
   return <p data-testid="ubicacion">{location.pathname + location.search}</p>;
 }
+
+describe('ProjectsPage — alcance de secciones de las actividades', () => {
+  const SECCIONES_AB = [
+    { id: 10, nombre: 'Grupo A', curso_id: 1, activo: true },
+    { id: 11, nombre: 'Grupo B', curso_id: 1, activo: true },
+  ];
+  const grupal = (id: number, nombre: string, secciones_ids: number[] = []) => ({
+    id, nombre, tipo: 'grupal' as const, peso_nota_final: 30, curso_id: 1, created_at: '2026-01-01',
+    total_peso_criterios: '100.00', aplica_todas_secciones: secciones_ids.length === 0, secciones_ids,
+  });
+  // Como el backend: fuera del alcance de la actividad responde 404
+  const NO_APLICA = { response: { status: 404, data: { detail: 'Esta actividad no aplica a esta sección' } } };
+
+  const renderPage = () =>
+    render(
+      <MemoryRouter>
+        <ProjectsPage />
+      </MemoryRouter>
+    );
+
+  it('no pide los equipos fuera del alcance y carga los de las combinaciones que sí aplican', async () => {
+    vi.mocked(seccionesApi.list).mockResolvedValue(SECCIONES_AB);
+    vi.mocked(actividadesApi.list).mockResolvedValue([grupal(100, 'Proyecto final'), grupal(101, 'Taller B', [11])]);
+    vi.mocked(equiposApi.list).mockImplementation(async (actId, secId) => {
+      if (actId === 101 && secId !== 11) throw NO_APLICA;
+      if (actId === 100 && secId === 10) return [EQUIPO];
+      if (actId === 101 && secId === 11) return [{ ...EQUIPO, id: 51, nombre: 'Equipo Beta', actividad_id: 101, seccion_id: 11 }];
+      return [];
+    });
+    renderPage();
+
+    expect(await screen.findByRole('button', { name: /equipo alfa/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /equipo beta/i })).toBeTruthy();
+    expect(equiposApi.list).not.toHaveBeenCalledWith(101, 10);
+    expect(vi.mocked(equiposApi.list).mock.calls).toEqual([[100, 10], [100, 11], [101, 11]]);
+  });
+
+  it('si fallan los equipos, "Nuevo proyecto" conserva las secciones y la actividad grupal', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(seccionesApi.list).mockResolvedValue(SECCIONES_AB);
+    vi.mocked(actividadesApi.list).mockResolvedValue([grupal(100, 'Proyecto final')]);
+    vi.mocked(equiposApi.list).mockRejectedValue({ response: { status: 500, data: { detail: 'Error interno' } } });
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(equiposApi.list).toHaveBeenCalled());
+    await user.click(await screen.findByRole('button', { name: /nuevo proyecto/i }));
+    const [seccion, actividad] = within(screen.getByRole('dialog')).getAllByRole('combobox') as HTMLSelectElement[];
+    expect(Array.from(seccion.options).map((o) => o.textContent)).toEqual(['Grupo A', 'Grupo B']);
+    expect(Array.from(actividad.options).map((o) => o.textContent)).toEqual(['Proyecto final']);
+  });
+});

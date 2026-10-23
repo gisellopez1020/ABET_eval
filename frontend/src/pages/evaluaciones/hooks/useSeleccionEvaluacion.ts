@@ -5,7 +5,7 @@ import { calificacionesApi } from '../../../api/calificaciones';
 import { criteriosApi } from '../../../api/criterios';
 import { equiposApi } from '../../../api/equipos';
 import { seccionesApi } from '../../../api/secciones';
-import { Actividad, Aspecto, Curso, Seccion } from '../../../types';
+import { Actividad, Aspecto, Curso, Seccion, aplicaEnSeccion } from '../../../types';
 import { ProjectOption } from '../types';
 
 // Selección en cascada Asignatura -> Actividad grupal -> Equipo, y la rúbrica con las
@@ -36,7 +36,7 @@ export function useSeleccionEvaluacion() {
   // {criterio_id: valor} de las calificaciones guardadas del equipo; sin clave = sin calificar
   const [valores, setValores] = useState<Record<number, 0 | 1>>({});
 
-  // Equipos de una actividad (todas las secciones en paralelo). preferProjectId: el de la URL, si aplica.
+  // Equipos de una actividad (las secciones de su alcance, en paralelo). preferProjectId: el de la URL, si aplica.
   const selectActivity = async (
     cursoActual: Curso,
     actividad: Actividad | null,
@@ -56,8 +56,10 @@ export function useSeleccionEvaluacion() {
 
     setLoadingProjects(true);
     try {
+      // Fuera del alcance de la actividad el backend responde 404 (y tumbaría el Promise.all)
+      const deLaActividad = secciones.filter((seccion) => aplicaEnSeccion(actividad, seccion.id));
       const porSeccion = await Promise.all(
-        secciones.map(async (seccion) => {
+        deLaActividad.map(async (seccion) => {
           const equipos = await equiposApi.list(actividad.id, seccion.id);
           return equipos.map((equipo): ProjectOption => ({
             id: equipo.id,
