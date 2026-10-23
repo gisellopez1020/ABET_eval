@@ -19,3 +19,8 @@ class Seccion(Base):
     equipos: Mapped[List["EquipoTrabajo"]] = relationship(
         "EquipoTrabajo", back_populates="seccion", cascade="all, delete-orphan"
     )
+    # Actividades con alcance específico que incluyen esta sección (al borrarla, sus
+    # filas de actividad_secciones se borran; las actividades no)
+    actividades_especificas: Mapped[List["Actividad"]] = relationship(
+        "Actividad", secondary="actividad_secciones", back_populates="secciones"
+    )

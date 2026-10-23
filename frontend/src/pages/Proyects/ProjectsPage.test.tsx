@@ -33,7 +33,7 @@ beforeEach(() => {
   vi.mocked(seccionesApi.list).mockResolvedValue([{ id: 10, nombre: 'Grupo A', curso_id: 1, activo: true }]);
   vi.mocked(actividadesApi.list).mockResolvedValue([
     { id: 100, nombre: 'Proyecto final', tipo: 'grupal', peso_nota_final: 30, curso_id: 1,
-      created_at: '2026-01-01', total_peso_criterios: '100.00' },
+      created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [] },
   ]);
   vi.mocked(equiposApi.list).mockResolvedValue([]);
   vi.mocked(estudiantesApi.list).mockResolvedValue([
@@ -70,6 +70,57 @@ describe('ProjectsPage — crear proyecto', () => {
     expect((screen.getByPlaceholderText('Ej: Sistema de inventarios') as HTMLInputElement).value).toBe('Equipo Alfa');
     expect(equiposApi.create).toHaveBeenCalledTimes(1);
     expect(equiposApi.create).toHaveBeenCalledWith(100, 10, [{ nombre: 'Equipo Alfa', estudiante_ids: [7] }]);
+  });
+
+  it('solo ofrece las actividades grupales que aplican a la sección elegida', async () => {
+    vi.mocked(seccionesApi.list).mockResolvedValue([
+      { id: 10, nombre: 'Grupo A', curso_id: 1, activo: true },
+      { id: 11, nombre: 'Grupo B', curso_id: 1, activo: true },
+    ]);
+    vi.mocked(actividadesApi.list).mockResolvedValue([
+      { id: 100, nombre: 'Proyecto final', tipo: 'grupal', peso_nota_final: 30, curso_id: 1,
+        created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [] },
+      { id: 101, nombre: 'Taller B', tipo: 'grupal', peso_nota_final: 20, curso_id: 1,
+        created_at: '2026-01-02', total_peso_criterios: '100.00', aplica_todas_secciones: false, secciones_ids: [11] },
+    ]);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ProjectsPage />
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: /nuevo proyecto/i }));
+    const dialogo = within(screen.getByRole('dialog'));
+    const [seccion, actividad] = dialogo.getAllByRole('combobox') as HTMLSelectElement[];
+    const opciones = () => Array.from(actividad.options).map((o) => o.textContent);
+
+    expect(seccion.value).toBe('10');
+    expect(opciones()).toEqual(['Proyecto final']);
+
+    await user.selectOptions(seccion, '11');
+    expect(opciones()).toEqual(['Proyecto final', 'Taller B']);
+    await user.selectOptions(actividad, '101');
+
+    // Al volver a una sección donde 'Taller B' no aplica, se elige otra actividad
+    await user.selectOptions(seccion, '10');
+    expect(actividad.value).toBe('100');
+  });
+
+  it('si ninguna actividad grupal aplica a la sección, lo dice', async () => {
+    vi.mocked(actividadesApi.list).mockResolvedValue([
+      { id: 101, nombre: 'Taller B', tipo: 'grupal', peso_nota_final: 20, curso_id: 1,
+        created_at: '2026-01-02', total_peso_criterios: '100.00', aplica_todas_secciones: false, secciones_ids: [11] },
+    ]);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <ProjectsPage />
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: /nuevo proyecto/i }));
+    expect(screen.getByText('Ninguna actividad grupal aplica a esta sección.')).toBeTruthy();
   });
 });
 
@@ -521,12 +572,12 @@ describe('ProjectsPage — asignatura y parámetros de la URL', () => {
     vi.mocked(actividadesApi.list).mockImplementation(async (cursoId) =>
       cursoId === 1
         ? [{ id: 100, nombre: 'Proyecto final', tipo: 'grupal', peso_nota_final: 30, curso_id: 1,
-             created_at: '2026-01-01', total_peso_criterios: '100.00' }]
+             created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [] }]
         : [
             { id: 200, nombre: 'Taller BD', tipo: 'grupal', peso_nota_final: 20, curso_id: 2,
-              created_at: '2026-01-01', total_peso_criterios: '100.00' },
+              created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [] },
             { id: 201, nombre: 'Proyecto BD', tipo: 'grupal', peso_nota_final: 30, curso_id: 2,
-              created_at: '2026-01-01', total_peso_criterios: '100.00' },
+              created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [] },
           ]
     );
     vi.mocked(equiposApi.list).mockImplementation(async (actividadId) =>
@@ -571,7 +622,7 @@ describe('ProjectsPage — asignatura y parámetros de la URL', () => {
   it('?actividadId usa la asignatura de esa actividad y la preselecciona al crear', async () => {
     vi.mocked(actividadesApi.get).mockResolvedValue({
       id: 201, nombre: 'Proyecto BD', tipo: 'grupal', peso_nota_final: 30, curso_id: 2,
-      created_at: '2026-01-01', total_peso_criterios: '100.00',
+      created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [],
     });
     const user = userEvent.setup();
     render(

@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy import exists, func
 from sqlalchemy.orm import Session
 
-from app.models import Actividad, Aspecto, Calificacion, Criterio
+from app.models import Actividad, Aspecto, Calificacion, Criterio, Estudiante
 
 
 class CalificacionRepository:
@@ -125,6 +125,18 @@ class CalificacionRepository:
                 Calificacion.criterio_id == Criterio.id,
                 Criterio.aspecto_id == Aspecto.id,
                 Aspecto.actividad_id == actividad_id,
+            )
+        ).scalar()
+
+    def existen_de_estudiantes_de_seccion(self, actividad_id: int, seccion_id: int) -> bool:
+        """Si algún estudiante de la sección tiene calificaciones individuales en la actividad."""
+        return self.db.query(
+            exists().where(
+                Calificacion.criterio_id == Criterio.id,
+                Criterio.aspecto_id == Aspecto.id,
+                Aspecto.actividad_id == actividad_id,
+                Calificacion.estudiante_id == Estudiante.id,
+                Estudiante.seccion_id == seccion_id,
             )
         ).scalar()
 

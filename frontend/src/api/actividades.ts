@@ -5,6 +5,9 @@ export interface ActividadCreate {
   nombre: string;
   tipo: 'individual' | 'grupal';
   peso_nota_final: number;
+  /** false: solo aplica a secciones_ids (al menos una) */
+  aplica_todas_secciones: boolean;
+  secciones_ids: number[];
 }
 
 export const actividadesApi = {

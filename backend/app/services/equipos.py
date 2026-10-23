@@ -21,7 +21,7 @@ from app.repositories.rubrica import RubricaRepository
 from app.repositories.seccion import SeccionRepository
 from app.schemas.equipo import EquipoCreate, EquipoOut, ModoCalificacionItem, ModoCalificacionResponse
 from app.schemas.estudiante import EstudianteOut
-from app.services.acceso import actividad_del_docente, seccion_del_curso
+from app.services.acceso import actividad_del_docente, seccion_de_la_actividad
 from app.services.errores import (
     ActividadNoGrupal, EquipoConCalificaciones, EquipoNoEncontrado, EstudianteEnDosEquipos, EstudianteFueraDeSeccion,
     EstudianteRepetidoEnEquipo, EstudianteYaEnOtroEquipo, SinPermiso,
@@ -174,7 +174,7 @@ class EquipoService:
 
     def _actividad_y_seccion(self, actividad_id: int, seccion_id: int, email: str) -> Tuple[Actividad, Seccion]:
         actividad = actividad_del_docente(self.actividades, self.cursos, actividad_id, email)
-        return actividad, seccion_del_curso(self.secciones, seccion_id, actividad.curso_id)
+        return actividad, seccion_de_la_actividad(self.secciones, actividad, seccion_id)
 
     def _equipo_del_docente(self, equipo_id: int, email: str) -> EquipoTrabajo:
         """

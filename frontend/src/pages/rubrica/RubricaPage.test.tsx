@@ -25,7 +25,7 @@ vi.mock('../../api/catalogo', () => ({ catalogoRaAbetApi: { list: vi.fn() } }));
 
 const ACTIVIDAD = {
   id: 100, nombre: 'Proyecto final', tipo: 'grupal' as const, peso_nota_final: 30, curso_id: 1,
-  created_at: '2026-01-01', total_peso_criterios: '100.00',
+  created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [],
 };
 const OTRA_ACTIVIDAD = { ...ACTIVIDAD, id: 200, nombre: 'Parcial' };
 

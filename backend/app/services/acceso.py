@@ -10,7 +10,9 @@ from app.models import Actividad, Curso, Seccion
 from app.repositories.actividad import ActividadRepository
 from app.repositories.curso import CursoRepository
 from app.repositories.seccion import SeccionRepository
-from app.services.errores import ActividadNoEncontrada, CursoNoEncontrado, SeccionFueraDelCurso, SinPermiso
+from app.services.errores import (
+    ActividadNoAplicaEnSeccion, ActividadNoEncontrada, CursoNoEncontrado, SeccionFueraDelCurso, SinPermiso,
+)
 
 
 def curso_del_docente(cursos: CursoRepository, curso_id: int, email: str) -> Curso:
@@ -52,4 +54,16 @@ def seccion_del_curso(secciones: SeccionRepository, seccion_id: int, curso_id: i
     seccion = secciones.get(seccion_id)
     if not seccion or seccion.curso_id != curso_id:
         raise SeccionFueraDelCurso()
+    return seccion
+
+
+def seccion_de_la_actividad(secciones: SeccionRepository, actividad: Actividad, seccion_id: int) -> Seccion:
+    """
+    La sección, si es del curso de la actividad y está en su alcance. SeccionFueraDelCurso
+    (404) si no es del curso; ActividadNoAplicaEnSeccion (404) si la actividad tiene
+    alcance específico y no la incluye. Es la regla de todo flujo con la sección en la URL.
+    """
+    seccion = seccion_del_curso(secciones, seccion_id, actividad.curso_id)
+    if not actividad.aplica_en(seccion.id):
+        raise ActividadNoAplicaEnSeccion()
     return seccion

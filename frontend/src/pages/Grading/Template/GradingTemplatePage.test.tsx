@@ -36,7 +36,7 @@ interface NavState {
 beforeEach(() => {
   vi.mocked(actividadesApi.get).mockResolvedValue({
     id: 100, nombre: 'Proyecto final', tipo: 'grupal', peso_nota_final: 30, curso_id: 1,
-    created_at: '2026-01-01', total_peso_criterios: '100.00',
+    created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [],
   });
   vi.mocked(criteriosApi.get).mockResolvedValue({
     aspectos: [{
@@ -316,7 +316,7 @@ describe('GradingTemplatePage — actividad individual', () => {
   it('el tipo sale de la actividad: muestra el código, lee y guarda como estudiante', async () => {
     vi.mocked(actividadesApi.get).mockResolvedValue({
       id: 100, nombre: 'Parcial', tipo: 'individual', peso_nota_final: 20, curso_id: 1,
-      created_at: '2026-01-01', total_peso_criterios: '100.00',
+      created_at: '2026-01-01', total_peso_criterios: '100.00', aplica_todas_secciones: true, secciones_ids: [],
     });
     vi.mocked(calificacionesApi.estudiante).mockResolvedValue([]);
     const estudiante = { id: 7, nombre: 'Ana Pérez', calificado: false, nota_total: null,

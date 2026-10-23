@@ -15,7 +15,7 @@ from app.models.actividad import TipoActividad
 from app.schemas.calificacion import ValorCriterio
 from app.services.calificaciones import CalificacionService
 from app.services.errores import (
-    CalificacionNoEncontrada, CriterioFueraDeActividad, EquipoFueraDeActividad, EquipoNoPerteneceAActividad,
+    ActividadNoAplicaEnSeccion, CalificacionNoEncontrada, EstudianteFueraDeAlcance, CriterioFueraDeActividad, EquipoFueraDeActividad, EquipoNoPerteneceAActividad,
     EstudianteFueraDelCurso, EstudianteNoEncontrado, EstudianteNoPerteneceAlCurso, NoEncontrado,
     SeccionFueraDelCurso, SinPermiso, SolicitudInvalida,
 )
@@ -173,10 +173,49 @@ class TestMasivo:
         assert _filas(db_session, equipo_id=equipo.id) == {crits[0].id: 1}
 
 
+# ── Alcance de secciones de la actividad ─────────────────────────────────────
+
+def _solo_en(db_session, actividad, *secciones):
+    actividad.aplica_todas_secciones = False
+    actividad.secciones = list(secciones)
+    db_session.commit()
+
+
+class TestAlcance:
+    def test_resumen_fuera_del_alcance(self, servicio, db_session, ctx):
+        act, _ = _actividad(db_session, ctx["curso"], [(None, [100])])
+        _solo_en(db_session, act, ctx["s2"])
+        with pytest.raises(ActividadNoAplicaEnSeccion):
+            servicio.resumen(act.id, ctx["s1"].id, EMAIL)
+        assert servicio.resumen(act.id, ctx["s2"].id, EMAIL) == []
+
+    def test_masivo_fuera_del_alcance_no_escribe(self, servicio, db_session, ctx):
+        act, [crits] = _actividad(db_session, ctx["curso"], [(None, [100])], tipo=TipoActividad.grupal)
+        equipo = _equipo(db_session, act, ctx["s1"])  # creado antes de restringir el alcance
+        _solo_en(db_session, act, ctx["s2"])
+        with pytest.raises(ActividadNoAplicaEnSeccion):
+            servicio.masivo(act.id, ctx["s1"].id, EMAIL, _valores(crits, [1]))
+        assert _filas(db_session, equipo_id=equipo.id) == {}
+
+    def test_guardar_estudiante_fuera_del_alcance_no_escribe(self, servicio, db_session, ctx):
+        act, [crits] = _actividad(db_session, ctx["curso"], [(None, [100])])
+        _solo_en(db_session, act, ctx["s2"])
+        with pytest.raises(EstudianteFueraDeAlcance, match="^La actividad no aplica a la sección del estudiante$"):
+            servicio.guardar(EMAIL, act.id, _valores(crits, [1]), None, ctx["ana"].id)
+        assert _filas(db_session, estudiante_id=ctx["ana"].id) == {}
+
+    def test_guardar_estudiante_del_alcance(self, servicio, db_session, ctx):
+        act, [crits] = _actividad(db_session, ctx["curso"], [(None, [100])])
+        _solo_en(db_session, act, ctx["s1"])
+        servicio.guardar(EMAIL, act.id, _valores(crits, [1]), None, ctx["ana"].id)
+        assert _filas(db_session, estudiante_id=ctx["ana"].id) == {crits[0].id: 1}
+
+
 def test_categorias():
-    for clase in (EquipoFueraDeActividad, EstudianteFueraDelCurso, CalificacionNoEncontrada):
+    for clase in (EquipoFueraDeActividad, EstudianteFueraDelCurso, CalificacionNoEncontrada, ActividadNoAplicaEnSeccion):
         assert issubclass(clase, NoEncontrado)
-    for clase in (EquipoNoPerteneceAActividad, EstudianteNoPerteneceAlCurso, CriterioFueraDeActividad):
+    for clase in (EquipoNoPerteneceAActividad, EstudianteNoPerteneceAlCurso, CriterioFueraDeActividad,
+                  EstudianteFueraDeAlcance):
         assert issubclass(clase, SolicitudInvalida)
 
 

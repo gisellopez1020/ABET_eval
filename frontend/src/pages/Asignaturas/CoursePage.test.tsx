@@ -30,7 +30,7 @@ const CURSO: Curso = {
   ra_abet: [], rangos_calificacion: RANGOS_CALIFICACION_DEFAULT, activo: true, created_at: '2026-01-01',
 };
 const actividad = (id: number, nombre: string, tipo: 'grupal' | 'individual', total: string): Actividad => ({
-  id, nombre, tipo, peso_nota_final: 30, curso_id: 1, created_at: '2026-01-01', total_peso_criterios: total,
+  id, nombre, tipo, peso_nota_final: 30, curso_id: 1, created_at: '2026-01-01', total_peso_criterios: total, aplica_todas_secciones: true, secciones_ids: [],
 });
 
 beforeEach(() => {
@@ -142,6 +142,35 @@ describe('CoursePage — navegación', () => {
     expect(screen.getByTestId('ubicacion').textContent).toBe('/actividades/100/calificar/11');
   });
 
+  it('"Calificar" se deshabilita si la actividad no aplica a la sección seleccionada', async () => {
+    vi.mocked(actividadesApi.list).mockResolvedValue([
+      { ...actividad(100, 'Proyecto final', 'grupal', '100.00'), aplica_todas_secciones: false, secciones_ids: [11] },
+      { ...actividad(101, 'Sin secciones', 'grupal', '100.00'), aplica_todas_secciones: false, secciones_ids: [] },
+    ]);
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    expect(within(fila('Proyecto final')).getByText('Secciones: Grupo B')).toBeTruthy();
+    expect(within(fila('Sin secciones')).getByText('Sin secciones asignadas')).toBeTruthy();
+    // Grupo A (la primera) está seleccionada y no es del alcance
+    const calificar = within(fila('Proyecto final')).getByRole('button', { name: 'Calificar' }) as HTMLButtonElement;
+    expect(calificar.disabled).toBe(true);
+    expect(calificar.parentElement?.getAttribute('title')).toBe('Esta actividad no aplica a la sección seleccionada');
+
+    await user.click(fila('Grupo B'));
+    const enB = within(fila('Proyecto final')).getByRole('button', { name: 'Calificar' }) as HTMLButtonElement;
+    expect(enB.disabled).toBe(false);
+    await user.click(enB);
+    expect(screen.getByTestId('ubicacion').textContent).toBe('/actividades/100/calificar/11');
+  });
+
+  it('las actividades de todas las secciones no muestran etiqueta de secciones', async () => {
+    renderPage();
+    await cargada();
+    expect(screen.queryByText(/^Secciones:/)).toBeNull();
+  });
+
   it('clic en una actividad abre su rúbrica', async () => {
     const user = userEvent.setup();
     renderPage();
@@ -231,13 +260,82 @@ describe('CoursePage — crear sección y actividad', () => {
     await user.click(d.getByRole('button', { name: 'Crear' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(actividadesApi.create).toHaveBeenCalledWith(1, { nombre: 'Taller', tipo: 'grupal', peso_nota_final: 35 });
+    expect(actividadesApi.create).toHaveBeenCalledWith(1, {
+      nombre: 'Taller', tipo: 'grupal', peso_nota_final: 35, aplica_todas_secciones: true, secciones_ids: [],
+    });
     expect(within(fila('Taller')).getByText('Sin rúbrica')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: '+ Nueva actividad' }));
     const otra = within(screen.getByRole('dialog', { name: 'Nueva actividad' }));
     expect((otra.getByPlaceholderText('Ej: Lab1: Cálculo de subredes') as HTMLInputElement).value).toBe('');
     expect((otra.getByRole('radio', { name: 'individual' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('nueva actividad en secciones específicas: exige elegir al menos una y las envía', async () => {
+    vi.mocked(actividadesApi.create).mockResolvedValue(
+      { ...actividad(102, 'Taller', 'individual', '0'), aplica_todas_secciones: false, secciones_ids: [11] }
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    await user.click(screen.getByRole('button', { name: '+ Nueva actividad' }));
+    const d = within(screen.getByRole('dialog', { name: 'Nueva actividad' }));
+    await user.type(d.getByPlaceholderText('Ej: Lab1: Cálculo de subredes'), 'Taller');
+    expect((d.getByRole('radio', { name: 'Todas las secciones' }) as HTMLInputElement).checked).toBe(true);
+    expect(d.queryByRole('checkbox')).toBeNull();
+
+    await user.click(d.getByRole('radio', { name: 'Secciones específicas' }));
+    expect((d.getByRole('button', { name: 'Crear' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(d.getByText('Elige al menos una sección.')).toBeTruthy();
+    await user.click(d.getByRole('checkbox', { name: 'Grupo B' }));
+    await user.click(d.getByRole('button', { name: 'Crear' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(actividadesApi.create).toHaveBeenCalledWith(1, {
+      nombre: 'Taller', tipo: 'individual', peso_nota_final: 20, aplica_todas_secciones: false, secciones_ids: [11],
+    });
+    expect(within(fila('Taller')).getByText('Secciones: Grupo B')).toBeTruthy();
+
+    // El formulario se reinicia a "Todas las secciones"
+    await user.click(screen.getByRole('button', { name: '+ Nueva actividad' }));
+    const otra = within(screen.getByRole('dialog', { name: 'Nueva actividad' }));
+    expect((otra.getByRole('radio', { name: 'Todas las secciones' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('con una sola sección no pregunta el alcance y la actividad aplica a todas', async () => {
+    vi.mocked(seccionesApi.list).mockResolvedValue([{ id: 10, nombre: 'Grupo A', curso_id: 1, activo: true }]);
+    vi.mocked(actividadesApi.create).mockResolvedValue(actividad(102, 'Taller', 'individual', '0'));
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    await user.click(screen.getByRole('button', { name: '+ Nueva actividad' }));
+    const d = within(screen.getByRole('dialog', { name: 'Nueva actividad' }));
+    expect(d.queryByText('Aplica a')).toBeNull();
+    expect(d.queryByRole('radio', { name: 'Secciones específicas' })).toBeNull();
+    await user.type(d.getByPlaceholderText('Ej: Lab1: Cálculo de subredes'), 'Taller');
+    await user.click(d.getByRole('button', { name: 'Crear' }));
+
+    await waitFor(() => expect(actividadesApi.create).toHaveBeenCalledWith(1, expect.objectContaining({
+      aplica_todas_secciones: true, secciones_ids: [],
+    })));
+  });
+
+  it('un 422 de validación se muestra como texto', async () => {
+    vi.mocked(actividadesApi.create).mockRejectedValue({ response: { data: { detail: [
+      { type: 'value_error', loc: ['body'], msg: 'Value error, Elija al menos una sección', input: {} },
+    ] } } });
+    const user = userEvent.setup();
+    renderPage();
+    await cargada();
+
+    await user.click(screen.getByRole('button', { name: '+ Nueva actividad' }));
+    const d = within(screen.getByRole('dialog', { name: 'Nueva actividad' }));
+    await user.type(d.getByPlaceholderText('Ej: Lab1: Cálculo de subredes'), 'Taller');
+    await user.click(d.getByRole('button', { name: 'Crear' }));
+
+    expect(await d.findByText('Value error, Elija al menos una sección')).toBeTruthy();
   });
 
   it('si crear la actividad falla, muestra el detalle del backend', async () => {

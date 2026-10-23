@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { Dialog } from '../../../components/ui/Dialog';
 import { Input } from '../../../components/ui/Input';
-import { Actividad, Seccion, Estudiante } from '../../../types';
+import { Actividad, Seccion, Estudiante, aplicaEnSeccion } from '../../../types';
 import { estudiantesApi } from '../../../api/estudiantes';
 import { StudentPicker } from './StudentPicker';
 
@@ -44,8 +44,15 @@ export function CreateProjectModal({
   const [error, setError] = useState('');
   const titleId = useId();
 
+  // Solo se ofrecen las actividades que aplican a la sección elegida
+  const actividadesDeSeccion = useMemo(
+    () => (seccionId ? activities.filter((a) => aplicaEnSeccion(a, Number(seccionId))) : activities),
+    [activities, seccionId]
+  );
+
   // El modal no se desmonta al cerrarse y las listas cambian con la asignatura: al abrir se
   // prefiere la preselección; si no, se conserva la elegida mientras siga en la lista, o la primera.
+  // La actividad se vuelve a elegir al cambiar de sección, entre las que aplican a la nueva.
   const wasOpen = useRef(false);
 
   useEffect(() => {
@@ -62,9 +69,11 @@ export function CreateProjectModal({
       return items[0]?.id ?? '';
     };
 
-    setSeccionId((current) => pick(sections, current, initialSeccionId));
-    setActividadId((current) => pick(activities, current, initialActividadId));
-  }, [open, sections, activities, initialSeccionId, initialActividadId]);
+    const seccion = pick(sections, seccionId, initialSeccionId);
+    setSeccionId(seccion);
+    const disponibles = seccion ? activities.filter((a) => aplicaEnSeccion(a, Number(seccion))) : activities;
+    setActividadId((current) => pick(disponibles, current, initialActividadId));
+  }, [open, sections, activities, initialSeccionId, initialActividadId, seccionId]);
 
   useEffect(() => {
     // Con otra sección cambia la lista: un filtro anterior no aplica
@@ -194,12 +203,15 @@ export function CreateProjectModal({
               onChange={(event) => setActividadId(Number(event.target.value))}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
             >
-              {activities.map((activity) => (
+              {actividadesDeSeccion.map((activity) => (
                 <option key={activity.id} value={activity.id}>
                   {activity.nombre}
                 </option>
               ))}
             </select>
+            {activities.length > 0 && actividadesDeSeccion.length === 0 && (
+              <p className="mt-1 text-xs text-gray-500">Ninguna actividad grupal aplica a esta sección.</p>
+            )}
           </div>
         </div>
 

@@ -84,6 +84,26 @@ class ActividadConCalificaciones(Conflicto):
         super().__init__(f"No se puede eliminar '{nombre}' porque ya tiene calificaciones registradas.")
 
 
+class SeccionesFueraDelCurso(DatosInvalidos):
+    """Secciones del alcance (en el body) que no existen o son de otro curso."""
+
+    def __init__(self, seccion_ids: list[int]):
+        self.seccion_ids = seccion_ids
+        super().__init__(f"Secciones que no son de este curso: {', '.join(map(str, seccion_ids))}")
+
+
+class SeccionConTrabajoEnActividad(Conflicto):
+    """Quitar la sección del alcance dejaría fuera equipos o calificaciones que ya tiene."""
+
+    def __init__(self, actividad: str, seccion: str):
+        self.actividad = actividad
+        self.seccion = seccion
+        super().__init__(
+            f"No se puede quitar la sección '{seccion}' de '{actividad}' porque ya tiene "
+            "equipos o calificaciones en esa actividad. Elimínelos primero."
+        )
+
+
 class RaAbetDesconocidos(DatosInvalidos):
     def __init__(self, codigos: list[str]):
         self.codigos = codigos
@@ -256,6 +276,13 @@ class SeccionFueraDelCurso(NoEncontrado):
         super().__init__("Sección no encontrada en este curso")
 
 
+class ActividadNoAplicaEnSeccion(NoEncontrado):
+    """La sección es del curso, pero la actividad tiene alcance específico y no la incluye."""
+
+    def __init__(self):
+        super().__init__("Esta actividad no aplica a esta sección")
+
+
 class EquipoNoEncontrado(NoEncontrado):
     def __init__(self):
         super().__init__("Equipo no encontrado")
@@ -337,6 +364,13 @@ class EquipoNoPerteneceAActividad(SolicitudInvalida):
 class EstudianteNoPerteneceAlCurso(SolicitudInvalida):
     def __init__(self):
         super().__init__("El estudiante no pertenece a este curso")
+
+
+class EstudianteFueraDeAlcance(SolicitudInvalida):
+    """El estudiante es del curso, pero su sección no está en el alcance de la actividad."""
+
+    def __init__(self):
+        super().__init__("La actividad no aplica a la sección del estudiante")
 
 
 class CriterioFueraDeActividad(SolicitudInvalida):
