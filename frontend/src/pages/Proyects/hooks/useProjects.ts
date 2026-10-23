@@ -4,7 +4,7 @@ import { cursosApi } from '../../../api/cursos';
 import { seccionesApi } from '../../../api/secciones';
 import { actividadesApi } from '../../../api/actividades';
 import { equiposApi } from '../../../api/equipos';
-import { Actividad, Seccion } from '../../../types';
+import { Actividad, Curso, Seccion, aplicaEnSeccion } from '../../../types';
 import { ProjectRow, toProjectRow } from '../types';
 
 // Secciones, actividades grupales y equipos de una asignatura. loadProjects recibe la
@@ -35,8 +35,13 @@ export function useProjects() {
 
     setLoading(true);
 
+    // Fase 1: secciones y actividades. Si fallan, no hay nada que mostrar.
+    let courseList: Curso[];
+    let courseSections: Seccion[];
+    let groupedActivities: Actividad[];
     try {
-      const [courseList, courseSections, courseActivities] =
+      let courseActivities: Actividad[];
+      [courseList, courseSections, courseActivities] =
         await Promise.all([
           cursosApi.list(),
           seccionesApi.list(courseId),
@@ -45,16 +50,29 @@ export function useProjects() {
 
       if (isStale()) return;
 
-      const groupedActivities = courseActivities.filter(
+      groupedActivities = courseActivities.filter(
         (activity) => activity.tipo === 'grupal'
-      );
-
-      const currentCourse = courseList.find(
-        (course) => course.id === courseId
       );
 
       setSections(courseSections);
       setActivities(groupedActivities);
+    } catch (error) {
+      if (isStale()) return;
+      console.error('Error cargando proyectos:', error);
+
+      setProjects([]);
+      setSections([]);
+      setActivities([]);
+      setLoading(false);
+      return;
+    }
+
+    // Fase 2: equipos. Si fallan, las secciones y actividades ya cargadas se
+    // conservan: "Nuevo proyecto" sigue funcionando.
+    try {
+      const currentCourse = courseList.find(
+        (course) => course.id === courseId
+      );
 
       if (groupedActivities.length === 0) {
         setProjects([]);
@@ -65,6 +83,9 @@ export function useProjects() {
 
       for (const activity of groupedActivities) {
         for (const section of courseSections) {
+          // Fuera del alcance de la actividad el backend responde 404: no se consulta
+          if (!aplicaEnSeccion(activity, section.id)) continue;
+
           const teams = await equiposApi.list(
             activity.id,
             section.id
@@ -90,11 +111,9 @@ export function useProjects() {
       setProjects(projectResults);
     } catch (error) {
       if (isStale()) return;
-      console.error('Error cargando proyectos:', error);
+      console.error('Error cargando equipos:', error);
 
       setProjects([]);
-      setSections([]);
-      setActivities([]);
     } finally {
       if (!isStale()) setLoading(false);
     }

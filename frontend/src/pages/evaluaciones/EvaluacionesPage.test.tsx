@@ -352,6 +352,26 @@ describe('EvaluacionesPage — estados vacíos y errores', () => {
     expect(screen.getByTestId('ubicacion').textContent).toBe('/proyectos?actividadId=100');
   });
 
+  it('una actividad con alcance específico solo pide los equipos de sus secciones', async () => {
+    vi.mocked(actividadesApi.list).mockImplementation(async (cursoId) =>
+      cursoId === 1 ? [{ ...actividad(100, 'Proyecto final', 1), aplica_todas_secciones: false, secciones_ids: [11] }] : []
+    );
+    // Como el backend: fuera del alcance responde 404
+    vi.mocked(equiposApi.list).mockImplementation(async (actId, secId) => {
+      if (actId === 100 && secId !== 11) {
+        throw { response: { status: 404, data: { detail: 'Esta actividad no aplica a esta sección' } } };
+      }
+      return EQUIPOS[`${actId}-${secId}`] ?? [];
+    });
+    renderPage();
+    await conRubrica();
+
+    expect(opciones('Proyecto a evaluar')).toEqual(['Equipo Beta · Grupo B']);
+    expect(equiposApi.list).toHaveBeenCalledWith(100, 11);
+    expect(equiposApi.list).not.toHaveBeenCalledWith(100, 10);
+    expect(screen.queryByText('No se pudieron cargar los equipos de esta actividad.')).toBeNull();
+  });
+
   it.each([
     ['las asignaturas', () => vi.mocked(cursosApi.list).mockRejectedValue(new Error('x')), 'No se pudieron cargar las asignaturas.'],
     ['la asignatura', () => vi.mocked(seccionesApi.list).mockRejectedValue(new Error('x')), 'No se pudieron cargar las actividades de esta asignatura.'],
