@@ -41,15 +41,15 @@ export function CoursesToolbar({
           />
         </div>
 
-      <Button
-        variant="secondary"
-        size="md"
-        icon={<Filter size={17} />}
-        onClick={onToggleFilter}
-        className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10"
-      >
-        Filtrar
-      </Button>
+        <Button
+          variant="secondary"
+          size="md"
+          icon={<Filter size={17} />}
+          onClick={onToggleFilter}
+          className="flex h-10 min-w-[220px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus-within:border-[#9E0B0F] focus-within:ring-2 focus-within:ring-[#9E0B0F]/10"
+        >
+          Filtrar
+        </Button>
         <button
           type="button"
           onClick={onNew}
@@ -58,16 +58,15 @@ export function CoursesToolbar({
           <Plus size={18} />
           Nueva asignatura
         </button>
-      </div>Ñ
+      </div>
 
       {showFilter && (
         <div className="mb-5 flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-white p-4">
           <button
             type="button"
             onClick={() => onStatusFilter('todos')}
-            className={`rounded-lg px-4 py-2 text-sm ${
-              statusFilter === 'todos' ? 'bg-[#9E0B0F] text-white' : 'bg-gray-100 text-gray-700'
-            }`}
+            className={`rounded-lg px-4 py-2 text-sm ${statusFilter === 'todos' ? 'bg-[#9E0B0F] text-white' : 'bg-gray-100 text-gray-700'
+              }`}
           >
             Todos
           </button>
@@ -75,9 +74,8 @@ export function CoursesToolbar({
           <button
             type="button"
             onClick={() => onStatusFilter('activo')}
-            className={`rounded-lg px-4 py-2 text-sm ${
-              statusFilter === 'activo' ? 'bg-[#9E0B0F] text-white' : 'bg-gray-100 text-gray-700'
-            }`}
+            className={`rounded-lg px-4 py-2 text-sm ${statusFilter === 'activo' ? 'bg-[#9E0B0F] text-white' : 'bg-gray-100 text-gray-700'
+              }`}
           >
             Activos
           </button>
@@ -85,9 +83,8 @@ export function CoursesToolbar({
           <button
             type="button"
             onClick={() => onStatusFilter('cerrado')}
-            className={`rounded-lg px-4 py-2 text-sm ${
-              statusFilter === 'cerrado' ? 'bg-[#9E0B0F] text-white' : 'bg-gray-100 text-gray-700'
-            }`}
+            className={`rounded-lg px-4 py-2 text-sm ${statusFilter === 'cerrado' ? 'bg-[#9E0B0F] text-white' : 'bg-gray-100 text-gray-700'
+              }`}
           >
             Cerrados
           </button>
