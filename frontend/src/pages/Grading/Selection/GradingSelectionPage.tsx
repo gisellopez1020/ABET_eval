@@ -229,7 +229,7 @@ export function GradingSelectionPage() {
                   )}
                 </div>
                 <Button
-                  variant={item.calificado ? 'secondary' : 'primary'}
+                  variant="secondary"
                   size="sm"
                   className="rounded-lg border border-gray-200 bg-white text-gray-700 outline-none transition hover:border-[#9E0B0F] hover:bg-white active:bg-white focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10"
                   onClick={() => goToTemplate(item, originalIndex)}
