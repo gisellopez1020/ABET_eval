@@ -7,10 +7,12 @@ Libros Excel de Estadísticas ABET por actividad (openpyxl, sin base de datos).
 - Hojas de detalle (una por equipo o estudiante): mismo formato que la rúbrica
   del profesor (Punto del informe / Aspecto evaluado / Criterio / Cumple /
   Nota informe / Nota del proyecto / Cantidad estudiantes). Los valores son
-  fijos, no fórmulas: la app es la fuente de verdad.
+  fijos, no fórmulas: la app es la fuente de verdad. Debajo, los integrantes y la
+  retroalimentación (o un aviso de por qué no la hay).
 """
 import io
 import logging
+import math
 import re
 from dataclasses import dataclass
 from itertools import groupby
@@ -49,11 +51,17 @@ ENCABEZADOS_DETALLE = [
 ]
 ANCHOS_DETALLE = {"A": 14, "B": 24, "C": 80, "D": 10, "E": 12, "F": 12, "G": 13}
 FILA_DATOS = 3  # los encabezados ocupan las filas 1-2 (combinadas)
+# Alto explícito de la fila de retroalimentación: Drive/Sheets no siempre autoajustan
+# el alto de celdas con wrap_text. Margen por debajo de los 80 de ancho de la columna C.
+CARACTERES_POR_LINEA_C = 75
+ALTO_LINEA_PT = 15
 
 _BORDE = Border(*(Side(style="thin", color="999999"),) * 4)
 _FONDO_ENCABEZADO = PatternFill("solid", fgColor="E7E6E6")
 _CENTRADO = Alignment(horizontal="center", vertical="center", wrap_text=True)
 _IZQUIERDA = Alignment(horizontal="left", vertical="center", wrap_text=True)
+_ARRIBA_IZQUIERDA = Alignment(horizontal="left", vertical="top", wrap_text=True)
+_FUENTE_AVISO = Font(italic=True, color="6B7280")
 
 
 @dataclass
@@ -72,6 +80,8 @@ class HojaDetalle:
     nota_proyecto: Optional[float]    # None si la calificación está incompleta
     cantidad_estudiantes: int
     integrantes: list[str]
+    retroalimentacion: str = ""               # texto de la IA, o un aviso si no hay uno vigente
+    retroalimentacion_es_aviso: bool = True
 
 
 def color_rango(indice: int, total: int) -> str:
@@ -234,6 +244,24 @@ def _escribir_detalle(ws: Worksheet, hoja: HojaDetalle) -> None:
     # Integrantes debajo de la tabla, dejando una fila libre
     for i, integrante in enumerate(hoja.integrantes):
         escribir_texto(ws, f"C{ultima + 2 + i}", integrante)
+
+    # Retroalimentación debajo de los integrantes, dejando otra fila libre
+    fila_retro = ultima + 3 + len(hoja.integrantes)
+    rotulo = ws[f"B{fila_retro}"]
+    rotulo.value = "Retroalimentación"
+    rotulo.font = Font(bold=True)
+    rotulo.fill = _FONDO_ENCABEZADO
+    texto = escribir_texto(ws, f"C{fila_retro}", hoja.retroalimentacion)
+    if hoja.retroalimentacion_es_aviso:
+        texto.font = _FUENTE_AVISO
+    _estilo(ws, f"B{fila_retro}:C{fila_retro}", _ARRIBA_IZQUIERDA)
+    ws.row_dimensions[fila_retro].height = _alto_texto(hoja.retroalimentacion)
+
+
+def _alto_texto(texto: str) -> float:
+    """Alto en puntos para ver el texto completo en la columna C con wrap_text."""
+    lineas = sum(max(1, math.ceil(len(p) / CARACTERES_POR_LINEA_C)) for p in texto.split("\n"))
+    return lineas * ALTO_LINEA_PT
 
 
 def _guardar(wb: Workbook) -> bytes:

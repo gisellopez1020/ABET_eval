@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Calificacion, Retroalimentacion
+from app.models import Actividad, Calificacion, Retroalimentacion
 from app.repositories.actividad import ActividadRepository
 from app.repositories.retroalimentacion import RetroalimentacionRepository
 from app.schemas.retroalimentacion import AspectoRetroalimentacion, RetroalimentacionOut
@@ -67,38 +67,16 @@ class RetroalimentacionService:
         equipo_id: Optional[int] = None, estudiante_id: Optional[int] = None,
     ) -> RetroalimentacionOut:
         valores: Dict[int, int] = {c.criterio_id: c.valor for c in calificaciones}
-        actividad = self.actividades.get(actividad_id)
-        aspectos: List[AspectoRetroalimentacion] = []
-        completa = True
-        hay_criterios = False
-        for aspecto in actividad.aspectos:
-            if not aspecto.criterios:
-                continue
-            hay_criterios = True
-            cumplidos, por_reforzar = [], []
-            for criterio in aspecto.criterios:
-                valor = valores.get(criterio.id)
-                if valor is None:
-                    completa = False
-                elif valor == 1:
-                    cumplidos.append(criterio.texto)
-                else:
-                    por_reforzar.append(criterio.texto)
-            aspectos.append(AspectoRetroalimentacion(
-                aspecto_id=aspecto.id, nombre=aspecto.nombre,
-                cumplidos=cumplidos, por_reforzar=por_reforzar,
-            ))
-        completa = completa and hay_criterios
-
-        estructurada = RetroalimentacionOut(completa=completa, fuente="estructurada", aspectos=aspectos)
-        if not completa:
+        estructurada = capa_estructurada(self.actividades.get(actividad_id), valores)
+        if not estructurada.completa:
             return estructurada
 
         tipo = "equipo" if equipo_id else "estudiante"
-        huella = _huella(tipo, aspectos)
+        aspectos = estructurada.aspectos
         guardada = self.retroalimentaciones.de(actividad_id, equipo_id, estudiante_id)
-        if guardada and guardada.huella == huella:
+        if es_vigente(tipo, estructurada, guardada):
             return _con_texto(estructurada, guardada)
+        huella = _huella(tipo, aspectos)
 
         texto = gemini.redactar(INSTRUCCIONES, mensaje_para_ia(tipo, aspectos))
         if texto is None:
@@ -120,6 +98,45 @@ class RetroalimentacionService:
             return estructurada.model_copy(update={"fuente": "ia", "texto": texto})
         self.db.refresh(guardada)
         return _con_texto(estructurada, guardada)
+
+
+def capa_estructurada(actividad: Actividad, valores: Dict[int, int]) -> RetroalimentacionOut:
+    """
+    La capa 1 a partir de {criterio_id: valor}: sin IA ni BD. Completa solo si la
+    actividad tiene criterios y todos están calificados.
+    """
+    aspectos: List[AspectoRetroalimentacion] = []
+    completa = True
+    hay_criterios = False
+    for aspecto in actividad.aspectos:
+        if not aspecto.criterios:
+            continue
+        hay_criterios = True
+        cumplidos, por_reforzar = [], []
+        for criterio in aspecto.criterios:
+            valor = valores.get(criterio.id)
+            if valor is None:
+                completa = False
+            elif valor == 1:
+                cumplidos.append(criterio.texto)
+            else:
+                por_reforzar.append(criterio.texto)
+        aspectos.append(AspectoRetroalimentacion(
+            aspecto_id=aspecto.id, nombre=aspecto.nombre,
+            cumplidos=cumplidos, por_reforzar=por_reforzar,
+        ))
+    return RetroalimentacionOut(completa=completa and hay_criterios, fuente="estructurada", aspectos=aspectos)
+
+
+def es_vigente(tipo: str, estructurada: RetroalimentacionOut, guardada: Optional[Retroalimentacion]) -> bool:
+    """
+    Si la guardada corresponde a la calificación actual (misma huella que se usó al
+    guardarla). Solo lectura: nunca llama a la IA. Para el export de Excel.
+    """
+    return bool(
+        estructurada.completa and guardada
+        and guardada.huella == _huella(tipo, estructurada.aspectos)
+    )
 
 
 def mensaje_para_ia(tipo: str, aspectos: List[AspectoRetroalimentacion]) -> str:
