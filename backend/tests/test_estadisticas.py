@@ -1,7 +1,8 @@
 """
 Estadísticas ABET por actividad: reporte acotado a una actividad, libro resumen
 (hoja Conteo con tortas), libro de detalle con el formato de la rúbrica del
-profesor y sincronización con Google Drive (simulada, fallida y exitosa).
+profesor (con la retroalimentación guardada, sin llamar a Gemini) y sincronización
+con Google Drive (simulada, fallida y exitosa).
 
 Reutiliza las fixtures y utilidades de test_reportes (SQLite en memoria).
 """
@@ -16,11 +17,12 @@ import pytest
 from PIL import Image
 
 from app.config import settings
-from app.models import EquipoTrabajo, MiembroEquipo
+from app.models import Calificacion, EquipoTrabajo, MiembroEquipo
 from app.models.actividad import TipoActividad
 from app.schemas.reporte import RangoReporte, ReporteCriterioItem
-from app.services import google_drive, reporte_excel
+from app.services import gemini, google_drive, reporte_excel, reportes
 from app.services.reporte_excel import FILA_ENCABEZADO_CONTEO, _nombre_hoja, color_rango, nombre_archivo
+from app.services.retroalimentacion import RetroalimentacionService
 from tests.test_catalogo_ra_abet import MOCK_USER, client, db_session  # noqa: F401 (fixtures)
 from tests.test_reportes import DEFAULT, _actividad, _calificar, _estudiante, _seccion, curso  # noqa: F401
 
@@ -178,6 +180,75 @@ class TestDetalleXlsx:
         assert (ws["D3"].value, ws["D4"].value) == (1, None)
         assert ws["E3"].value is None and ws["F3"].value is None
         assert ws["G3"].value == 1
+        # Sin calificación completa nunca hay retroalimentación: aviso propio (C6 integrante, C8)
+        assert ws["B8"].value == "Retroalimentación"
+        assert ws["C8"].value == reportes.AVISO_INCOMPLETA
+        assert ws["C8"].font.i
+
+
+class TestRetroalimentacionEnDetalle:
+    """
+    El export solo lee la guardada: nunca llama a Gemini. Fila 12 en el fixture grupal:
+    tabla 3-7, libre, integrantes 9-10, libre.
+    """
+
+    TEXTO = "Lograron un diagrama coherente y justificaron las tecnologías elegidas. " * 4
+
+    @pytest.fixture()
+    def sin_ia(self, monkeypatch):
+        """gemini.redactar falla si se invoca; devuelve la lista de llamadas."""
+        llamadas = []
+
+        def _no_llamar(*args, **kwargs):
+            llamadas.append(args)
+            raise AssertionError("el export no debe llamar a Gemini")
+
+        monkeypatch.setattr(gemini, "redactar", _no_llamar)
+        return llamadas
+
+    def _generar(self, db_session, actividad, monkeypatch):
+        """
+        Guarda la retroalimentación por el camino real del service (mismo cálculo de
+        huella) y vuelve a dejar gemini.redactar como estaba (el mock de sin_ia).
+        """
+        equipo = db_session.query(EquipoTrabajo).filter_by(nombre="Equipo: 1/A").one()
+        anterior = gemini.redactar
+        monkeypatch.setattr(gemini, "redactar", lambda *a, **k: self.TEXTO)
+        out = RetroalimentacionService(db_session).de_equipo(actividad.id, equipo.id, MOCK_USER["email"])
+        monkeypatch.setattr(gemini, "redactar", anterior)
+        assert out.fuente == "ia"
+        return equipo
+
+    def test_incluye_la_guardada_vigente(self, client, db_session, curso, grupal, monkeypatch, sin_ia):
+        self._generar(db_session, grupal, monkeypatch)
+        ws = _libro(_detalle(client, curso, grupal)[1])["Equipo 1A"]
+
+        assert ws["B12"].value == "Retroalimentación" and ws["B12"].font.b
+        celda = ws["C12"]
+        assert celda.value == self.TEXTO
+        assert not celda.font.i
+        assert celda.alignment.wrap_text and celda.alignment.vertical == "top"
+        # Alto explícito para leer el párrafo completo (más de una línea)
+        assert ws.row_dimensions[12].height >= 15 * 4
+        assert sin_ia == []
+
+    def test_sin_guardada_muestra_aviso_sin_llamar_a_gemini(self, client, db_session, curso, grupal, sin_ia):
+        ws = _libro(_detalle(client, curso, grupal)[1])["Equipo 1A"]
+        assert ws["C12"].value == reportes.AVISO_NO_GENERADA
+        assert ws["C12"].font.i
+        assert ws.row_dimensions[12].height >= 15
+        assert sin_ia == []
+
+    def test_guardada_desactualizada_no_se_muestra(self, client, db_session, curso, grupal, monkeypatch, sin_ia):
+        equipo = self._generar(db_session, grupal, monkeypatch)
+        # El docente cambia una calificación después de generarla
+        cal = db_session.query(Calificacion).filter_by(equipo_id=equipo.id, valor=0).first()
+        cal.valor = 1
+        db_session.commit()
+
+        ws = _libro(_detalle(client, curso, grupal)[1])["Equipo 1A"]
+        assert ws["C12"].value == reportes.AVISO_DESACTUALIZADA
+        assert sin_ia == []
 
 
 class TestNombreConSeccion:

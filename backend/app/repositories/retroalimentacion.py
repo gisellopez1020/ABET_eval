@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,10 @@ class RetroalimentacionRepository:
             .filter_by(actividad_id=actividad_id, equipo_id=equipo_id, estudiante_id=estudiante_id)
             .one_or_none()
         )
+
+    def de_actividad(self, actividad_id: int) -> List[Retroalimentacion]:
+        """Todas las guardadas de la actividad (de equipos y de estudiantes), en una consulta."""
+        return self.db.query(Retroalimentacion).filter_by(actividad_id=actividad_id).all()
 
     def agregar(self, retro: Retroalimentacion) -> Retroalimentacion:
         self.db.add(retro)

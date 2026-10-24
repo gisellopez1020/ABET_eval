@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import Actividad, Curso, RaAbetCatalogo, Seccion
+from app.models import Actividad, Curso, RaAbetCatalogo, Retroalimentacion, Seccion
 from app.models.actividad import TipoActividad
 from app.repositories.actividad import ActividadRepository
 from app.repositories.calificacion import CalificacionRepository
@@ -21,6 +21,7 @@ from app.repositories.curso import CursoRepository
 from app.repositories.equipo import EquipoRepository
 from app.repositories.estudiante import EstudianteRepository
 from app.repositories.ra_abet import RaAbetRepository
+from app.repositories.retroalimentacion import RetroalimentacionRepository
 from app.repositories.rubrica import RubricaRepository
 from app.repositories.seccion import SeccionRepository
 from app.schemas.reporte import (
@@ -34,6 +35,18 @@ from app.services.errores import ActividadFueraDelCurso
 from app.services.google_drive import subir_archivo
 from app.services.reporte_excel import (
     AspectoDetalle, HojaDetalle, MIME_XLSX, libro_detalle, libro_resumen, nombre_archivo,
+)
+from app.services.retroalimentacion import capa_estructurada, es_vigente
+
+AVISO_INCOMPLETA = (
+    "Calificación incompleta: la retroalimentación se genera cuando todos los criterios estén calificados."
+)
+AVISO_NO_GENERADA = (
+    "Retroalimentación aún no generada (se genera al abrir el detalle de calificación en la app)."
+)
+AVISO_DESACTUALIZADA = (
+    "Retroalimentación desactualizada: la calificación cambió desde que se generó. "
+    "Ábrela en la app para regenerarla."
 )
 
 
@@ -237,11 +250,19 @@ class ReporteService:
             for a in aspectos_act
         }
 
-        # Entidades: (nombre de hoja, lector de sus calificaciones, integrantes)
+        # Retroalimentaciones guardadas de la actividad: {id de equipo o estudiante: fila}
+        grupal = actividad.tipo == TipoActividad.grupal
+        guardadas = {
+            r.equipo_id if grupal else r.estudiante_id: r
+            for r in RetroalimentacionRepository(self.db).de_actividad(actividad.id)
+        }
+
+        # Entidades: (id, nombre de hoja, lector de sus calificaciones, integrantes)
         calificaciones = CalificacionRepository(self.db)
-        if actividad.tipo == TipoActividad.grupal:
+        if grupal:
             entidades = [
                 (
+                    e.id,
                     e.nombre,
                     partial(calificaciones.valores_de_equipo, e.id),
                     sorted(
@@ -253,6 +274,7 @@ class ReporteService:
         else:
             entidades = [
                 (
+                    e.id,
                     e.nombre_completo,
                     partial(calificaciones.valores_de_estudiante, e.id),
                     [f"{e.nombre_completo} ({e.codigo_estudiante})"],
@@ -261,13 +283,14 @@ class ReporteService:
             ]
 
         hojas: list[HojaDetalle] = []
-        for nombre, leer_valores, integrantes in entidades:
+        for entidad_id, nombre, leer_valores, integrantes in entidades:
             filas = leer_valores(criterio_ids) if criterio_ids else []
             if not filas:
                 continue
             valores = {cid: valor for cid, valor, _ in filas}
             notas = notas_bloque(valores, bloques)
             completa = len(valores) == len(criterio_ids)
+            retro, es_aviso = _retroalimentacion_guardada(actividad, valores, guardadas.get(entidad_id))
             hojas.append(HojaDetalle(
                 nombre=nombre,
                 aspectos=[
@@ -283,5 +306,25 @@ class ReporteService:
                 nota_proyecto=float(sum(n for _, _, n in filas)) if completa else None,
                 cantidad_estudiantes=len(integrantes),
                 integrantes=integrantes,
+                retroalimentacion=retro,
+                retroalimentacion_es_aviso=es_aviso,
             ))
         return hojas
+
+
+def _retroalimentacion_guardada(
+    actividad: Actividad, valores: dict[int, int], guardada: Optional[Retroalimentacion],
+) -> tuple[str, bool]:
+    """
+    (texto, es_aviso) para la hoja de detalle. Solo lee la guardada: el export nunca
+    redacta con IA (serían varias llamadas a Gemini en una sola petición).
+    """
+    estructurada = capa_estructurada(actividad, valores)
+    if not estructurada.completa:
+        return AVISO_INCOMPLETA, True
+    if guardada is None:
+        return AVISO_NO_GENERADA, True
+    tipo = "equipo" if actividad.tipo == TipoActividad.grupal else "estudiante"
+    if not es_vigente(tipo, estructurada, guardada):
+        return AVISO_DESACTUALIZADA, True
+    return guardada.texto, False

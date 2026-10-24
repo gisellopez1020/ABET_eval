@@ -14,7 +14,8 @@ from app.models import Calificacion, Criterio, EquipoTrabajo, Retroalimentacion
 from app.models.actividad import TipoActividad
 from app.services import gemini
 from app.services.errores import EquipoFueraDeActividad, EstudianteFueraDelCurso, SinPermiso
-from app.services.retroalimentacion import RetroalimentacionService
+from app.repositories.retroalimentacion import RetroalimentacionRepository
+from app.services.retroalimentacion import RetroalimentacionService, capa_estructurada, es_vigente
 from tests.test_catalogo_ra_abet import MOCK_USER, db_session  # noqa: F401 (fixtures)
 from tests.test_exportar_estudiantes import _curso, _est
 from tests.test_reportes import _actividad, _calificar
@@ -216,6 +217,34 @@ class TestConIA:
 
 
 # ── Fallback cuando la IA falla ──────────────────────────────────────────────
+
+class TestVigenciaSinIA:
+    """es_vigente + capa_estructurada: lo que usa el export de Excel para leer sin redactar."""
+
+    def test_la_guardada_por_el_service_es_vigente_hasta_que_cambia_la_calificacion(
+        self, servicio, db_session, ctx, ia,
+    ):
+        act, [crits] = _actividad(db_session, ctx["curso"], [(None, [50, 50])])
+        _calificar(db_session, crits, [1, 0], estudiante=ctx["ana"])
+        servicio.de_estudiante(act.id, ctx["ana"].id, EMAIL)
+        guardada = RetroalimentacionRepository(db_session).de(act.id, None, ctx["ana"].id)
+
+        def vigente():
+            valores = {c.criterio_id: c.valor for c in db_session.query(Calificacion).all()}
+            return es_vigente("estudiante", capa_estructurada(act, valores), guardada)
+
+        assert vigente()
+        db_session.query(Calificacion).filter_by(criterio_id=crits[1].id).one().valor = 1
+        db_session.commit()
+        assert not vigente()
+        assert len(ia.llamadas) == 1
+
+    def test_incompleta_o_sin_guardada_no_es_vigente(self, db_session, ctx, ia):
+        act, [crits] = _actividad(db_session, ctx["curso"], [(None, [50, 50])])
+        assert not es_vigente("estudiante", capa_estructurada(act, {crits[0].id: 1}), None)
+        assert not es_vigente("estudiante", capa_estructurada(act, {c.id: 1 for c in crits}), None)
+        assert ia.llamadas == []
+
 
 class TestFallback:
     def test_si_la_ia_falla_devuelve_la_estructurada_sin_guardar(self, servicio, db_session, ctx, ia):

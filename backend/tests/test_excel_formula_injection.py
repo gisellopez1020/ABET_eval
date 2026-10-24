@@ -100,7 +100,7 @@ class TestListaEstudiantes:
 
 # ── Reporte de estadísticas ──────────────────────────────────────────────────
 
-def _libro_detalle(texto=NORMAL, aspecto=NORMAL, integrante="ANA (001)", etiqueta="0.0-5.0"):
+def _libro_detalle(texto=NORMAL, aspecto=NORMAL, integrante="ANA (001)", etiqueta="0.0-5.0", retro=NORMAL):
     rangos = [RangoReporte(etiqueta=etiqueta, minimo=0.0, maximo=5.0)]
     criterios = [ReporteCriterioItem(
         codigo="1.1", descripcion="d", codigo_padre=None, peso=None,
@@ -113,6 +113,7 @@ def _libro_detalle(texto=NORMAL, aspecto=NORMAL, integrante="ANA (001)", etiquet
             criterios=[(texto, 1), ("otro criterio", 0)], nota=2.5,
         )],
         nota_proyecto=2.5, cantidad_estudiantes=1, integrantes=[integrante],
+        retroalimentacion=retro, retroalimentacion_es_aviso=False,
     )
     wb = _abrir(libro_detalle(rangos, criterios, [hoja]))
     return wb["Conteo"], wb["Equipo 1"]
@@ -135,6 +136,12 @@ class TestReporteDetalle:
         _es_texto_literal(ws["C6"], valor)
 
     @pytest.mark.parametrize("valor", PELIGROSOS)
+    def test_retroalimentacion(self, valor):
+        # Texto libre de la IA: fila 8 = tabla (3-4), libre, integrante (6), libre
+        _, ws = _libro_detalle(retro=valor)
+        _es_texto_literal(ws["C8"], valor)
+
+    @pytest.mark.parametrize("valor", PELIGROSOS)
     def test_etiqueta_rango(self, valor):
         conteo, _ = _libro_detalle(etiqueta=valor)
         _es_texto_literal(conteo["B5"], valor)
@@ -142,8 +149,8 @@ class TestReporteDetalle:
     def test_texto_normal_y_numeros_no_se_tocan(self):
         conteo, ws = _libro_detalle()
         assert [conteo["A5"].value, conteo["B5"].value, conteo["B6"].value] == ["Calificación", "0.0-5.0", 1]
-        assert [ws["A3"].value, ws["B3"].value, ws["C3"].value, ws["C6"].value] == [
-            "ABET 1.1", NORMAL, NORMAL, "ANA (001)",
+        assert [ws["A3"].value, ws["B3"].value, ws["C3"].value, ws["C6"].value, ws["C8"].value] == [
+            "ABET 1.1", NORMAL, NORMAL, "ANA (001)", NORMAL,
         ]
         assert (ws["D3"].data_type, ws["E3"].data_type, ws["F3"].data_type, ws["G3"].data_type) == ("n",) * 4
         assert ws["E3"].number_format == "0.00"
