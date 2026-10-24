@@ -22,9 +22,11 @@ vi.mock('../../components/Layout/AppLayout', () => ({
 vi.mock('../../api/cursos', () => ({ cursosApi: { list: vi.fn() } }));
 vi.mock('../../api/secciones', () => ({ seccionesApi: { list: vi.fn() } }));
 vi.mock('../../api/actividades', () => ({ actividadesApi: { list: vi.fn() } }));
-vi.mock('../../api/equipos', () => ({ equiposApi: { list: vi.fn() } }));
+vi.mock('../../api/equipos', () => ({ equiposApi: { list: vi.fn(), modoCalificacion: vi.fn() } }));
 vi.mock('../../api/criterios', () => ({ criteriosApi: { get: vi.fn() } }));
-vi.mock('../../api/calificaciones', () => ({ calificacionesApi: { equipo: vi.fn() } }));
+vi.mock('../../api/calificaciones', () => ({
+  calificacionesApi: { equipo: vi.fn(), estudiante: vi.fn() },
+}));
 
 // ── Datos ────────────────────────────────────────────────────────────────────
 
@@ -83,8 +85,30 @@ beforeEach(() => {
   vi.mocked(seccionesApi.list).mockImplementation(async (cursoId) => SECCIONES[cursoId] ?? []);
   vi.mocked(actividadesApi.list).mockImplementation(async (cursoId) => ACTIVIDADES[cursoId] ?? []);
   vi.mocked(equiposApi.list).mockImplementation(async (actId, secId) => EQUIPOS[`${actId}-${secId}`] ?? []);
+  vi.mocked(equiposApi.modoCalificacion).mockImplementation(async (_actId, secId) => ({
+    tipo: 'individual',
+    items: [{
+      id: 90 + secId,
+      nombre: secId === 10 ? 'Ana Pérez' : 'Caro Díaz',
+      miembros: [{
+        id: 90 + secId,
+        nombre_completo: secId === 10 ? 'Ana Pérez' : 'Caro Díaz',
+        codigo_estudiante: `E${secId}`,
+        seccion_id: secId,
+      }],
+      calificado: false,
+      nota_total: null,
+    }],
+    total: 1,
+    calificados: 0,
+  }));
   vi.mocked(criteriosApi.get).mockResolvedValue(RUBRICA as never);
   vi.mocked(calificacionesApi.equipo).mockResolvedValue([calif(11, 1), calif(12, 0)]);
+  vi.mocked(calificacionesApi.estudiante).mockResolvedValue([{
+    ...calif(11, 1),
+    equipo_id: null,
+    estudiante_id: 100,
+  }]);
 });
 
 afterEach(() => {
@@ -290,13 +314,32 @@ describe('EvaluacionesPage — rúbrica y resumen del equipo', () => {
     expect(screen.getByText('0 de 0 criterios calificados')).toBeTruthy();
   });
 
-  it('"Evaluación Individual" está deshabilitada y marcada como Próximamente', async () => {
+  it('permite seleccionar una actividad individual y muestra su rúbrica y estudiante', async () => {
+    const user = userEvent.setup();
     renderPage();
     await conRubrica();
 
-    const individual = screen.getByRole('button', { name: /evaluación individual/i }) as HTMLButtonElement;
-    expect(individual.disabled).toBe(true);
-    expect(individual.textContent).toContain('Próximamente');
+    await user.click(screen.getByRole('button', { name: 'Evaluación Individual' }));
+
+    expect(await screen.findByText('Ana Pérez')).toBeTruthy();
+    expect(opciones('Actividad')).toEqual(['Parcial']);
+    expect(opciones('Estudiante a evaluar')).toEqual(['Ana Pérez · Grupo A', 'Caro Díaz · Grupo B']);
+    expect(equiposApi.modoCalificacion).toHaveBeenCalledWith(101, 10);
+    expect(calificacionesApi.estudiante).toHaveBeenCalledWith(101, 100);
+    expect(screen.getByText('Resumen del estudiante')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Evaluación Individual' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('permite cambiar entre estudiante y actividad individual antes de calificar', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await conRubrica();
+    await user.click(screen.getByRole('button', { name: 'Evaluación Individual' }));
+    await screen.findByText('Ana Pérez');
+
+    await user.selectOptions(sel('Estudiante a evaluar'), '101');
+
+    expect(calificacionesApi.estudiante).toHaveBeenLastCalledWith(101, 101);
   });
 });
 
@@ -310,6 +353,18 @@ describe('EvaluacionesPage — navegación', () => {
     await user.click(screen.getByRole('button', { name: /ir a calificar/i }));
 
     expect(screen.getByTestId('ubicacion').textContent).toBe('/actividades/100/calificar/11');
+  });
+
+  it('"Ir a calificar" abre la ruta común de calificación para el estudiante seleccionado', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await conRubrica();
+    await user.click(screen.getByRole('button', { name: 'Evaluación Individual' }));
+    await screen.findByText('Ana Pérez');
+
+    await user.click(screen.getByRole('button', { name: /ir a calificar/i }));
+
+    expect(screen.getByTestId('ubicacion').textContent).toBe('/actividades/101/calificar/10');
   });
 
   it('"← Volver" lleva a proyectos', async () => {
@@ -335,10 +390,14 @@ describe('EvaluacionesPage — estados vacíos y errores', () => {
 
   it('una asignatura sin actividades grupales lo explica', async () => {
     vi.mocked(actividadesApi.list).mockResolvedValue([actividad(101, 'Parcial', 1, 'individual')]);
+    const user = userEvent.setup();
     renderPage();
 
     expect(await screen.findByText(/Esta asignatura no tiene actividades grupales\./)).toBeTruthy();
     expect(opciones('Actividad')).toEqual(['Sin actividades grupales']);
+    await user.click(screen.getByRole('button', { name: 'Evaluación Individual' }));
+    expect(await screen.findByText('Resumen del estudiante')).toBeTruthy();
+    expect(opciones('Actividad')).toEqual(['Parcial']);
   });
 
   it('una actividad sin equipos ofrece "Crear equipos" para esa actividad', async () => {

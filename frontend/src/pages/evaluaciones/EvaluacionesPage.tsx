@@ -22,6 +22,8 @@ export default function EvaluacionesPage() {
     setCourses,
     curso,
     activities,
+    tipoEvaluacion,
+    handleTipoEvaluacionChange,
     selectedActivityId,
     projects,
     selectedProjectId,
@@ -114,6 +116,7 @@ export default function EvaluacionesPage() {
               curso={curso}
               onCourseChange={handleCourseChange}
               activities={activities}
+              tipoEvaluacion={tipoEvaluacion}
               selectedActivityId={selectedActivityId}
               onActivityChange={handleActivityChange}
               projects={projects}
@@ -124,32 +127,40 @@ export default function EvaluacionesPage() {
               loading={loading}
             />
 
+            {!loadingCourses && !loadingCourse && curso && (
+              <div className="mb-5 inline-flex rounded-lg border border-[#e5e7eb] bg-white p-1 shadow-sm">
+                <button
+                  type="button"
+                  aria-pressed={tipoEvaluacion === 'grupal'}
+                  onClick={() => handleTipoEvaluacionChange('grupal')}
+                  className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium shadow-sm ${
+                    tipoEvaluacion === 'grupal'
+                      ? 'bg-[#9E0B0F] text-white'
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <CheckCheck size={15} />
+                  Evaluación Grupal
+                </button>
+
+                <button
+                  type="button"
+                  aria-pressed={tipoEvaluacion === 'individual'}
+                  onClick={() => handleTipoEvaluacionChange('individual')}
+                  className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium shadow-sm ${
+                    tipoEvaluacion === 'individual'
+                      ? 'bg-[#9E0B0F] text-white'
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <PencilLine size={15} />
+                  Evaluación Individual
+                </button>
+              </div>
+            )}
+
             {!loading && selectedProject && (
               <>
-                <div className="mb-5 inline-flex rounded-lg border border-[#e5e7eb] bg-white p-1 shadow-sm">
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 rounded-md bg-[#9E0B0F] px-4 py-2 text-sm font-medium text-white shadow-sm"
-                  >
-                    <CheckCheck size={15} />
-                    Evaluación Grupal
-                  </button>
-
-                  {/* Pendiente de construir: hoy esta pantalla solo carga actividades grupales */}
-                  <button
-                    type="button"
-                    disabled
-                    title="Próximamente. Las actividades individuales se califican desde “Ir a calificar” de cada actividad."
-                    className="flex cursor-not-allowed items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-gray-400"
-                  >
-                    <PencilLine size={15} />
-                    Evaluación Individual
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-                      Próximamente
-                    </span>
-                  </button>
-                </div>
-
                 <div className="grid gap-6 xl:grid-cols-[1.6fr_0.7fr]">
                   <RubricaEquipo aspectos={aspectos} valores={valores} />
 
@@ -157,6 +168,7 @@ export default function EvaluacionesPage() {
                     project={selectedProject}
                     aspectos={aspectos}
                     valores={valores}
+                    tipoEvaluacion={tipoEvaluacion}
                     onIrACalificar={() =>
                       navigate(
                         `/actividades/${selectedProject.actividadId}/calificar/${selectedProject.seccionId}`
@@ -172,6 +184,7 @@ export default function EvaluacionesPage() {
                 loadError={loadError}
                 sinAsignaturas={courses.length === 0}
                 sinActividades={activities.length === 0}
+                tipoEvaluacion={tipoEvaluacion}
                 onCrearEquipos={() => navigate(`/proyectos?actividadId=${selectedActivityId}`)}
               />
             )}

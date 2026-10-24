@@ -10,11 +10,18 @@ interface ResumenEquipoProps {
   project: ProjectOption;
   aspectos: Aspecto[];
   valores: Record<number, 0 | 1>;
+  tipoEvaluacion?: 'grupal' | 'individual';
   onIrACalificar: () => void;
 }
 
 // Resumen lateral: avance de la calificación, integrantes y "Ir a calificar"
-export function ResumenEquipo({ project, aspectos, valores, onIrACalificar }: ResumenEquipoProps) {
+export function ResumenEquipo({
+  project,
+  aspectos,
+  valores,
+  tipoEvaluacion = 'grupal',
+  onIrACalificar,
+}: ResumenEquipoProps) {
   const totalCriterios = aspectos.reduce((total, aspecto) => total + aspecto.criterios.length, 0);
   const criteriosCalificados = aspectos.reduce(
     (total, aspecto) => total + aspecto.criterios.filter((criterio) => criterio.id in valores).length,
@@ -26,7 +33,9 @@ export function ResumenEquipo({ project, aspectos, valores, onIrACalificar }: Re
                   <aside className="space-y-5">
                     <div className="rounded-xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
                       <div className="mb-3 flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-700">Resumen del proyecto</span>
+                        <span className="text-sm font-semibold text-gray-700">
+                          {tipoEvaluacion === 'grupal' ? 'Resumen del proyecto' : 'Resumen del estudiante'}
+                        </span>
                       </div>
 
                       <div className="mb-5 flex flex-col items-center justify-center">
@@ -69,8 +78,12 @@ export function ResumenEquipo({ project, aspectos, valores, onIrACalificar }: Re
 
                     <div className="rounded-xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
                       <div className="mb-3 flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-700">Equipo</span>
-                        <Badge variant="neutral">{project.miembros.length} miembros</Badge>
+                        <span className="text-sm font-semibold text-gray-700">
+                          {tipoEvaluacion === 'grupal' ? 'Equipo' : 'Estudiante'}
+                        </span>
+                        {tipoEvaluacion === 'grupal' && (
+                          <Badge variant="neutral">{project.miembros.length} miembros</Badge>
+                        )}
                       </div>
 
                       <div className="space-y-2">

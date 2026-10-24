@@ -3,12 +3,14 @@ import { ProjectOption } from '../types';
 
 const SELECT_CLASS =
 'w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-10 text-sm text-gray-700 outline-none transition hover:border-[#9E0B0F] focus:border-[#9E0B0F] focus:ring-2 focus:ring-[#9E0B0F]/10 disabled:bg-gray-50';
+type TipoEvaluacion = 'grupal' | 'individual';
 interface SelectoresEvaluacionProps {
   courses: Curso[];
   curso: Curso | null;
   onCourseChange: (value: string) => void;
-  /** Solo actividades grupales */
+  /** Actividades del tipo de evaluación seleccionado */
   activities: Actividad[];
+  tipoEvaluacion: TipoEvaluacion;
   selectedActivityId: number | null;
   onActivityChange: (value: string) => void;
   projects: ProjectOption[];
@@ -26,6 +28,7 @@ export function SelectoresEvaluacion({
   curso,
   onCourseChange,
   activities,
+  tipoEvaluacion,
   selectedActivityId,
   onActivityChange,
   projects,
@@ -70,7 +73,9 @@ export function SelectoresEvaluacion({
                   {loadingCourses || loadingCourse ? (
                     <option value="">Cargando…</option>
                   ) : activities.length === 0 ? (
-                    <option value="">Sin actividades grupales</option>
+                    <option value="">
+                      {tipoEvaluacion === 'grupal' ? 'Sin actividades grupales' : 'Sin actividades individuales'}
+                    </option>
                   ) : (
                     activities.map((actividad) => (
                       <option key={actividad.id} value={actividad.id}>
@@ -82,7 +87,9 @@ export function SelectoresEvaluacion({
               </label>
 
               <label className="w-full text-sm text-gray-700">
-                <span className="mb-1 block text-gray-800">Proyecto a evaluar</span>
+                <span className="mb-1 block text-gray-800">
+                  {tipoEvaluacion === 'grupal' ? 'Proyecto a evaluar' : 'Estudiante a evaluar'}
+                </span>
                 <select
                   value={selectedProjectId ?? ''}
                   onChange={(event) => onProjectChange(Number(event.target.value) || null)}
@@ -92,7 +99,9 @@ export function SelectoresEvaluacion({
                   {loading ? (
                     <option value="">Cargando…</option>
                   ) : projects.length === 0 ? (
-                    <option value="">Sin equipos</option>
+                    <option value="">
+                      {tipoEvaluacion === 'grupal' ? 'Sin equipos' : 'Sin estudiantes'}
+                    </option>
                   ) : (
                     projects.map((project) => (
                       <option key={project.id} value={project.id}>

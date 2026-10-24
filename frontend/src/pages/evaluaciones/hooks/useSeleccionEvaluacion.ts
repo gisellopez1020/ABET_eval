@@ -8,8 +8,8 @@ import { seccionesApi } from '../../../api/secciones';
 import { Actividad, Aspecto, Curso, Seccion, aplicaEnSeccion } from '../../../types';
 import { ProjectOption } from '../types';
 
-// Selección en cascada Asignatura -> Actividad grupal -> Equipo, y la rúbrica con las
-// calificaciones guardadas del equipo elegido. selectCourse y selectActivity reciben lo
+// Selección en cascada Asignatura -> Actividad -> Equipo/estudiante, y la rúbrica con las
+// calificaciones guardadas del elemento elegido. selectCourse y selectActivity reciben lo
 // que necesitan como argumentos (no lo leen del estado) y cada nivel descarta, con su
 // contador courseRequest / activityRequest, las respuestas de selecciones anteriores.
 // La carga inicial (lee la URL) vive en la página y llama a selectCourse.
@@ -18,9 +18,11 @@ export function useSeleccionEvaluacion() {
   const [courses, setCourses] = useState<Curso[]>([]);
   const [curso, setCurso] = useState<Curso | null>(null);
   const [sections, setSections] = useState<Seccion[]>([]);
-  const [activities, setActivities] = useState<Actividad[]>([]); // solo grupales
+  const [allActivities, setAllActivities] = useState<Actividad[]>([]);
+  const [tipoEvaluacion, setTipoEvaluacion] = useState<'grupal' | 'individual'>('grupal');
+  const activities = allActivities.filter((actividad) => actividad.tipo === tipoEvaluacion);
   const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null);
-  const [projects, setProjects] = useState<ProjectOption[]>([]); // equipos de la actividad elegida
+  const [projects, setProjects] = useState<ProjectOption[]>([]); // equipos o estudiantes de la actividad elegida
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [loadingCourse, setLoadingCourse] = useState(false);
@@ -36,7 +38,7 @@ export function useSeleccionEvaluacion() {
   // {criterio_id: valor} de las calificaciones guardadas del equipo; sin clave = sin calificar
   const [valores, setValores] = useState<Record<number, 0 | 1>>({});
 
-  // Equipos de una actividad (las secciones de su alcance, en paralelo). preferProjectId: el de la URL, si aplica.
+  // Equipos o estudiantes de una actividad (secciones de su alcance, en paralelo).
   const selectActivity = async (
     cursoActual: Curso,
     actividad: Actividad | null,
@@ -60,6 +62,23 @@ export function useSeleccionEvaluacion() {
       const deLaActividad = secciones.filter((seccion) => aplicaEnSeccion(actividad, seccion.id));
       const porSeccion = await Promise.all(
         deLaActividad.map(async (seccion) => {
+          if (actividad.tipo === 'individual') {
+            const modo = await equiposApi.modoCalificacion(actividad.id, seccion.id);
+            return modo.items.map((estudiante): ProjectOption => ({
+              id: estudiante.id,
+              nombre: estudiante.nombre,
+              cursoId: cursoActual.id,
+              cursoNombre: cursoActual.nombre,
+              actividadId: actividad.id,
+              actividadNombre: actividad.nombre,
+              seccionId: seccion.id,
+              seccionNombre: seccion.nombre,
+              miembros: estudiante.miembros.map((m) => m.nombre_completo),
+              calificado: estudiante.calificado,
+              notaTotal: estudiante.nota_total,
+            }));
+          }
+
           const equipos = await equiposApi.list(actividad.id, seccion.id);
           return equipos.map((equipo): ProjectOption => ({
             id: equipo.id,
@@ -84,8 +103,12 @@ export function useSeleccionEvaluacion() {
       setSelectedProjectId(inicial?.id ?? null);
     } catch (error) {
       if (isStale()) return;
-      console.error('Error cargando equipos de la actividad:', error);
-      setLoadError('No se pudieron cargar los equipos de esta actividad.');
+      console.error('Error cargando elementos de la actividad:', error);
+      setLoadError(
+        actividad.tipo === 'individual'
+          ? 'No se pudieron cargar los estudiantes de esta actividad.'
+          : 'No se pudieron cargar los equipos de esta actividad.'
+      );
     } finally {
       if (!isStale()) setLoadingProjects(false);
     }
@@ -103,7 +126,7 @@ export function useSeleccionEvaluacion() {
     setCurso(cursoActual);
     setLoadError('');
     setSections([]);
-    setActivities([]);
+    setAllActivities([]);
     setSelectedActivityId(null);
     setProjects([]);
     setSelectedProjectId(null);
@@ -121,12 +144,12 @@ export function useSeleccionEvaluacion() {
       ]);
       if (isStale()) return;
 
-      const grupales = actividades.filter((actividad) => actividad.tipo === 'grupal');
       setSections(secciones);
-      setActivities(grupales);
+      setAllActivities(actividades);
       setLoadingCourse(false);
 
-      const inicial = grupales.find((actividad) => actividad.id === prefer.actividadId) ?? grupales[0] ?? null;
+      const disponibles = actividades.filter((actividad) => actividad.tipo === tipoEvaluacion);
+      const inicial = disponibles.find((actividad) => actividad.id === prefer.actividadId) ?? disponibles[0] ?? null;
       void selectActivity(cursoActual, inicial, secciones, prefer.projectId);
     } catch (error) {
       if (isStale()) return;
@@ -148,8 +171,18 @@ export function useSeleccionEvaluacion() {
     void selectActivity(curso, actividad, sections);
   };
 
+  const handleTipoEvaluacionChange = (tipo: 'grupal' | 'individual') => {
+    setTipoEvaluacion(tipo);
+    if (!curso) return;
+    const disponibles = allActivities.filter((actividad) => actividad.tipo === tipo);
+    const inicial = disponibles[0] ?? null;
+    setLoadError('');
+    void selectActivity(curso, inicial, sections);
+  };
+
   useEffect(() => {
     const selectedProject = projects.find((project) => project.id === selectedProjectId);
+    const selectedActivity = allActivities.find((activity) => activity.id === selectedActivityId);
     setAspectos([]);
     setValores({});
     if (!selectedProject) {
@@ -163,7 +196,9 @@ export function useSeleccionEvaluacion() {
       try {
         const [resp, calificaciones] = await Promise.all([
           criteriosApi.get(selectedProject.actividadId),
-          calificacionesApi.equipo(selectedProject.actividadId, selectedProject.id),
+          selectedActivity?.tipo === 'individual'
+            ? calificacionesApi.estudiante(selectedProject.actividadId, selectedProject.id)
+            : calificacionesApi.equipo(selectedProject.actividadId, selectedProject.id),
         ]);
         if (cancelado) return;
         setAspectos(resp.aspectos);
@@ -178,7 +213,7 @@ export function useSeleccionEvaluacion() {
     return () => {
       cancelado = true;
     };
-  }, [projects, selectedProjectId]);
+  }, [allActivities, projects, selectedActivityId, selectedProjectId]);
 
   return {
     courses,
@@ -186,6 +221,8 @@ export function useSeleccionEvaluacion() {
     curso,
     sections,
     activities,
+    tipoEvaluacion,
+    handleTipoEvaluacionChange,
     selectedActivityId,
     projects,
     selectedProjectId,
