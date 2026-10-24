@@ -6,7 +6,7 @@ from app.config import settings
 from app.archivos import LimiteCuerpoSubidas
 from app.errores_http import registrar_manejadores
 from app.routers import auth, cursos, secciones, estudiantes, actividades
-from app.routers import criterios, equipos, calificaciones, reportes, catalogo
+from app.routers import criterios, equipos, calificaciones, reportes, catalogo, retroalimentacion
 
 app = FastAPI(
     title="ABET Eval API",
@@ -39,6 +39,7 @@ app.include_router(actividades.router)
 app.include_router(criterios.router)
 app.include_router(equipos.router)
 app.include_router(calificaciones.router)
+app.include_router(retroalimentacion.router)
 app.include_router(reportes.router)
 app.include_router(catalogo.router)
 

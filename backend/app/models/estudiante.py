@@ -21,3 +21,7 @@ class Estudiante(Base):
     calificaciones: Mapped[List["Calificacion"]] = relationship(
         "Calificacion", back_populates="estudiante", cascade="all, delete-orphan"
     )
+
+    retroalimentaciones: Mapped[List["Retroalimentacion"]] = relationship(
+        "Retroalimentacion", cascade="all, delete-orphan"
+    )

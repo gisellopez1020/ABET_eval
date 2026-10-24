@@ -21,6 +21,10 @@ class EquipoTrabajo(Base):
         "Calificacion", back_populates="equipo", cascade="all, delete-orphan"
     )
 
+    retroalimentaciones: Mapped[List["Retroalimentacion"]] = relationship(
+        "Retroalimentacion", cascade="all, delete-orphan"
+    )
+
 
 class MiembroEquipo(Base):
     __tablename__ = "miembros_equipo"

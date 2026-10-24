@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     frontend_origins: str = "http://localhost:5173,http://frontend:5173"
     google_drive_folder_name: str = "ABET_Eval"
     skip_auth: bool = False
+    # Redacción con IA de la retroalimentación. Sin key (vacía o PLACEHOLDER) no es un
+    # error: se muestra la retroalimentación estructurada, sin llamar a la API.
+    gemini_api_key: str = "PLACEHOLDER"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_thinking_level: str = "low"
+    # Si Gemini no responde en este tiempo se muestra la estructurada
+    gemini_timeout_segundos: float = 10.0
 
     # hide_input_in_errors: que un error de validación no imprima secretos en los logs
     model_config = {
@@ -54,6 +61,11 @@ class Settings(BaseSettings):
                 "SKIP_AUTH=true para el modo demo/desarrollo."
             )
         return self
+
+    @property
+    def gemini_habilitado(self) -> bool:
+        key = self.gemini_api_key.strip()
+        return bool(key) and key != "PLACEHOLDER"
 
     @property
     def lista_frontend_origins(self) -> list[str]:

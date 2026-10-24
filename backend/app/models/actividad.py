@@ -53,6 +53,10 @@ class Actividad(Base):
         order_by="Seccion.id",
     )
 
+    retroalimentaciones: Mapped[List["Retroalimentacion"]] = relationship(
+        "Retroalimentacion", cascade="all, delete-orphan"
+    )
+
     @property
     def secciones_ids(self) -> List[int]:
         """Ids de las secciones del alcance específico; vacío si aplica a todas."""

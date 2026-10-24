@@ -9,6 +9,7 @@ import { calificacionesApi, ValorCriterio } from '../../../api/calificaciones';
 import { Actividad, Aspecto, ModoCalificacionItem } from '../../../types';
 import { CriteriosTabla } from './components/CriteriosTabla';
 import { EncabezadoItem } from './components/EncabezadoItem';
+import { RetroalimentacionPanel } from './components/RetroalimentacionPanel';
 import { valoresIniciales } from '../../../utils/valoresIniciales';
 
 interface LocationState {
@@ -39,6 +40,8 @@ export function GradingTemplatePage() {
   // Si no se pudieron leer las calificaciones guardadas, no se permite guardar:
   // los toggles en 0 sobrescribirían las notas reales.
   const [loadError, setLoadError] = useState('');
+  // La retroalimentación describe la calificación guardada: solo se pide si está completa
+  const [guardadaCompleta, setGuardadaCompleta] = useState(false);
 
   const items = state?.items ?? [];
   const currentIndex = state?.currentIndex ?? items.findIndex((i) => i.id === iid);
@@ -61,6 +64,7 @@ export function GradingTemplatePage() {
     setLoading(true);
     setLoadError('');
     setSaveError('');
+    setGuardadaCompleta(false);
 
     const load = async () => {
       try {
@@ -78,6 +82,9 @@ export function GradingTemplatePage() {
             : await calificacionesApi.estudiante(actId, iid);
           if (cancelado) return;
           setValores(valoresIniciales(resp.aspectos, guardadas));
+          const calificados = new Set(guardadas.map((g) => g.criterio_id));
+          const criterios = resp.aspectos.flatMap((asp) => asp.criterios);
+          setGuardadaCompleta(criterios.length > 0 && criterios.every((c) => calificados.has(c.id)));
         } catch (error) {
           if (cancelado) return;
           console.error('Error cargando calificaciones guardadas:', error);
@@ -210,6 +217,10 @@ export function GradingTemplatePage() {
           totalPeso={totalPeso}
           notaTotal={notaTotal}
         />
+
+        {guardadaCompleta && (
+          <RetroalimentacionPanel key={`${actId}-${iid}`} actividadId={actId} tipo={tipo} itemId={iid} />
+        )}
 
         {saveError && (
           <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-uao-accent">
