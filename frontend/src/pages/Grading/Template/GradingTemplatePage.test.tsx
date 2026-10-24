@@ -18,7 +18,10 @@ vi.mock('../../../components/Layout/AppLayout', () => ({
 vi.mock('../../../api/actividades', () => ({ actividadesApi: { get: vi.fn() } }));
 vi.mock('../../../api/criterios', () => ({ criteriosApi: { get: vi.fn() } }));
 vi.mock('../../../api/calificaciones', () => ({
-  calificacionesApi: { equipo: vi.fn(), estudiante: vi.fn(), save: vi.fn() },
+  calificacionesApi: {
+    equipo: vi.fn(), estudiante: vi.fn(), save: vi.fn(),
+    retroalimentacionEquipo: vi.fn(), retroalimentacionEstudiante: vi.fn(),
+  },
 }));
 
 const item = (id: number, nombre: string): ModoCalificacionItem => ({
@@ -343,5 +346,53 @@ describe('GradingTemplatePage — actividad individual', () => {
       actividad_id: 100, criterios: [{ criterio_id: 11, valor: 0 }], estudiante_id: 7,
     });
     await waitFor(() => expect(router.state.location.state).toBeNull());
+  });
+});
+
+describe('GradingTemplatePage — retroalimentación', () => {
+  const GUARDADA = [{
+    id: 1, criterio_id: 11, valor: 1 as const, nota_calculada: 5, equipo_id: 1, estudiante_id: null,
+    created_at: '2026-01-01', updated_at: '2026-01-01',
+  }];
+
+  it('con la calificación guardada completa muestra la retroalimentación', async () => {
+    vi.mocked(calificacionesApi.equipo).mockResolvedValue(GUARDADA);
+    vi.mocked(calificacionesApi.retroalimentacionEquipo).mockResolvedValue({
+      completa: true, fuente: 'ia', texto: 'Lograron una arquitectura clara.', generada_en: '2026-10-23T10:00:00Z',
+      aspectos: [{ aspecto_id: 1, nombre: 'Diseño', cumplidos: ['Arquitectura clara'], por_reforzar: [] }],
+    });
+    renderEn(0);
+    await enItem('Equipo A');
+
+    expect(await screen.findByText('Lograron una arquitectura clara.')).toBeTruthy();
+    // La misma región que las otras pruebas verifican que no esté
+    expect(screen.getByRole('region', { name: 'Retroalimentación' })).toBeTruthy();
+    expect(calificacionesApi.retroalimentacionEquipo).toHaveBeenCalledWith(100, 1);
+  });
+
+  it('sin calificación guardada completa no la pide', async () => {
+    renderEn(0);
+    await enItem('Equipo A');
+
+    expect(screen.queryByRole('region', { name: 'Retroalimentación' })).toBeNull();
+    expect(calificacionesApi.retroalimentacionEquipo).not.toHaveBeenCalled();
+  });
+
+  it('si el endpoint falla, el detalle sigue funcionando y se puede guardar', async () => {
+    const consola = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = userEvent.setup();
+    vi.mocked(calificacionesApi.equipo).mockResolvedValue(GUARDADA);
+    vi.mocked(calificacionesApi.retroalimentacionEquipo).mockRejectedValue(new Error('500'));
+    renderEn(0);
+    await enItem('Equipo A');
+
+    await waitFor(() => expect(calificacionesApi.retroalimentacionEquipo).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Retroalimentación' })).toBeNull());
+    expect(screen.queryByText(/no se pudo/i)).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /guardar calificación/i }));
+    await enItem('Equipo B');
+    expect(calificacionesApi.save).toHaveBeenCalledTimes(1);
+    consola.mockRestore();
   });
 });

@@ -151,6 +151,27 @@ export interface ResumenCalificacion {
   criterios_totales: number;
 }
 
+/** Retroalimentación de un aspecto: texto de sus criterios cumplidos y no cumplidos. */
+export interface AspectoRetroalimentacion {
+  aspecto_id: number;
+  nombre: string;
+  cumplidos: string[];
+  por_reforzar: string[];
+}
+
+/**
+ * Retroalimentación según la rúbrica y la calificación guardada. `fuente: 'ia'` trae el
+ * párrafo redactado en `texto`; `'estructurada'` (IA no configurada o no disponible),
+ * solo `aspectos`. Con `completa: false` falta calificar algún criterio.
+ */
+export interface RetroalimentacionOut {
+  completa: boolean;
+  fuente: 'ia' | 'estructurada';
+  texto: string | null;
+  aspectos: AspectoRetroalimentacion[];
+  generada_en: string | null;
+}
+
 export interface CalificacionOut {
   id: number;
   criterio_id: number;

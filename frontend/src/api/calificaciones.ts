@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { CalificacionOut, ResumenCalificacion } from '../types';
+import { CalificacionOut, ResumenCalificacion, RetroalimentacionOut } from '../types';
 
 export interface ValorCriterio {
   criterio_id: number;
@@ -27,6 +27,15 @@ export const calificacionesApi = {
   estudiante: (actividadId: number, estudianteId: number) =>
     apiClient
       .get<CalificacionOut[]>(`/actividades/${actividadId}/estudiantes/${estudianteId}/calificaciones`)
+      .then((r) => r.data),
+  /** Retroalimentación del equipo; la primera vez puede tardar unos segundos (la redacta la IA). */
+  retroalimentacionEquipo: (actividadId: number, equipoId: number) =>
+    apiClient
+      .get<RetroalimentacionOut>(`/actividades/${actividadId}/equipos/${equipoId}/retroalimentacion`)
+      .then((r) => r.data),
+  retroalimentacionEstudiante: (actividadId: number, estudianteId: number) =>
+    apiClient
+      .get<RetroalimentacionOut>(`/actividades/${actividadId}/estudiantes/${estudianteId}/retroalimentacion`)
       .then((r) => r.data),
   save: (data: CalificacionCreate) =>
     apiClient.post<CalificacionOut[]>('/calificaciones', data).then((r) => r.data),
