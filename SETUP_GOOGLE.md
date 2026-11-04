@@ -33,7 +33,7 @@ algún origen de `FRONTEND_ORIGINS` apunta a un dominio real (cuentan como local
 3. En **URIs de redirección autorizados**, agrega la URL del callback del backend:
    - Desarrollo: `http://localhost:8000/auth/callback`
    - Producción: `https://<tu-dominio>/api/auth/callback` (mismo host que el
-     frontend; ver la nota del paso 6)
+     frontend; ver la nota del paso 7)
 4. Guarda el **Client ID** y el **Client Secret** generados.
 
 ## 4. Generar `JWT_SECRET_KEY` (obligatorio con `SKIP_AUTH=false`)
@@ -50,10 +50,38 @@ Genera una clave aleatoria:
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Guárdala para el siguiente paso. No la subas al repositorio y usa una distinta
+Guárdala para el paso 6. No la subas al repositorio y usa una distinta
 en cada entorno (desarrollo, producción).
 
-## 5. Variables de entorno del backend
+## 5. Generar `TOKEN_ENCRYPTION_KEY` (obligatorio con `SKIP_AUTH=false`)
+
+El backend guarda en la base de datos el `refresh_token` de Google Drive de cada
+docente, cifrado con `TOKEN_ENCRYPTION_KEY`, para que la sincronización con Drive
+siga funcionando después de reiniciar el backend o el computador. Con
+`SKIP_AUTH=false`, **el backend no arranca** si `TOKEN_ENCRYPTION_KEY` falta, vale
+`PLACEHOLDER`, está vacía o no es una clave Fernet válida (base64 *urlsafe* de 32
+bytes: 44 caracteres).
+
+Genera la clave con **PowerShell** (no necesita Python; sirve en Windows PowerShell
+5.1 y en PowerShell 7):
+
+```powershell
+$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')
+```
+
+O con Python, si lo tienes instalado:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Guárdala para el paso 6, con el mismo cuidado que `JWT_SECRET_KEY`. Si la clave
+cambia o se pierde, los accesos guardados ya no se pueden descifrar: no es un
+error, pero cada docente tendrá que volver a iniciar sesión con Google para que
+Drive funcione. Por lo mismo, un respaldo de la base restaurado en otro computador
+necesita la misma clave (o que los docentes vuelvan a iniciar sesión).
+
+## 6. Variables de entorno del backend
 
 Copia estos valores al archivo `.env`:
 
@@ -64,6 +92,9 @@ GOOGLE_REDIRECT_URI=http://localhost:8000/auth/callback
 
 # Clave generada en el paso 4 (mínimo 32 caracteres)
 JWT_SECRET_KEY=<clave-generada-en-el-paso-4>
+
+# Clave generada en el paso 5 (clave Fernet de 44 caracteres)
+TOKEN_ENCRYPTION_KEY=<clave-generada-en-el-paso-5>
 
 # URL del frontend a la que se redirige tras un login exitoso
 FRONTEND_URL=http://localhost:5173
@@ -79,12 +110,14 @@ SKIP_AUTH=false
 ```
 
 Si al arrancar el backend falla con un error sobre `JWT_SECRET_KEY`, vuelve al
-paso 4: la clave no está configurada o no es lo bastante larga. Si el error es
+paso 4: la clave no está configurada o no es lo bastante larga. Si es sobre
+`TOKEN_ENCRYPTION_KEY`, vuelve al paso 5: falta la clave, sigue en `PLACEHOLDER` o
+quedó incompleta al copiarla. Si el error es
 sobre `FRONTEND_ORIGINS`, la lista está vacía o contiene `*`. Si el error empieza con
 `SKIP_AUTH=true desactiva el login`, quedó `SKIP_AUTH=true` en un `.env` con URLs de un
 dominio real: cámbialo a `SKIP_AUTH=false`.
 
-## 6. Flujo de login y sesión
+## 7. Flujo de login y sesión
 
 1. El frontend redirige al usuario a `GET /auth/login` del backend.
 2. El backend redirige a la pantalla de consentimiento de Google.
@@ -102,7 +135,8 @@ dominio real: cámbialo a `SKIP_AUTH=false`.
    backend responde 403. Así otro sitio no puede modificar datos aprovechando
    la cookie del docente.
 8. Para cerrar sesión, el frontend llama a `POST /auth/logout`, que borra la
-   cookie (el frontend no puede hacerlo porque es `HttpOnly`).
+   cookie (el frontend no puede hacerlo porque es `HttpOnly`) y el acceso a
+   Google Drive guardado para ese docente.
 
 **El callback y el frontend deben compartir host.** La cookie la pone el host
 de `GOOGLE_REDIRECT_URI`, y el navegador solo la envía a ese mismo host. En
@@ -118,10 +152,17 @@ El JWT no tiene estado en el servidor: cerrar sesión borra la cookie del
 navegador, pero una copia del token seguiría siendo válida hasta su
 vencimiento (`JWT_EXPIRE_MINUTES`, 24 h por defecto).
 
-## 7. Sincronización con Google Drive
+## 8. Sincronización con Google Drive
 
 El `access_token` y `refresh_token` de Google obtenidos durante el login se
 guardan en el backend asociados al email del docente, y se usan para subir
 el detalle ABET (el Excel que se exporta desde "Estadísticas ABET") a una
 carpeta llamada `GOOGLE_DRIVE_FOLDER_NAME` en el Google Drive del docente
 autenticado.
+
+El `access_token` (dura cerca de una hora) solo vive en memoria. El
+`refresh_token` además se guarda cifrado con `TOKEN_ENCRYPTION_KEY` en la tabla
+`tokens_drive`: tras un reinicio del backend, la primera subida lo usa para pedir
+un `access_token` nuevo, sin que el docente vuelva a iniciar sesión. Si Google lo
+rechaza (el docente revocó el permiso), se borra y la app pide volver a iniciar
+sesión; un fallo temporal de Google no borra nada.
