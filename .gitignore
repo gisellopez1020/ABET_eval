@@ -1,5 +1,7 @@
-# Environment variables
+# Environment variables (.env.produccion, etc.); solo el ejemplo va al repo
 .env
+.env.*
+!.env.example
 
 # Node
 node_modules/
@@ -18,3 +20,5 @@ __pycache__/
 
 # coverage
 .coverage
+# Certificados TLS
+certs/

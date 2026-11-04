@@ -1,0 +1,60 @@
+# Variante "TLS en el proxy de la universidad" (docker-compose.detras-de-proxy.yml).
+# El proxy de la universidad termina https y reenvía por http a este nginx, que solo
+# acepta conexiones de ese proxy (PROXY_CONFIANZA). TLS 1.2+ y el certificado son
+# responsabilidad del proxy. Ver DESPLIEGUE_PRODUCCION.md.
+# Plantilla: la imagen de nginx reemplaza ${PROXY_CONFIANZA} al arrancar.
+
+server_tokens off;
+
+# ¿La conexión viene del proxy de confianza? Se mira la IP de la conexión TCP
+# ($realip_remote_addr), no $remote_addr: set_real_ip_from (abajo) cambia $remote_addr
+# por la IP del docente antes de llegar a este control de acceso.
+geo $realip_remote_addr $desde_proxy_de_confianza {
+    default 0;
+    ${PROXY_CONFIANZA} 1;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name _;
+
+    # Solo el proxy de confianza puede hablar con este nginx
+    if ($desde_proxy_de_confianza = 0) {
+        return 403;
+    }
+
+    # La IP real del docente viene en el X-Forwarded-For que pone el proxy
+    set_real_ip_from ${PROXY_CONFIANZA};
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+
+    include /etc/nginx/snippets/cabeceras-seguridad.conf;
+
+    root /usr/share/nginx/html;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    client_max_body_size 3m;
+
+    location /api/ {
+        proxy_pass http://backend:8000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        # Al docente se le sirve siempre por https (en el proxy de la universidad)
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location /assets/ {
+        include /etc/nginx/snippets/cabeceras-seguridad.conf;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
