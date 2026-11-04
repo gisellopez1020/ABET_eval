@@ -1,3 +1,4 @@
+from cryptography.fernet import Fernet
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
@@ -14,6 +15,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "PLACEHOLDER"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
+    # Clave Fernet con que se cifra el refresh_token de Google Drive en la base de datos
+    token_encryption_key: str = "PLACEHOLDER"
     frontend_url: str = "http://localhost:5173"
     # Orígenes permitidos por CORS, separados por comas. Texto (no list[str])
     # para que se pueda escribir sin JSON en la variable de entorno.
@@ -59,6 +62,36 @@ class Settings(BaseSettings):
                 'python -c "import secrets; print(secrets.token_urlsafe(32))" '
                 "y configúrala en la variable de entorno JWT_SECRET_KEY, o usa "
                 "SKIP_AUTH=true para el modo demo/desarrollo."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validar_token_encryption_key(self) -> "Settings":
+        """Con login real (SKIP_AUTH=false) el refresh_token de Drive se guarda cifrado.
+
+        Sin una clave Fernet válida no se podría guardar, y la sesión de Drive se
+        perdería en cada reinicio; con el valor por defecto sería una clave pública.
+        Va después de validar_jwt_secret_key para no tapar su mensaje.
+        """
+        if self.skip_auth:
+            return self
+        clave = self.token_encryption_key.strip()
+        try:
+            # Fernet rechaza lo que no sea base64 urlsafe de 32 bytes ("PLACEHOLDER" incluido)
+            Fernet(clave.encode())
+            valida = True
+        except ValueError:
+            valida = False
+        if not valida:
+            raise ValueError(
+                "TOKEN_ENCRYPTION_KEY no es una clave Fernet válida (valor por defecto "
+                "'PLACEHOLDER', vacía o mal formada). Con SKIP_AUTH=false se usa para "
+                "cifrar en la base de datos el acceso a Google Drive de cada docente. "
+                "Genera una con: "
+                'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" '
+                "(o con el comando de PowerShell de SETUP_GOOGLE.md) y configúrala en la "
+                "variable de entorno TOKEN_ENCRYPTION_KEY, o usa SKIP_AUTH=true para el "
+                "modo demo/desarrollo."
             )
         return self
 
