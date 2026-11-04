@@ -1,0 +1,48 @@
+# Modo HTTPS (RNF-13): se aplica ENCIMA de docker-compose.prod.yml, que no cambia.
+#
+#   docker compose --env-file .env.produccion -f docker-compose.prod.yml -f docker-compose.https.yml up -d --build
+#
+# - nginx termina TLS 1.2/1.3 en el 443 y redirige el 80 a https.
+# - El backend NO se publica: todo, incluido el login con Google, entra por nginx
+#   bajo /api/ (GOOGLE_REDIRECT_URI=https://DOMINIO/api/auth/callback).
+# - Uvicorn solo acepta X-Forwarded-For/-Proto de la IP fija de nginx.
+# - Swagger (/docs) se apaga: detrás del prefijo /api no carga.
+# Certificado en ./certs/fullchain.pem y ./certs/privkey.pem (nunca en el repo).
+# Detalle y variables: DESPLIEGUE_PRODUCCION.md.
+
+services:
+  postgres:
+    networks: [interna]
+
+  backend:
+    environment:
+      # Única IP de la que uvicorn acepta X-Forwarded-For/-Proto (la de nginx, abajo)
+      FORWARDED_ALLOW_IPS: ${NGINX_IP:-172.30.80.10}
+      API_DOCS: "false"
+    command: sh -c "alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers"
+    # El backend deja de estar publicado: solo nginx llega a él, por la red interna
+    ports: !reset []
+    networks: [interna]
+
+  frontend:
+    build:
+      args:
+        # El login navega a /api/auth/login en el mismo dominio (pasa por nginx)
+        VITE_API_URL: /api
+    ports: !override
+      - "${PUERTO_HTTP:-80}:80"
+      - "${PUERTO_HTTPS:-443}:443"
+    volumes:
+      - ./frontend/nginx-https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/nginx-cabeceras-seguridad.conf:/etc/nginx/snippets/cabeceras-seguridad.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    networks:
+      interna:
+        ipv4_address: ${NGINX_IP:-172.30.80.10}
+
+networks:
+  interna:
+    ipam:
+      config:
+        # Cambiarla si choca con una red de la universidad (y NGINX_IP dentro de ella)
+        - subnet: ${RED_INTERNA_SUBNET:-172.30.80.0/24}

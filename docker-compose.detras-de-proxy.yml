@@ -1,0 +1,44 @@
+# Variante "TLS en el proxy de la universidad": se aplica ENCIMA de docker-compose.prod.yml.
+#
+#   docker compose --env-file .env.produccion -f docker-compose.prod.yml -f docker-compose.detras-de-proxy.yml up -d --build
+#
+# - El proxy de la universidad termina https (TLS 1.2+, certificado, HSTS) y reenvía
+#   por http a este nginx en PUERTO_PROXY; nginx solo acepta conexiones de PROXY_CONFIANZA.
+# - El backend NO se publica; uvicorn solo acepta X-Forwarded-* de la IP fija de nginx.
+# - Mismas URLs que el modo HTTPS: GOOGLE_REDIRECT_URI=https://DOMINIO/api/auth/callback.
+# Detalle: DESPLIEGUE_PRODUCCION.md.
+
+services:
+  postgres:
+    networks: [interna]
+
+  backend:
+    environment:
+      FORWARDED_ALLOW_IPS: ${NGINX_IP:-172.30.80.10}
+      API_DOCS: "false"
+    command: sh -c "alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers"
+    ports: !reset []
+    networks: [interna]
+
+  frontend:
+    build:
+      args:
+        VITE_API_URL: /api
+    environment:
+      # IP o red (CIDR) del proxy de la universidad: la única que puede conectarse
+      PROXY_CONFIANZA: ${PROXY_CONFIANZA:?Define PROXY_CONFIANZA con la IP o red del proxy de la universidad}
+    ports: !override
+      - "${PUERTO_PROXY:-8080}:80"
+    volumes:
+      # Plantilla: la imagen de nginx la convierte en conf.d/default.conf al arrancar
+      - ./frontend/nginx-detras-de-proxy.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./frontend/nginx-cabeceras-seguridad.conf:/etc/nginx/snippets/cabeceras-seguridad.conf:ro
+    networks:
+      interna:
+        ipv4_address: ${NGINX_IP:-172.30.80.10}
+
+networks:
+  interna:
+    ipam:
+      config:
+        - subnet: ${RED_INTERNA_SUBNET:-172.30.80.0/24}

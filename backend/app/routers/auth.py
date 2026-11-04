@@ -23,7 +23,7 @@ from app.services.google_auth import (
     guardar_tokens_drive,
     verify_id_token,
 )
-from app.utils.urls import es_localhost
+from app.utils.urls import cookie_segura, ruta_padre
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -39,13 +39,22 @@ class DocenteOut(BaseModel):
     csrf_token: Optional[str] = None
 
 
+def _ruta_cookie_state() -> str:
+    """
+    Path de la cookie oauth_state: el directorio del callback tal como lo ve el
+    navegador. /auth en local (http://localhost:8000/auth/callback) y /api/auth en
+    modo HTTPS, donde nginx recibe /api/auth/callback y le quita el /api al pasarlo.
+    """
+    return ruta_padre(settings.google_redirect_uri)
+
+
 def _atributos_cookie_sesion() -> dict:
     """Atributos de la cookie de sesión; borrarla exige repetir los mismos."""
     return {
         "httponly": True,
         "samesite": "lax",
         # La cookie la pone el host del callback de Google (GOOGLE_REDIRECT_URI)
-        "secure": not es_localhost(settings.google_redirect_uri),
+        "secure": cookie_segura(settings.google_redirect_uri),
         # "/" porque el frontend llama a la API con el prefijo /api del proxy
         "path": "/",
     }
@@ -62,8 +71,8 @@ def login():
         httponly=True,
         samesite="lax",
         max_age=STATE_COOKIE_MAX_AGE,
-        secure=not es_localhost(settings.google_redirect_uri),
-        path="/auth",
+        secure=cookie_segura(settings.google_redirect_uri),
+        path=_ruta_cookie_state(),
     )
     return response
 
@@ -109,7 +118,10 @@ async def callback(
         max_age=settings.jwt_expire_minutes * 60,
         **_atributos_cookie_sesion(),
     )
-    response.delete_cookie(STATE_COOKIE_NAME, path="/auth")
+    response.delete_cookie(
+        STATE_COOKIE_NAME, path=_ruta_cookie_state(),
+        secure=cookie_segura(settings.google_redirect_uri), httponly=True, samesite="lax",
+    )
     return response
 
 

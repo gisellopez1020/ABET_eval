@@ -125,8 +125,8 @@ dominio real: cámbialo a `SKIP_AUTH=false`.
 4. El backend intercambia el `code` por tokens de Google, valida el
    `id_token` y emite su propio JWT (firmado con `JWT_SECRET_KEY`).
 5. El backend guarda ese JWT en la cookie `session` (`HttpOnly`,
-   `SameSite=Lax`, `Path=/`, y `Secure` cuando `GOOGLE_REDIRECT_URI` no es
-   localhost) y redirige a `FRONTEND_URL/auth/callback`. El token nunca viaja
+   `SameSite=Lax`, `Path=/`, y `Secure` cuando `GOOGLE_REDIRECT_URI` usa https
+   o no es localhost) y redirige a `FRONTEND_URL/auth/callback`. El token nunca viaja
    en la URL y el JavaScript del frontend no puede leerlo.
 6. El frontend llama a `GET /auth/me`, que confirma la sesión y devuelve el
    docente y un `csrf_token`. El navegador adjunta la cookie solo.
@@ -142,11 +142,12 @@ dominio real: cámbialo a `SKIP_AUTH=false`.
 de `GOOGLE_REDIRECT_URI`, y el navegador solo la envía a ese mismo host. En
 desarrollo funciona sin más: el callback es `localhost:8000`, el frontend
 `localhost:5173` llama a la API por su proxy `/api`, y las cookies no
-distinguen puertos. En producción, sirve la API bajo el dominio del frontend
-(un proxy inverso que reenvíe `/api` al backend) y usa
-`GOOGLE_REDIRECT_URI=https://<tu-dominio>/api/auth/callback` y
-`VITE_API_URL=https://<tu-dominio>/api`. Si el backend vive en otro dominio, la
-cookie no llegaría a las peticiones del frontend.
+distinguen puertos. En producción, la API se sirve bajo el dominio del frontend
+(nginx reenvía `/api` al backend) con
+`GOOGLE_REDIRECT_URI=https://<tu-dominio>/api/auth/callback`: lo configuran
+`docker-compose.https.yml` y `docker-compose.detras-de-proxy.yml`, ver
+[DESPLIEGUE_PRODUCCION.md](./DESPLIEGUE_PRODUCCION.md). Si el backend viviera en
+otro dominio, la cookie no llegaría a las peticiones del frontend.
 
 El JWT no tiene estado en el servidor: cerrar sesión borra la cookie del
 navegador, pero una copia del token seguiría siendo válida hasta su

@@ -12,8 +12,10 @@ app = FastAPI(
     title="ABET Eval API",
     description="Sistema de evaluación por criterios ABET — Universidad Autónoma de Occidente",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # API_DOCS=false (modo HTTPS) los quita: detrás del prefijo /api de nginx no cargan
+    docs_url="/docs" if settings.api_docs else None,
+    redoc_url="/redoc" if settings.api_docs else None,
+    openapi_url="/openapi.json" if settings.api_docs else None,
 )
 
 app.add_middleware(

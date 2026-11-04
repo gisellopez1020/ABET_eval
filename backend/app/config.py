@@ -2,7 +2,7 @@ from cryptography.fernet import Fernet
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
-from app.utils.urls import es_host_local
+from app.utils.urls import es_host_local, puede_ser_http
 
 JWT_SECRET_MIN_LENGTH = 32
 
@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     gemini_thinking_level: str = "low"
     # Si Gemini no responde en este tiempo se muestra la estructurada
     gemini_timeout_segundos: float = 10.0
+    # Swagger (/docs), ReDoc (/redoc) y /openapi.json. Solo el modo HTTPS
+    # (docker-compose.https.yml) los apaga: detrás del prefijo /api de nginx no cargan
+    api_docs: bool = True
 
     # hide_input_in_errors: que un error de validación no imprima secretos en los logs
     model_config = {
@@ -119,6 +122,36 @@ class Settings(BaseSettings):
                 "por comas (p. ej. 'https://abet.uao.edu.co'); no puede estar vacía ni "
                 "contener '*', porque la API usa cookies de sesión y con '*' cualquier "
                 "sitio podría hacer peticiones autenticadas en nombre del docente."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validar_https_fuera_de_localhost(self) -> "Settings":
+        """Con login real (SKIP_AUTH=false) las URLs públicas deben usar https (RNF-13).
+
+        Por http viajarían en claro el código de autorización de Google y la cookie de
+        sesión. Solo localhost, 127.0.0.1, ::1 y el servicio `frontend` de docker
+        compose pueden ir por http: ese tráfico no sale de la máquina. Va después de
+        los validadores de secretos para no tapar sus mensajes.
+        """
+        if self.skip_auth:
+            return self
+        sin_https = [
+            nombre
+            for nombre, urls in (
+                ("GOOGLE_REDIRECT_URI", [self.google_redirect_uri]),
+                ("FRONTEND_URL", [self.frontend_url]),
+                ("FRONTEND_ORIGINS", self.lista_frontend_origins),
+            )
+            if not all(puede_ser_http(url) for url in urls)
+        ]
+        if sin_https:
+            raise ValueError(
+                f"{', '.join(sin_https)} debe usar https:// con SKIP_AUTH=false cuando "
+                "apunta a un servidor que no es esta máquina: por http viajarían sin "
+                "cifrar el código de autorización de Google y la cookie de sesión. Solo "
+                "localhost, 127.0.0.1, ::1 y el servicio 'frontend' de docker compose "
+                "pueden usar http. Para el despliegue con TLS ver DESPLIEGUE_PRODUCCION.md."
             )
         return self
 
