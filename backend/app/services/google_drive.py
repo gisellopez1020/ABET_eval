@@ -11,6 +11,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.services.google_auth import (
@@ -38,13 +39,15 @@ def _credenciales_drive(email: str, tokens: dict) -> Credentials:
     """
     Construye las credenciales del docente con lo necesario para renovarse.
 
-    Si el access_token ya venció, lo renueva aquí con el refresh_token y guarda
-    el nuevo. Si Drive responde 401 por otro motivo (p. ej. desfase de reloj),
-    google-auth también renueva y reintenta por su cuenta con estos mismos datos.
+    Si no hay access_token (tras un reinicio solo queda el refresh_token guardado en
+    la base) o ya venció, lo renueva aquí con el refresh_token y guarda el nuevo.
+    `expired` no basta: es False sin expiry, aunque no haya token. Si Drive responde
+    401 por otro motivo (p. ej. desfase de reloj), google-auth también renueva y
+    reintenta por su cuenta con estos mismos datos.
     Lanza RefreshError si Google rechaza la renovación.
     """
     credentials = Credentials(
-        token=tokens["access_token"],
+        token=tokens.get("access_token"),
         refresh_token=tokens.get("refresh_token"),
         token_uri=TOKEN_ENDPOINT,
         client_id=settings.google_client_id,
@@ -52,7 +55,7 @@ def _credenciales_drive(email: str, tokens: dict) -> Credentials:
         scopes=SCOPES,
         expiry=tokens.get("expires_at"),
     )
-    if credentials.expired:
+    if credentials.token is None or credentials.expired:
         credentials.refresh(Request())
         actualizar_access_token_drive(email, credentials.token, credentials.expiry)
     return credentials
@@ -64,14 +67,14 @@ def _guardar_token_renovado(email: str, tokens: dict, credentials: Credentials) 
         actualizar_access_token_drive(email, credentials.token, credentials.expiry)
 
 
-def _mensaje_refresh_fallido(email: str, exc: RefreshError) -> str:
+def _mensaje_refresh_fallido(db: Session, email: str, exc: RefreshError) -> str:
     """Traduce un fallo de renovación a un mensaje para el docente."""
     if exc.retryable:
         logger.warning("Fallo temporal renovando el token de Google de %s: %s", email, exc)
         return MENSAJE_REFRESH_TEMPORAL
-    # refresh_token revocado/inválido: los tokens guardados ya no sirven
+    # refresh_token revocado/inválido: los tokens guardados ya no sirven (tampoco el de la base)
     logger.warning("Google rechazó el refresh_token de %s: %s", email, exc)
-    descartar_tokens_drive(email)
+    descartar_tokens_drive(db, email)
     return MENSAJE_REAUTENTICAR
 
 
@@ -123,7 +126,7 @@ def _subir_archivo(credentials: Credentials, email: str, nombre: str, contenido:
     return service.files().create(body=metadata, media_body=media, fields="id, webViewLink").execute()
 
 
-def subir_archivo(email: str, nombre: str, contenido: bytes, mimetype: str) -> dict:
+def subir_archivo(db: Session, email: str, nombre: str, contenido: bytes, mimetype: str) -> dict:
     """
     Sube (o reemplaza) un archivo en la carpeta ABET_Eval del docente.
     Nunca lanza: devuelve {"estado": "sincronizado"|"simulado"|"error", "detalle", "enlace"}
@@ -134,8 +137,8 @@ def subir_archivo(email: str, nombre: str, contenido: bytes, mimetype: str) -> d
         logger.info("Subiendo a Google Drive: %s [modo simulado]", nombre)
         return {"estado": "simulado", "detalle": None, "enlace": None}
 
-    tokens = obtener_tokens_drive(email)
-    if not tokens or not tokens.get("access_token"):
+    tokens = obtener_tokens_drive(db, email)
+    if not tokens or not (tokens.get("access_token") or tokens.get("refresh_token")):
         return {
             "estado": "error",
             "detalle": "No hay una sesión de Google Drive activa; vuelve a iniciar sesión con Google.",
@@ -148,7 +151,7 @@ def subir_archivo(email: str, nombre: str, contenido: bytes, mimetype: str) -> d
         _guardar_token_renovado(email, tokens, credentials)
         return {"estado": "sincronizado", "detalle": None, "enlace": archivo.get("webViewLink")}
     except RefreshError as exc:
-        return {"estado": "error", "detalle": _mensaje_refresh_fallido(email, exc), "enlace": None}
+        return {"estado": "error", "detalle": _mensaje_refresh_fallido(db, email, exc), "enlace": None}
     except Exception as exc:  # error de Drive (HttpError), sin conexión (TransportError, socket), etc.
         logger.exception("Error subiendo %s a Google Drive", nombre)
         return {"estado": "error", "detalle": f"No se pudo subir a Google Drive: {exc}", "enlace": None}

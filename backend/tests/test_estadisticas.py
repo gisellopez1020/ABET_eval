@@ -278,7 +278,7 @@ class TestSincronizacionDrive:
 
     def test_sin_token_devuelve_el_archivo_y_marca_error(self, client, db_session, curso, grupal, monkeypatch):
         monkeypatch.setattr(settings, "skip_auth", False)
-        monkeypatch.setattr(google_drive, "obtener_tokens_drive", lambda email: None)
+        monkeypatch.setattr(google_drive, "obtener_tokens_drive", lambda db, email: None)
         datos, contenido = _detalle(client, curso, grupal)
         assert datos["drive"]["estado"] == "error"
         assert "iniciar sesión" in datos["drive"]["detalle"]
@@ -286,7 +286,7 @@ class TestSincronizacionDrive:
 
     def test_fallo_de_subida_no_bloquea(self, client, db_session, curso, grupal, monkeypatch):
         monkeypatch.setattr(settings, "skip_auth", False)
-        monkeypatch.setattr(google_drive, "obtener_tokens_drive", lambda email: {"access_token": "t"})
+        monkeypatch.setattr(google_drive, "obtener_tokens_drive", lambda db, email: {"access_token": "t"})
 
         def _falla(*_):
             raise ConnectionError("sin conexión")
@@ -299,7 +299,7 @@ class TestSincronizacionDrive:
 
     def test_subida_exitosa(self, client, db_session, curso, grupal, monkeypatch):
         monkeypatch.setattr(settings, "skip_auth", False)
-        monkeypatch.setattr(google_drive, "obtener_tokens_drive", lambda email: {"access_token": "t"})
+        monkeypatch.setattr(google_drive, "obtener_tokens_drive", lambda db, email: {"access_token": "t"})
         recibido = {}
 
         def _sube(token, email, nombre, contenido, mimetype):

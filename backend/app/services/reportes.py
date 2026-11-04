@@ -115,7 +115,7 @@ class ReporteService:
         rangos, criterios, _ = self._calcular_niveles(curso, seccion_id, actividad_id)
         contenido = libro_detalle(rangos, criterios, self._hojas_detalle(actividad, seccion_id))
         nombre = nombre_archivo(curso, actividad, "detalle", seccion)
-        drive = subir_archivo(docente_email, nombre, contenido, MIME_XLSX)
+        drive = subir_archivo(self.db, docente_email, nombre, contenido, MIME_XLSX)
         return contenido, nombre, drive
 
     def _verificar_actividad(

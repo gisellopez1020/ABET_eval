@@ -16,6 +16,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi import Depends, FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -28,7 +29,11 @@ from app.auth.dependencies import (
     get_current_user,
 )
 from app.config import Settings, settings
+from app.database import get_db
+from app.repositories.token_drive import TokenDriveRepository
 from app.routers import auth
+from app.services import google_auth
+from tests.test_catalogo_ra_abet import db_session  # noqa: F401 (fixture)
 
 EMAIL = "doc@uao.edu.co"
 
@@ -62,9 +67,14 @@ def login_real(monkeypatch):
 
 
 @pytest.fixture
-def client():
-    with TestClient(app) as c:
-        yield c
+def client(db_session):
+    # SQLite en memoria: el logout borra el acceso a Drive guardado en la base
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app.dependency_overrides.clear()
 
 
 def _csrf_de(token: str) -> str:
@@ -210,6 +220,40 @@ class TestLogout:
         assert client.get("/auth/logout").status_code == 405
 
 
+class TestLogoutOlvidaDrive:
+    """El logout borra el acceso a Google Drive del docente (memoria y base), pero solo
+    con sesión válida y CSRF correcto: otro sitio no debe poder borrarlo."""
+
+    @pytest.fixture(autouse=True)
+    def drive_guardado(self, monkeypatch, db_session):
+        monkeypatch.setattr(settings, "token_encryption_key", Fernet.generate_key().decode())
+        monkeypatch.setattr(google_auth, "_google_tokens", {})
+        google_auth.guardar_tokens_drive(db_session, EMAIL, {"access_token": "a", "refresh_token": "r"})
+
+    def _guardado(self, db_session):
+        return TokenDriveRepository(db_session).de(EMAIL) is not None and EMAIL in google_auth._google_tokens
+
+    def test_con_csrf_valido_borra(self, client, sesion, db_session):
+        assert client.post("/auth/logout", headers={CSRF_HEADER: sesion}).status_code == 204
+        assert TokenDriveRepository(db_session).de(EMAIL) is None
+        assert EMAIL not in google_auth._google_tokens
+
+    @pytest.mark.parametrize("cabecera", [{}, {CSRF_HEADER: "otro-valor"}])
+    def test_con_csrf_invalido_no_borra(self, client, sesion, db_session, cabecera):
+        assert client.post("/auth/logout", headers=cabecera).status_code == 403
+        assert self._guardado(db_session)
+
+    def test_sin_sesion_identificable_no_borra(self, client, db_session):
+        client.cookies.set(SESSION_COOKIE_NAME, "jwt-vencido-o-invalido")
+        assert client.post("/auth/logout").status_code == 204
+        assert self._guardado(db_session)
+
+    def test_en_modo_skip_auth_no_toca_nada(self, client, sesion, db_session, monkeypatch):
+        monkeypatch.setattr(settings, "skip_auth", True)
+        assert client.post("/auth/logout", headers={CSRF_HEADER: sesion}).status_code == 204
+        assert self._guardado(db_session)
+
+
 class TestModoSkipAuth:
     def test_no_exige_cookie_ni_csrf(self, client, monkeypatch):
         monkeypatch.setattr(settings, "skip_auth", True)
@@ -243,6 +287,7 @@ class TestCORS:
     def test_lista_desde_texto_separado_por_comas(self):
         s = Settings(
             _env_file=None, skip_auth=False, jwt_secret_key="a" * 32,
+            token_encryption_key=Fernet.generate_key().decode(),
             frontend_origins=" https://a.edu.co , https://b.edu.co ,",
         )
         assert s.lista_frontend_origins == ["https://a.edu.co", "https://b.edu.co"]
@@ -267,6 +312,7 @@ class TestCORS:
         )
         env = {
             **os.environ, "SKIP_AUTH": "false", "JWT_SECRET_KEY": "a" * 32,
+            "TOKEN_ENCRYPTION_KEY": Fernet.generate_key().decode(),
             "FRONTEND_ORIGINS": "https://abet.uao.edu.co",
         }
         salida = subprocess.run(

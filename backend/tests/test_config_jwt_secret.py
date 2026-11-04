@@ -8,6 +8,7 @@ no se exige nada.
 import secrets
 
 import pytest
+from cryptography.fernet import Fernet
 from pydantic import ValidationError
 
 from app.config import Settings
@@ -18,10 +19,13 @@ def entorno_limpio(monkeypatch):
     """Evita que variables de entorno del sistema influyan en los casos."""
     monkeypatch.delenv("SKIP_AUTH", raising=False)
     monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
+    monkeypatch.delenv("TOKEN_ENCRYPTION_KEY", raising=False)
 
 
 def crear_settings(**kwargs) -> Settings:
-    # _env_file=None: ignora el .env local para que el test sea determinista
+    # _env_file=None: ignora el .env local para que el test sea determinista.
+    # Clave de cifrado válida por defecto: aquí solo se prueba JWT_SECRET_KEY
+    kwargs.setdefault("token_encryption_key", Fernet.generate_key().decode())
     return Settings(_env_file=None, **kwargs)
 
 

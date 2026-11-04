@@ -9,6 +9,7 @@ from .equipo import EquipoTrabajo, MiembroEquipo
 from .calificacion import Calificacion
 from .retroalimentacion import Retroalimentacion
 from .ra_abet_catalogo import RaAbetCatalogo
+from .token_drive import TokenDrive
 
 __all__ = [
     "Base",
@@ -24,4 +25,5 @@ __all__ = [
     "Calificacion",
     "Retroalimentacion",
     "RaAbetCatalogo",
+    "TokenDrive",
 ]

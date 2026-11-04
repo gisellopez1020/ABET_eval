@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.auth.dependencies import (
     CSRF_HEADER,
@@ -14,8 +15,10 @@ from app.auth.dependencies import (
     verificar_csrf,
 )
 from app.config import settings
+from app.database import get_db
 from app.services.google_auth import (
     build_authorization_url,
+    descartar_tokens_drive,
     exchange_code_for_tokens,
     guardar_tokens_drive,
     verify_id_token,
@@ -70,6 +73,7 @@ async def callback(
     code: str = Query(...),
     state: str | None = Query(default=None),
     oauth_state: str | None = Cookie(default=None, alias=STATE_COOKIE_NAME),
+    db: Session = Depends(get_db),
 ):
     """
     Recibe el authorization code de Google, lo intercambia por tokens,
@@ -95,7 +99,7 @@ async def callback(
         )
 
     usuario = verify_id_token(id_token_str)
-    guardar_tokens_drive(usuario["email"], tokens)
+    guardar_tokens_drive(db, usuario["email"], tokens)
 
     app_token = create_access_token(usuario["email"], usuario["nombre"])
     response = RedirectResponse(url=f"{settings.frontend_url}/auth/callback")
@@ -132,6 +136,7 @@ def logout(
     request: Request,
     session: Optional[str] = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     csrf_header: Optional[str] = Header(default=None, alias=CSRF_HEADER),
+    db: Session = Depends(get_db),
 ):
     """
     Borra la cookie de sesión (el frontend no puede: es httpOnly).
@@ -139,6 +144,11 @@ def logout(
     Con una sesión válida exige el header CSRF, como cualquier POST, para que
     otro sitio no pueda cerrar la sesión del docente. Si la sesión ya venció o
     no existe, la borra igual: siempre debe poder cerrarse sesión.
+
+    Con sesión válida y CSRF correcto también olvida el acceso a Google Drive del
+    docente (memoria y base): tras cerrar sesión la app no debe seguir actuando en
+    su Drive. Sin sesión identificable no se sabe de quién es: el próximo login lo
+    reemplaza.
     """
     if not settings.skip_auth and session:
         try:
@@ -146,7 +156,9 @@ def logout(
         except HTTPException:
             usuario = None
         if usuario:
+            # Lanza 403 si el CSRF no coincide: entonces no se borra nada
             verificar_csrf(request, usuario, csrf_header)
+            descartar_tokens_drive(db, usuario["email"])
 
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(SESSION_COOKIE_NAME, **_atributos_cookie_sesion())

@@ -99,6 +99,6 @@ def test_reporte_por_curso_no_valida_la_seccion_solo_filtra(client, db_session, 
 def test_detalle_no_llama_a_drive_si_la_verificacion_falla(client, db_session, curso, monkeypatch):
     llamadas = []
     monkeypatch.setattr(settings, "skip_auth", False)
-    monkeypatch.setattr(google_drive, "obtener_tokens_drive", lambda email: llamadas.append(email))
+    monkeypatch.setattr(google_drive, "obtener_tokens_drive", lambda db, email: llamadas.append(email))
     assert _pedir(client, "detalle", curso.id, 99999).status_code == 404
     assert llamadas == []
