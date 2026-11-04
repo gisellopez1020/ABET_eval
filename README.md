@@ -35,6 +35,8 @@ La app vuelve a arrancar sola al reiniciar el computador mientras Docker Desktop
 
 Usa los mismos puertos que la instalación de desarrollo (5173 y 8000): no se pueden tener las dos levantadas a la vez.
 
+Para instalar la app en un servidor de la universidad, con HTTPS y login real, ver [DESPLIEGUE_PRODUCCION.md](./DESPLIEGUE_PRODUCCION.md).
+
 ## Instalación en 6 pasos
 
 Para programar: monta el código en los contenedores y recarga los cambios al guardar.
@@ -136,8 +138,12 @@ Con el entorno ya creado, solo hace falta la última línea. Para correr un solo
 ABET_eval/
 ├── docker-compose.yml            # Desarrollo (código montado, recarga al guardar)
 ├── docker-compose.prod.yml       # Instalación para usar la app
+├── docker-compose.https.yml      # Producción: encima de prod.yml, TLS en nginx
+├── docker-compose.detras-de-proxy.yml  # Producción: TLS en el proxy de la universidad
 ├── .env.example
 ├── SETUP_GOOGLE.md
+├── DESPLIEGUE_PRODUCCION.md      # Guía para TI: HTTPS, certificados, verificación
+├── scripts/                      # generar-cert-prueba (certificado SOLO para pruebas)
 ├── backend/                      # FastAPI + Python 3.11
 │   ├── main.py
 │   ├── app/
