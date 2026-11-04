@@ -11,8 +11,12 @@ import httpx
 from fastapi import HTTPException, status
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.repositories.token_drive import TokenDriveRepository
+from app.utils.cifrado import cifrar, descifrar
 
 logger = logging.getLogger("abet.google_auth")
 
@@ -30,6 +34,8 @@ SCOPES = [
 # (email → {"access_token", "refresh_token", "expires_at"}).
 # Permite que el servicio de Google Drive actúe en nombre del docente sin
 # depender de que el frontend reenvíe un token adicional en cada llamada.
+# El refresh_token también se guarda cifrado en la base (tabla tokens_drive)
+# para que la sesión de Drive sobreviva a un reinicio del backend.
 _google_tokens: dict[str, dict] = {}
 
 
@@ -99,12 +105,50 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def guardar_tokens_drive(email: str, tokens: dict) -> None:
-    """Guarda el access_token/refresh_token de Google Drive del docente en memoria."""
+def _refresh_token_guardado(db: Session, email: str) -> Optional[str]:
+    """El refresh_token del docente guardado en la base, o None si no hay o no se puede leer.
+
+    Si no se puede descifrar (TOKEN_ENCRYPTION_KEY cambió o se perdió) se trata como
+    "sin sesión de Drive": la fila no se borra, el próximo login la reemplaza.
+    """
+    try:
+        fila = TokenDriveRepository(db).de(email)
+    except SQLAlchemyError as exc:
+        # Solo el tipo: el mensaje de SQLAlchemy puede incluir los valores de la consulta
+        logger.error("No se pudo leer el acceso a Google Drive de %s: %s", email, type(exc).__name__)
+        return None
+    if fila is None:
+        return None
+    refresh_token = descifrar(fila.refresh_token_cifrado)
+    if refresh_token is None:
+        logger.warning(
+            "No se pudo descifrar el acceso a Google Drive de %s (¿cambió TOKEN_ENCRYPTION_KEY?)", email
+        )
+    return refresh_token
+
+
+def guardar_tokens_drive(db: Session, email: str, tokens: dict) -> None:
+    """
+    Guarda los tokens de Google Drive del docente: todos en memoria y el refresh_token,
+    cifrado, en la base. Si Google no devolvió refresh_token, conserva el guardado.
+    Un fallo de la base no impide el login: Drive funciona desde la memoria hasta el
+    próximo reinicio.
+    """
     expires_in = tokens.get("expires_in")
+    refresh_token = tokens.get("refresh_token")
+    if refresh_token:
+        try:
+            TokenDriveRepository(db).guardar(email, cifrar(refresh_token))
+            db.commit()
+        except (SQLAlchemyError, ValueError) as exc:
+            db.rollback()
+            logger.error("No se pudo guardar el acceso a Google Drive de %s: %s", email, type(exc).__name__)
+    else:
+        anterior = _google_tokens.get(email) or {}
+        refresh_token = anterior.get("refresh_token") or _refresh_token_guardado(db, email)
     _google_tokens[email] = {
         "access_token": tokens.get("access_token"),
-        "refresh_token": tokens.get("refresh_token"),
+        "refresh_token": refresh_token,
         "expires_at": _utcnow() + timedelta(seconds=int(expires_in)) if expires_in else None,
     }
 
@@ -118,11 +162,29 @@ def actualizar_access_token_drive(email: str, access_token: str, expires_at: Opt
     tokens["expires_at"] = expires_at
 
 
-def descartar_tokens_drive(email: str) -> None:
-    """Olvida los tokens del docente (p. ej. cuando Google revocó el acceso)."""
+def descartar_tokens_drive(db: Session, email: str) -> None:
+    """Olvida los tokens del docente, en memoria y en la base (Google revocó el acceso o cerró sesión)."""
     _google_tokens.pop(email, None)
+    try:
+        TokenDriveRepository(db).borrar(email)
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.error("No se pudo borrar el acceso a Google Drive de %s: %s", email, type(exc).__name__)
 
 
-def obtener_tokens_drive(email: str) -> Optional[dict]:
-    """Recupera los tokens de Google Drive guardados para el docente, si existen."""
-    return _google_tokens.get(email)
+def obtener_tokens_drive(db: Session, email: str) -> Optional[dict]:
+    """
+    Recupera los tokens de Google Drive del docente, si existen. Tras un reinicio la
+    memoria está vacía: se carga el refresh_token de la base, sin access_token, y quien
+    lo use debe renovarlo (ver google_drive._credenciales_drive).
+    """
+    tokens = _google_tokens.get(email)
+    if tokens is not None:
+        return tokens
+    refresh_token = _refresh_token_guardado(db, email)
+    if refresh_token is None:
+        return None
+    tokens = {"access_token": None, "refresh_token": refresh_token, "expires_at": None}
+    _google_tokens[email] = tokens
+    return tokens

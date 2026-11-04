@@ -45,7 +45,7 @@ def drive(monkeypatch):
     """Sustituye la subida a Drive del servicio y registra las llamadas."""
     llamadas = []
 
-    def subir(email, nombre, contenido, mimetype):
+    def subir(db, email, nombre, contenido, mimetype):
         llamadas.append(nombre)
         return {"estado": "simulado", "detalle": None, "enlace": None}
 

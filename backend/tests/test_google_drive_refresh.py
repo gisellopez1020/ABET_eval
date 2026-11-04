@@ -11,18 +11,21 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
+from cryptography.fernet import Fernet
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 
 from app.config import settings
 from app.services import google_auth, google_drive
+from tests.test_catalogo_ra_abet import db_session  # noqa: F401 (fixture)
 
 EMAIL = "docente@uao.edu.co"
 
 
 @pytest.fixture(autouse=True)
-def login_real(monkeypatch):
+def login_real(monkeypatch, db_session):
     monkeypatch.setattr(settings, "skip_auth", False)
+    monkeypatch.setattr(settings, "token_encryption_key", Fernet.generate_key().decode())
     monkeypatch.setattr(google_auth, "_google_tokens", {})
     monkeypatch.setattr(google_drive, "_carpeta_cache", {EMAIL: "carpeta"})
 
@@ -76,89 +79,89 @@ def _login(expires_in: int) -> None:
     }
 
 
-def _subir():
-    return google_drive.subir_archivo(EMAIL, "reporte.xlsx", b"x", "application/octet-stream")
+def _subir(db):
+    return google_drive.subir_archivo(db, EMAIL, "reporte.xlsx", b"x", "application/octet-stream")
 
 
 REVOCADO = RefreshError("invalid_grant: Token has been expired or revoked.", retryable=False)
 
 
 class TestGuardarTokens:
-    def test_guarda_el_vencimiento_a_partir_de_expires_in(self):
+    def test_guarda_el_vencimiento_a_partir_de_expires_in(self, db_session):
         antes = google_auth._utcnow()
         google_auth.guardar_tokens_drive(
-            EMAIL, {"access_token": "a", "refresh_token": "r", "expires_in": 3599}
+            db_session, EMAIL, {"access_token": "a", "refresh_token": "r", "expires_in": 3599}
         )
-        expires_at = google_auth.obtener_tokens_drive(EMAIL)["expires_at"]
+        expires_at = google_auth.obtener_tokens_drive(db_session, EMAIL)["expires_at"]
         assert antes + timedelta(seconds=3599) <= expires_at <= google_auth._utcnow() + timedelta(seconds=3599)
 
-    def test_sin_expires_in_no_inventa_vencimiento(self):
-        google_auth.guardar_tokens_drive(EMAIL, {"access_token": "a", "refresh_token": "r"})
-        assert google_auth.obtener_tokens_drive(EMAIL)["expires_at"] is None
+    def test_sin_expires_in_no_inventa_vencimiento(self, db_session):
+        google_auth.guardar_tokens_drive(db_session, EMAIL, {"access_token": "a", "refresh_token": "r"})
+        assert google_auth.obtener_tokens_drive(db_session, EMAIL)["expires_at"] is None
 
 
 class TestTokenVencidoRefreshExitoso:
-    def test_subir_archivo_continua(self, drive, refresh):
+    def test_subir_archivo_continua(self, db_session, drive, refresh):
         _login(expires_in=-60)
-        assert _subir() == {"estado": "sincronizado", "detalle": None, "enlace": "https://drive/abc"}
+        assert _subir(db_session) == {"estado": "sincronizado", "detalle": None, "enlace": "https://drive/abc"}
         assert refresh.llamadas == 1
         assert drive.tokens and set(drive.tokens) == {"token-nuevo"}
-        assert google_auth.obtener_tokens_drive(EMAIL)["access_token"] == "token-nuevo"
-        assert google_auth.obtener_tokens_drive(EMAIL)["refresh_token"] == "refresh-1"
+        assert google_auth.obtener_tokens_drive(db_session, EMAIL)["access_token"] == "token-nuevo"
+        assert google_auth.obtener_tokens_drive(db_session, EMAIL)["refresh_token"] == "refresh-1"
 
-    def test_token_a_punto_de_vencer_tambien_se_renueva(self, drive, refresh):
+    def test_token_a_punto_de_vencer_tambien_se_renueva(self, db_session, drive, refresh):
         _login(expires_in=60)  # dentro del margen de google-auth (3 min 45 s)
-        assert _subir()["estado"] == "sincronizado"
+        assert _subir(db_session)["estado"] == "sincronizado"
         assert refresh.llamadas == 1
 
 
 class TestRefreshTokenRevocado:
-    def test_subir_archivo_pide_reautenticar(self, drive, refresh):
+    def test_subir_archivo_pide_reautenticar(self, db_session, drive, refresh):
         _login(expires_in=-60)
         refresh.error = REVOCADO
-        resultado = _subir()
+        resultado = _subir(db_session)
         assert resultado["estado"] == "error"
         assert "Vuelve a iniciar sesión con Google" in resultado["detalle"]
         assert drive.tokens == []
-        assert google_auth.obtener_tokens_drive(EMAIL) is None
+        assert google_auth.obtener_tokens_drive(db_session, EMAIL) is None
 
     # Camino del 401: google-auth renueva dentro de execute() y Google lo rechaza
-    def test_revocado_durante_la_llamada_a_drive(self, drive, refresh):
+    def test_revocado_durante_la_llamada_a_drive(self, db_session, drive, refresh):
         _login(expires_in=3600)
         drive.error = REVOCADO
-        assert "Vuelve a iniciar sesión con Google" in _subir()["detalle"]
+        assert "Vuelve a iniciar sesión con Google" in _subir(db_session)["detalle"]
 
-    def test_fallo_temporal_no_pide_reautenticar_ni_borra_tokens(self, drive, refresh):
+    def test_fallo_temporal_no_pide_reautenticar_ni_borra_tokens(self, db_session, drive, refresh):
         _login(expires_in=-60)
         refresh.error = RefreshError("server_error", retryable=True)
-        resultado = _subir()
+        resultado = _subir(db_session)
         assert resultado == {
             "estado": "error", "detalle": google_drive.MENSAJE_REFRESH_TEMPORAL, "enlace": None,
         }
-        assert google_auth.obtener_tokens_drive(EMAIL)["refresh_token"] == "refresh-1"
+        assert google_auth.obtener_tokens_drive(db_session, EMAIL)["refresh_token"] == "refresh-1"
 
 
 class TestTokenVigente:
-    def test_subir_archivo_no_renueva(self, drive, refresh):
+    def test_subir_archivo_no_renueva(self, db_session, drive, refresh):
         _login(expires_in=3600)
-        assert _subir()["estado"] == "sincronizado"
+        assert _subir(db_session)["estado"] == "sincronizado"
         assert refresh.llamadas == 0
         assert set(drive.tokens) == {"token-viejo"}
-        assert google_auth.obtener_tokens_drive(EMAIL)["access_token"] == "token-viejo"
+        assert google_auth.obtener_tokens_drive(db_session, EMAIL)["access_token"] == "token-viejo"
 
-    def test_sin_vencimiento_conocido_no_renueva(self, drive, refresh):
+    def test_sin_vencimiento_conocido_no_renueva(self, db_session, drive, refresh):
         _login(expires_in=3600)
         google_auth._google_tokens[EMAIL]["expires_at"] = None
-        assert _subir()["estado"] == "sincronizado"
+        assert _subir(db_session)["estado"] == "sincronizado"
         assert refresh.llamadas == 0
 
 
 class TestCredenciales:
-    def test_incluyen_lo_necesario_para_renovarse(self, monkeypatch):
+    def test_incluyen_lo_necesario_para_renovarse(self, db_session, monkeypatch):
         monkeypatch.setattr(settings, "google_client_id", "cid")
         monkeypatch.setattr(settings, "google_client_secret", "csecret")
         _login(expires_in=3600)
-        cred = google_drive._credenciales_drive(EMAIL, google_auth.obtener_tokens_drive(EMAIL))
+        cred = google_drive._credenciales_drive(EMAIL, google_auth.obtener_tokens_drive(db_session, EMAIL))
         assert cred.refresh_token == "refresh-1"
         assert cred.token_uri == google_auth.TOKEN_ENDPOINT
         assert (cred.client_id, cred.client_secret) == ("cid", "csecret")
@@ -168,7 +171,7 @@ class TestCredenciales:
 class TestRespaldoDel401:
     """Con la librería real: Drive responde 401 → google-auth renueva y reintenta."""
 
-    def test_401_renueva_reintenta_y_guarda_el_token(self, monkeypatch, refresh):
+    def test_401_renueva_reintenta_y_guarda_el_token(self, db_session, monkeypatch, refresh):
         from google_auth_httplib2 import AuthorizedHttp
         from googleapiclient.discovery import build
         from googleapiclient.http import HttpMockSequence
@@ -186,6 +189,6 @@ class TestRespaldoDel401:
         monkeypatch.setattr(google_drive, "_build_drive_service", _build_real)
         _login(expires_in=3600)  # vigente según expires_at, pero Google ya no lo acepta
 
-        assert _subir() == {"estado": "sincronizado", "detalle": None, "enlace": "https://drive/abc"}
+        assert _subir(db_session) == {"estado": "sincronizado", "detalle": None, "enlace": "https://drive/abc"}
         assert refresh.llamadas == 1
-        assert google_auth.obtener_tokens_drive(EMAIL)["access_token"] == "token-nuevo"
+        assert google_auth.obtener_tokens_drive(db_session, EMAIL)["access_token"] == "token-nuevo"
