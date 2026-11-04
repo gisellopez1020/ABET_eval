@@ -123,8 +123,12 @@ def test_auth_real_con_dominios_reales_arranca():
 
 
 def test_auth_real_con_url_sin_host_no_la_revisa():
-    config = crear_settings(skip_auth=False, jwt_secret_key=CLAVE, frontend_url="abet.uao.edu.co")
-    assert config.frontend_url == "abet.uao.edu.co"
+    """Este validador no la revisa; la rechaza el de https (RNF-13): no es https://."""
+    with pytest.raises(ValidationError) as exc:
+        crear_settings(skip_auth=False, jwt_secret_key=CLAVE, frontend_url="abet.uao.edu.co")
+    mensaje = str(exc.value)
+    assert MENSAJE_NUEVO not in mensaje
+    assert "FRONTEND_URL debe usar https://" in mensaje
 
 
 # ── Orden de los validadores: los errores de siempre no cambian ──────────────
