@@ -30,7 +30,7 @@ from tests.test_catalogo_ra_abet import db_session  # noqa: F401 (fixture)
 BACKEND = Path(__file__).resolve().parents[1]
 DOMINIO = "https://abet.uao.edu.co"
 VARIABLES = (
-    "SKIP_AUTH", "JWT_SECRET_KEY", "TOKEN_ENCRYPTION_KEY", "GOOGLE_REDIRECT_URI",
+    "SKIP_AUTH", "JWT_SECRET_KEY", "TOKEN_ENCRYPTION_KEY", "DATA_ENCRYPTION_KEY", "GOOGLE_REDIRECT_URI",
     "FRONTEND_URL", "FRONTEND_ORIGINS", "API_DOCS",
 )
 MENSAJE = "debe usar https:// con SKIP_AUTH=false"
@@ -47,6 +47,7 @@ def settings_produccion(**kwargs) -> Settings:
     kwargs.setdefault("skip_auth", False)
     kwargs.setdefault("jwt_secret_key", "a" * 32)
     kwargs.setdefault("token_encryption_key", Fernet.generate_key().decode())
+    kwargs.setdefault("data_encryption_key", Fernet.generate_key().decode())
     return Settings(_env_file=None, **kwargs)
 
 

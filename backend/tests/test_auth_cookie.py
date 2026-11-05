@@ -288,6 +288,7 @@ class TestCORS:
         s = Settings(
             _env_file=None, skip_auth=False, jwt_secret_key="a" * 32,
             token_encryption_key=Fernet.generate_key().decode(),
+            data_encryption_key=Fernet.generate_key().decode(),
             frontend_origins=" https://a.edu.co , https://b.edu.co ,",
         )
         assert s.lista_frontend_origins == ["https://a.edu.co", "https://b.edu.co"]
@@ -313,6 +314,7 @@ class TestCORS:
         env = {
             **os.environ, "SKIP_AUTH": "false", "JWT_SECRET_KEY": "a" * 32,
             "TOKEN_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+            "DATA_ENCRYPTION_KEY": Fernet.generate_key().decode(),
             "FRONTEND_ORIGINS": "https://abet.uao.edu.co",
         }
         salida = subprocess.run(
