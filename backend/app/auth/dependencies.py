@@ -1,11 +1,14 @@
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import jwt
 from fastapi import Cookie, Header, HTTPException, Request, status
-from jose import jwt, JWTError
 
-from app.config import settings
+from app.config import ALGORITMO_JWT, settings
+
+logger = logging.getLogger(__name__)
 
 MOCK_USER = {
     "email": "profesor.test@uao.edu.co",
@@ -33,7 +36,7 @@ def create_access_token(email: str, nombre: str) -> str:
         CSRF_CLAIM: secrets.token_urlsafe(32),
         "exp": expira,
     }
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=ALGORITMO_JWT)
 
 
 def decodificar_sesion(token: Optional[str]) -> dict:
@@ -44,15 +47,20 @@ def decodificar_sesion(token: Optional[str]) -> dict:
             detail="No hay una sesión iniciada; inicia sesión con Google",
         )
     try:
+        # Algoritmo fijo (nunca el que diga el token) y exp obligatorio: un JWT sin
+        # vencimiento no se acepta aunque esté bien firmado.
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
+            algorithms=[ALGORITMO_JWT],
+            options={"require": ["exp"]},
         )
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
+        # El motivo exacto (firma, vencimiento, formato) solo va al log, no al cliente
+        logger.info("Sesión rechazada: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Sesión inválida o expirada: {exc}",
+            detail="Sesión inválida o expirada; inicia sesión de nuevo",
         ) from exc
 
     email = payload.get("email")

@@ -15,6 +15,11 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import base64
+import json
+from datetime import datetime, timedelta, timezone
+
+import jwt
 import pytest
 from cryptography.fernet import Fernet
 from fastapi import Depends, FastAPI
@@ -63,6 +68,8 @@ def borrar(usuario: dict = Depends(get_current_user)):
 @pytest.fixture(autouse=True)
 def login_real(monkeypatch):
     monkeypatch.setattr(settings, "skip_auth", False)
+    # Como en producción, donde el validador exige al menos 32 caracteres
+    monkeypatch.setattr(settings, "jwt_secret_key", "clave-de-pruebas-" + "k" * 48)
     ejecutados.clear()
 
 
@@ -78,8 +85,16 @@ def client(db_session):
 
 
 def _csrf_de(token: str) -> str:
-    from jose import jwt
-    return jwt.get_unverified_claims(token)["csrf"]
+    return jwt.decode(token, options={"verify_signature": False})["csrf"]
+
+
+def _jwt(payload: dict, clave: str | None = None, algoritmo: str = "HS256") -> str:
+    """JWT hecho a mano (sin create_access_token) para probar lo que se rechaza."""
+    return jwt.encode(payload, clave or settings.jwt_secret_key, algorithm=algoritmo)
+
+
+def _en(minutos: int) -> datetime:
+    return datetime.now(timezone.utc) + timedelta(minutes=minutos)
 
 
 def _set_cookie(resp, nombre: str) -> str:
@@ -139,10 +154,10 @@ class TestSesionPorCookie:
         assert client.get("/auth/me").status_code == 401
 
     def test_me_con_jwt_firmado_con_otra_clave_401(self, client, monkeypatch):
+        clave_del_servidor = settings.jwt_secret_key
         monkeypatch.setattr(settings, "jwt_secret_key", "otra-clave-" + "x" * 32)
         token = create_access_token(EMAIL, "Doc")
-        monkeypatch.undo()
-        monkeypatch.setattr(settings, "skip_auth", False)
+        monkeypatch.setattr(settings, "jwt_secret_key", clave_del_servidor)
         client.cookies.set(SESSION_COOKIE_NAME, token)
         assert client.get("/auth/me").status_code == 401
 
@@ -153,6 +168,54 @@ class TestSesionPorCookie:
 
     def test_cada_sesion_tiene_su_propio_token_csrf(self):
         assert _csrf_de(create_access_token(EMAIL, "Doc")) != _csrf_de(create_access_token(EMAIL, "Doc"))
+
+
+class TestJWTRechazados:
+    """Lo que el decodificador no acepta: todo responde 401 con el mismo mensaje genérico."""
+
+    MENSAJE = "Sesión inválida o expirada; inicia sesión de nuevo"
+
+    def _me(self, client, token: str):
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        return client.get("/auth/me")
+
+    def test_el_token_emitido_es_hs256_y_lleva_exp(self):
+        token = create_access_token(EMAIL, "Doc")
+        assert jwt.get_unverified_header(token)["alg"] == "HS256"
+        assert "exp" in jwt.decode(token, options={"verify_signature": False})
+
+    def test_sin_exp_401(self, client):
+        resp = self._me(client, _jwt({"email": EMAIL, "csrf": "c"}))
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == self.MENSAJE
+
+    def test_vencido_401(self, client):
+        resp = self._me(client, _jwt({"email": EMAIL, "csrf": "c", "exp": _en(-1)}))
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == self.MENSAJE
+
+    def test_otro_algoritmo_hmac_401(self, client):
+        # Misma clave del servidor (65 bytes, válida también para HS512): se rechaza por el algoritmo
+        token = _jwt({"email": EMAIL, "csrf": "c", "exp": _en(60)}, algoritmo="HS512")
+        assert self._me(client, token).status_code == 401
+
+    def test_alg_none_401(self, client):
+        def b64(d: dict) -> str:
+            return base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
+        token = f"{b64({'alg': 'none', 'typ': 'JWT'})}.{b64({'email': EMAIL, 'exp': 9999999999})}."
+        assert self._me(client, token).status_code == 401
+
+    @pytest.mark.parametrize("token", ["no-es-un-jwt", "a.b.c"])
+    def test_el_detail_no_revela_el_motivo_de_la_libreria(self, client, token):
+        detalle = self._me(client, token).json()["detail"]
+        assert detalle == self.MENSAJE
+        for texto_libreria in ("segments", "Signature", "decode", "padding", "Invalid"):
+            assert texto_libreria not in detalle
+
+    def test_jwt_algorithm_distinto_de_hs256_no_arranca(self):
+        with pytest.raises(ValidationError) as exc:
+            Settings(_env_file=None, skip_auth=True, jwt_algorithm="none")
+        assert "JWT_ALGORITHM debe ser HS256" in str(exc.value)
 
 
 class TestCSRF:
@@ -184,8 +247,8 @@ class TestCSRF:
         assert ejecutados == ["post"]
 
     def test_jwt_sin_claim_csrf_no_puede_modificar(self, client, monkeypatch):
-        from jose import jwt
-        token = jwt.encode({"email": EMAIL, "nombre": "Doc"}, settings.jwt_secret_key, algorithm="HS256")
+        # Con exp: sin él el JWT ya se rechaza con 401 antes de llegar al CSRF
+        token = _jwt({"email": EMAIL, "nombre": "Doc", "exp": _en(60)})
         client.cookies.set(SESSION_COOKIE_NAME, token)
         assert client.post("/protegido", headers={CSRF_HEADER: ""}).status_code == 403
         assert client.post("/protegido", headers={CSRF_HEADER: "None"}).status_code == 403

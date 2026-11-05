@@ -6,6 +6,8 @@ from app.utils.claves import clave_maestra_valida
 from app.utils.urls import es_host_local, puede_ser_http
 
 JWT_SECRET_MIN_LENGTH = 32
+# Único algoritmo con que se firman y aceptan los JWT de sesión (HMAC con JWT_SECRET_KEY)
+ALGORITMO_JWT = "HS256"
 
 
 class Settings(BaseSettings):
@@ -45,6 +47,17 @@ class Settings(BaseSettings):
         "case_sensitive": False,
         "hide_input_in_errors": True,
     }
+
+    @model_validator(mode="after")
+    def validar_jwt_algorithm(self) -> "Settings":
+        """JWT_ALGORITHM se conserva por compatibilidad con .env existentes, pero solo
+        admite HS256: aceptar otro (o "none") abriría la puerta a forjar sesiones."""
+        if self.jwt_algorithm != ALGORITMO_JWT:
+            raise ValueError(
+                f"JWT_ALGORITHM debe ser {ALGORITMO_JWT} (o no definirse); "
+                f"se recibió otro valor."
+            )
+        return self
 
     @model_validator(mode="after")
     def validar_jwt_secret_key(self) -> "Settings":
