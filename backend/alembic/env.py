@@ -1,4 +1,3 @@
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -18,9 +17,13 @@ from app.models import (  # noqa: F401
 
 target_metadata = Base.metadata
 
-database_url = os.getenv("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+# La misma URL que la app (app.config.settings, que lee DATABASE_URL y el .env). Al
+# importarla se validan los Settings: con SKIP_AUTH=false y la contraseña de ejemplo de
+# PostgreSQL el arranque se detiene aquí, antes de migrar, con el mensaje que dice qué
+# hacer. "%" se duplica porque alembic.ini usa interpolación de configparser.
+from app.config import settings  # noqa: E402
+
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
