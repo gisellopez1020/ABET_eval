@@ -1,6 +1,6 @@
 # Instalación para usar la app (docker-compose.prod.yml): compila el frontend y lo sirve
 # con nginx, que además hace de proxy de /api al backend. Para desarrollo, ver Dockerfile.
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
