@@ -16,6 +16,8 @@ Sistema de evaluación por criterios ABET para la Universidad Autónoma de Occid
 
 ## Instalación para usar la app (sin programar)
 
+**Para usarla con el inicio de sesión real de Google y Google Drive (un docente en su computador con Windows), sigue el [manual de inicio rápido](./MANUAL_INICIO_RAPIDO.md)**: incluye el `.env` completo, las claves, el respaldo cifrado y qué hacer si algo falla. Lo que sigue es la versión corta, con el modo demo.
+
 Para quien solo va a usar la app en su computador, sin modificar el código. Ocupa y consume mucho menos que la instalación de desarrollo de la sección siguiente: el frontend va compilado y no hay recarga automática.
 
 1. Instala [Docker Desktop](https://www.docker.com/products/docker-desktop/) y déjalo abierto.
@@ -34,7 +36,7 @@ Para quien solo va a usar la app en su computador, sin modificar el código. Ocu
    ```bash
    docker compose -f docker-compose.prod.yml up -d --build
    ```
-4. Abre http://localhost:5173. La base de datos se prepara sola al arrancar. Antes de crear cursos, carga el catálogo de Student Outcomes como se explica en el [paso 4](#4-cargar-el-catálogo-de-student-outcomes-abet).
+4. Abre http://localhost:5173. La base de datos se prepara sola al arrancar. Antes de crear cursos, carga el catálogo de Student Outcomes como se explica en el [paso 3](#3-cargar-el-catálogo-de-student-outcomes-abet).
 
 Con el login real, la sesión se cierra sola tras 8 horas sin usar la app (y como máximo a las 24 horas de iniciarla); basta con volver a entrar con Google. Al actualizar a la versión 1.0.0 hay que iniciar sesión una vez más.
 
@@ -46,7 +48,7 @@ Para instalar la app en un servidor de la universidad, con HTTPS y login real, v
 
 El nombre, el código y el correo de los estudiantes se guardan cifrados si configuras `DATA_ENCRYPTION_KEY` en el `.env` (obligatoria con `SKIP_AUTH=false`; ver [SETUP_GOOGLE.md](./SETUP_GOOGLE.md), paso 5). Sin ella se guardan sin cifrar y el backend lo avisa al arrancar. **Si esa clave se pierde, esos datos no se pueden recuperar.**
 
-## Instalación en 6 pasos
+## Instalación en 5 pasos
 
 Para programar: monta el código en los contenedores y recarga los cambios al guardar.
 
@@ -96,7 +98,7 @@ El catálogo de Resultados de Aprendizaje y Criterios de Evaluación **no se car
 docker-compose exec backend python scripts/seed.py
 ```
 
-Carga el curso real "Redes De Datos" (545210, período 2026-1), con 2 secciones, 6 equipos de trabajo (20 estudiantes en total, con nombres ficticios) y la rúbrica completa de la actividad "Proyecto Final I", ya calificada para los 6 equipos. Si el paso 4 no se completó antes, este script se detiene con un error indicando qué códigos ABET faltan en el catálogo.
+Carga el curso real "Redes De Datos" (545210, período 2026-1), con 2 secciones, 6 equipos de trabajo (20 estudiantes en total, con nombres ficticios) y la rúbrica completa de la actividad "Proyecto Final I", ya calificada para los 6 equipos. Si el paso 3 no se completó antes, este script se detiene con un error indicando qué códigos ABET faltan en el catálogo.
 
 ### 5. Abrir la aplicación
 
@@ -167,6 +169,7 @@ ABET_eval/
 ├── .env.example
 ├── SETUP_GOOGLE.md
 ├── DESPLIEGUE_PRODUCCION.md      # Guía para TI: HTTPS, certificados, verificación
+├── MANUAL_INICIO_RAPIDO.md       # Manual del docente: instalar, usar, respaldar (Windows)
 ├── SECURITY.md                   # Cómo reportar vulnerabilidades y controles implementados
 ├── CHANGELOG.md                  # Registro de cambios por versión
 ├── THIRD_PARTY_LICENSES.md       # Licencias de las dependencias de producción
