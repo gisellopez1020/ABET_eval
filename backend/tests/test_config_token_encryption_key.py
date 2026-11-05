@@ -20,12 +20,14 @@ JWT = "a" * 32
 @pytest.fixture(autouse=True)
 def entorno_limpio(monkeypatch):
     """Evita que variables de entorno del sistema influyan en los casos."""
-    for variable in ("SKIP_AUTH", "JWT_SECRET_KEY", "TOKEN_ENCRYPTION_KEY"):
+    for variable in ("SKIP_AUTH", "JWT_SECRET_KEY", "TOKEN_ENCRYPTION_KEY", "DATA_ENCRYPTION_KEY"):
         monkeypatch.delenv(variable, raising=False)
 
 
 def crear_settings(**kwargs) -> Settings:
-    # _env_file=None: ignora el .env local para que el test sea determinista
+    # _env_file=None: ignora el .env local para que el test sea determinista.
+    # Clave de datos válida por defecto: aquí solo se prueba TOKEN_ENCRYPTION_KEY
+    kwargs.setdefault("data_encryption_key", Fernet.generate_key().decode())
     return Settings(_env_file=None, **kwargs)
 
 

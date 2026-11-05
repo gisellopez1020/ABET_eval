@@ -2,6 +2,7 @@ from cryptography.fernet import Fernet
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
+from app.utils.claves import clave_maestra_valida
 from app.utils.urls import es_host_local, puede_ser_http
 
 JWT_SECRET_MIN_LENGTH = 32
@@ -17,6 +18,10 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24
     # Clave Fernet con que se cifra el refresh_token de Google Drive en la base de datos
     token_encryption_key: str = "PLACEHOLDER"
+    # Clave maestra con que se cifran los datos personales del estudiante (RNF-14).
+    # Distinta de TOKEN_ENCRYPTION_KEY y de JWT_SECRET_KEY. Si se pierde, esos datos
+    # no se pueden recuperar.
+    data_encryption_key: str = "PLACEHOLDER"
     frontend_url: str = "http://localhost:5173"
     # Orígenes permitidos por CORS, separados por comas. Texto (no list[str])
     # para que se pueda escribir sin JSON en la variable de entorno.
@@ -95,6 +100,41 @@ class Settings(BaseSettings):
                 "(o con el comando de PowerShell de SETUP_GOOGLE.md) y configúrala en la "
                 "variable de entorno TOKEN_ENCRYPTION_KEY, o usa SKIP_AUTH=true para el "
                 "modo demo/desarrollo."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validar_data_encryption_key(self) -> "Settings":
+        """Clave de los datos personales del estudiante (RNF-14).
+
+        Con SKIP_AUTH=false es obligatoria: sin ella los nombres, códigos y correos se
+        guardarían en claro. Con SKIP_AUTH=true es opcional (sin ella no se cifra y se
+        avisa al arrancar), pero si se configura debe ser válida: una clave con un
+        error de tipeo no debe hacer que se guarde en claro sin aviso. En los dos
+        modos debe ser distinta de las otras claves. Va después de los validadores
+        de JWT_SECRET_KEY y TOKEN_ENCRYPTION_KEY para no tapar sus mensajes.
+        """
+        clave = self.data_encryption_key.strip()
+        configurada = bool(clave) and clave != "PLACEHOLDER"
+        if not configurada and self.skip_auth:
+            return self
+        if not configurada or not clave_maestra_valida(clave):
+            raise ValueError(
+                "DATA_ENCRYPTION_KEY no es una clave válida (valor por defecto "
+                "'PLACEHOLDER', vacía o mal formada: deben ser 32 bytes en base64 urlsafe, "
+                "44 caracteres). Con SKIP_AUTH=false es obligatoria: con ella se cifran "
+                "en la base de datos el nombre, el código y el correo de cada estudiante. "
+                "Genera una con: "
+                'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" '
+                "y GUÁRDALA EN UN LUGAR SEGURO: si se pierde, esos datos no se pueden "
+                "recuperar. Ver DESPLIEGUE_PRODUCCION.md."
+            )
+        if clave in (self.token_encryption_key.strip(), self.jwt_secret_key.strip()):
+            raise ValueError(
+                "DATA_ENCRYPTION_KEY debe ser distinta de TOKEN_ENCRYPTION_KEY y de "
+                "JWT_SECRET_KEY: cada clave protege una cosa distinta y filtrar una no "
+                "debe exponer las demás. Genera otra con: "
+                'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             )
         return self
 
