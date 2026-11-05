@@ -19,7 +19,7 @@ services:
       # Única IP de la que uvicorn acepta X-Forwarded-For/-Proto (la de nginx, abajo)
       FORWARDED_ALLOW_IPS: ${NGINX_IP:-172.30.80.10}
       API_DOCS: "false"
-    command: sh -c "alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers"
+    command: sh -c "alembic upgrade head && python -m app.verificar_cifrado && exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers"
     # El backend deja de estar publicado: solo nginx llega a él, por la red interna
     ports: !reset []
     networks: [interna]
