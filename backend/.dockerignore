@@ -1,3 +1,4 @@
+# Lo que nunca debe entrar a la imagen del backend (ni a su contexto de build)
 .git
 .venv/
 venv/
@@ -7,5 +8,12 @@ __pycache__/
 .mypy_cache/
 .coverage
 htmlcov/
+# Pruebas: la imagen de producción no las lleva. En desarrollo llegan por el montaje
+# de ./backend (docker-compose.yml)
 tests/
+# Secretos y certificados
 .env
+.env.*
+*.pem
+*.key
+certs/
