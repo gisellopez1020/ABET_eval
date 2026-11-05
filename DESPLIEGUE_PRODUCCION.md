@@ -121,7 +121,8 @@ Qué configura `frontend/nginx-https.conf`:
   `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Permissions-Policy` y una `Content-Security-Policy` que solo permite recursos del
   propio dominio. Esa CSP se probó recorriendo todas las pantallas en Chrome, y
-  generando el PDF y el Excel, sin ninguna violación. Sus dos excepciones son por el
+  generando el PDF y el Excel, sin ninguna violación; la prueba se repitió con jsPDF
+  4.2.1 (noviembre de 2026), también sin violaciones. Sus dos excepciones son por el
   PDF del reporte: elementos `<style>` en línea (html2canvas) e imágenes `data:` (jsPDF).
 - `/api/` se reenvía al backend con `X-Forwarded-For` (la IP de la conexión) y
   `X-Forwarded-Proto: https`.
@@ -356,3 +357,11 @@ y registra esa URI en Google Cloud si quieres completar el login.
   anterior. **No uses `down -v`: borra la base de datos.**
 - Si el backend no arranca, `docker compose ... logs backend` muestra el motivo
   (variable con http, clave faltante o inválida).
+- **Riesgo aceptado: html2canvas 1.4.1.** Captura las gráficas del reporte ABET para el
+  PDF. No publica versiones desde enero de 2022, pero no tiene avisos de seguridad
+  conocidos (`npm audit`, noviembre de 2026). Se acepta porque solo dibuja nodos del
+  propio DOM de la app, en el navegador del docente que exporta: no procesa archivos
+  ni HTML de terceros. Es además la razón de la excepción `style-src-elem 'unsafe-inline'`
+  de la CSP. La alternativa mantenida, `html2canvas-pro` (misma API), obliga a volver a
+  validar el ajuste de la leyenda (`conTextoAlineado`, `frontend/src/pages/Reports/pdf.ts`)
+  y la CSP. Revisar si aparece un aviso de seguridad para html2canvas.

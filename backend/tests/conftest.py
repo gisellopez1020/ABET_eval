@@ -13,3 +13,6 @@ os.environ.setdefault(
 # la variable de entorno tiene prioridad sobre el .env. Las que prueban la redacción
 # activan una key falsa y simulan la respuesta.
 os.environ["GEMINI_API_KEY"] = "PLACEHOLDER"
+# Los JWT de las pruebas se firman con una clave del largo que exige producción
+# (las que validan el rechazo de claves inseguras pasan la suya a Settings).
+os.environ.setdefault("JWT_SECRET_KEY", "clave-de-pruebas-" + "k" * 48)
