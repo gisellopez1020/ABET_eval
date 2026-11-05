@@ -12,7 +12,7 @@ const paginas = import.meta.glob(['./**/*.tsx', '!./**/*.test.tsx'], {
 
 describe('páginas', () => {
   it('se encontraron las páginas', () => {
-    expect(Object.keys(paginas)).toContain('./Course/CoursePage.tsx');
+    expect(Object.keys(paginas)).toContain('./Asignaturas/CoursePage.tsx');
   });
 
   it('ninguna importa el Header del layout', () => {
