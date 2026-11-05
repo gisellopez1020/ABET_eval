@@ -1,6 +1,19 @@
+# Lo que nunca debe entrar al contexto de build del frontend
 .git
 node_modules/
 dist/
 coverage/
 .vite/
 *.log
+# Variables locales: Vite lee .env al compilar y todo VITE_* queda en el JS público.
+# En la imagen, los valores llegan solo por los build args (Dockerfile.prod)
+.env
+.env.*
+# Certificados y llaves
+*.pem
+*.key
+certs/
+# Pruebas y su configuración (en desarrollo llegan por el montaje de ./frontend)
+tests/
+**/*.test.ts
+**/*.test.tsx
