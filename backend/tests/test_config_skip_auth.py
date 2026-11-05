@@ -17,7 +17,7 @@ from app.utils.urls import es_host_local, es_localhost
 DOMINIO = "https://abet.uao.edu.co"
 CLAVE = "a" * 32
 MENSAJE_NUEVO = "SKIP_AUTH=true desactiva el login"
-VARIABLES = ("SKIP_AUTH", "JWT_SECRET_KEY", "TOKEN_ENCRYPTION_KEY", "GOOGLE_REDIRECT_URI", "FRONTEND_URL", "FRONTEND_ORIGINS")
+VARIABLES = ("SKIP_AUTH", "JWT_SECRET_KEY", "TOKEN_ENCRYPTION_KEY", "DATA_ENCRYPTION_KEY", "GOOGLE_REDIRECT_URI", "FRONTEND_URL", "FRONTEND_ORIGINS")
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +31,7 @@ def crear_settings(**kwargs) -> Settings:
     # _env_file=None: ignora el .env local para que el test sea determinista.
     # Clave de cifrado válida por defecto: aquí solo se prueba SKIP_AUTH
     kwargs.setdefault("token_encryption_key", Fernet.generate_key().decode())
+    kwargs.setdefault("data_encryption_key", Fernet.generate_key().decode())
     return Settings(_env_file=None, **kwargs)
 
 

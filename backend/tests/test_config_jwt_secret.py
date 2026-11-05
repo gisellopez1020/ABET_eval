@@ -20,12 +20,14 @@ def entorno_limpio(monkeypatch):
     monkeypatch.delenv("SKIP_AUTH", raising=False)
     monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
     monkeypatch.delenv("TOKEN_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("DATA_ENCRYPTION_KEY", raising=False)
 
 
 def crear_settings(**kwargs) -> Settings:
     # _env_file=None: ignora el .env local para que el test sea determinista.
     # Clave de cifrado válida por defecto: aquí solo se prueba JWT_SECRET_KEY
     kwargs.setdefault("token_encryption_key", Fernet.generate_key().decode())
+    kwargs.setdefault("data_encryption_key", Fernet.generate_key().decode())
     return Settings(_env_file=None, **kwargs)
 
 

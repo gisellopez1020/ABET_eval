@@ -1,8 +1,13 @@
+from itertools import groupby
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
 from app.models import Curso, Estudiante, Seccion
+from app.utils.orden import clave_estudiante, ordenar_por_nombre
+
+# Los nombres están cifrados (RNF-14): no hay ORDER BY por nombre, se ordena en
+# Python con el orden alfabético español de utils/orden.py
 
 
 class EstudianteRepository:
@@ -14,17 +19,13 @@ class EstudianteRepository:
 
     def de_seccion(self, seccion_id: int) -> List[Estudiante]:
         """Estudiantes de la sección ordenados por nombre completo."""
-        return (
-            self.db.query(Estudiante)
-            .filter(Estudiante.seccion_id == seccion_id)
-            .order_by(Estudiante.nombre_completo)
-            .all()
+        return ordenar_por_nombre(
+            self.db.query(Estudiante).filter(Estudiante.seccion_id == seccion_id).all()
         )
 
     def de_curso(self, curso_id: int, seccion_id: Optional[int] = None) -> List[Estudiante]:
         """Estudiantes del curso (o solo de la sección) ordenados por nombre completo."""
-        query = self._de_curso(self.db.query(Estudiante), curso_id, seccion_id)
-        return query.order_by(Estudiante.nombre_completo).all()
+        return ordenar_por_nombre(self._de_curso(self.db.query(Estudiante), curso_id, seccion_id).all())
 
     def ids_de_curso(self, curso_id: int, seccion_id: Optional[int] = None) -> List[int]:
         return [eid for (eid,) in self._de_curso(self.db.query(Estudiante.id), curso_id, seccion_id).all()]
@@ -57,7 +58,13 @@ class EstudianteRepository:
             query = query.filter(Seccion.activo == True)  # noqa: E712
         if curso_id is not None:
             query = query.filter(Curso.id == curso_id)
-        return query.order_by(Curso.nombre, Seccion.nombre, Estudiante.nombre_completo).all()
+        # Asignatura y sección (no cifradas) en SQL; dentro de cada sección, por nombre
+        filas = query.order_by(Curso.nombre, Seccion.nombre, Curso.id, Seccion.id).all()
+        return [
+            fila
+            for _, grupo in groupby(filas, key=lambda f: (f[2].id, f[1].id))
+            for fila in sorted(grupo, key=lambda f: clave_estudiante(f[0]))
+        ]
 
     def nombres_por_id(self, ids: Iterable[int]) -> Dict[int, str]:
         return dict(

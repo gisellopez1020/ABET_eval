@@ -53,7 +53,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 Guárdala para el paso 6. No la subas al repositorio y usa una distinta
 en cada entorno (desarrollo, producción).
 
-## 5. Generar `TOKEN_ENCRYPTION_KEY` (obligatorio con `SKIP_AUTH=false`)
+## 5. Generar `TOKEN_ENCRYPTION_KEY` y `DATA_ENCRYPTION_KEY` (obligatorias con `SKIP_AUTH=false`)
 
 El backend guarda en la base de datos el `refresh_token` de Google Drive de cada
 docente, cifrado con `TOKEN_ENCRYPTION_KEY`, para que la sincronización con Drive
@@ -81,6 +81,19 @@ error, pero cada docente tendrá que volver a iniciar sesión con Google para qu
 Drive funcione. Por lo mismo, un respaldo de la base restaurado en otro computador
 necesita la misma clave (o que los docentes vuelvan a iniciar sesión).
 
+### `DATA_ENCRYPTION_KEY` (también obligatoria con `SKIP_AUTH=false`)
+
+Con el mismo comando genera **otra** clave, distinta de la anterior y de
+`JWT_SECRET_KEY`: con ella se cifran en la base de datos el nombre, el código y el
+correo de cada estudiante (RNF-14). Con `SKIP_AUTH=false` el backend no arranca sin
+ella, ni si es igual a alguna de las otras dos.
+
+> **Esta clave no se puede perder.** A diferencia de `TOKEN_ENCRYPTION_KEY`, si
+> `DATA_ENCRYPTION_KEY` cambia o se pierde, **los datos de los estudiantes no se
+> pueden recuperar**, ni siquiera desde un respaldo. Guarda una copia fuera del
+> computador (por ejemplo, en el gestor de contraseñas de la universidad). Detalles,
+> respaldos y qué queda cifrado: [DESPLIEGUE_PRODUCCION.md](./DESPLIEGUE_PRODUCCION.md#6-cifrado-en-reposo-rnf-14).
+
 ## 6. Variables de entorno del backend
 
 Copia estos valores al archivo `.env`:
@@ -93,8 +106,9 @@ GOOGLE_REDIRECT_URI=http://localhost:8000/auth/callback
 # Clave generada en el paso 4 (mínimo 32 caracteres)
 JWT_SECRET_KEY=<clave-generada-en-el-paso-4>
 
-# Clave generada en el paso 5 (clave Fernet de 44 caracteres)
+# Claves generadas en el paso 5 (claves Fernet de 44 caracteres, distintas entre sí)
 TOKEN_ENCRYPTION_KEY=<clave-generada-en-el-paso-5>
+DATA_ENCRYPTION_KEY=<otra-clave-generada-en-el-paso-5>
 
 # URL del frontend a la que se redirige tras un login exitoso
 FRONTEND_URL=http://localhost:5173
@@ -112,7 +126,9 @@ SKIP_AUTH=false
 Si al arrancar el backend falla con un error sobre `JWT_SECRET_KEY`, vuelve al
 paso 4: la clave no está configurada o no es lo bastante larga. Si es sobre
 `TOKEN_ENCRYPTION_KEY`, vuelve al paso 5: falta la clave, sigue en `PLACEHOLDER` o
-quedó incompleta al copiarla. Si el error es
+quedó incompleta al copiarla; lo mismo si es sobre `DATA_ENCRYPTION_KEY`. Si el
+backend dice que `DATA_ENCRYPTION_KEY` **no es la clave con que se cifraron** los
+datos, la clave cambió: configura la original (sin ella esos datos no se recuperan). Si el error es
 sobre `FRONTEND_ORIGINS`, la lista está vacía o contiene `*`. Si el error empieza con
 `SKIP_AUTH=true desactiva el login`, quedó `SKIP_AUTH=true` en un `.env` con URLs de un
 dominio real: cámbialo a `SKIP_AUTH=false`.
