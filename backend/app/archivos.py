@@ -54,7 +54,7 @@ MENSAJE_DESCOMPRIMIDO_GRANDE = (
 
 
 def _demasiado_grande(detalle: str = MENSAJE_DEMASIADO_GRANDE) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=detalle)
+    return HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=detalle)
 
 
 def _verificar_descomprimido(contenido: bytes) -> None:
@@ -140,7 +140,7 @@ async def _responder_413(send: Send) -> None:
     cuerpo = json.dumps({"detail": MENSAJE_DEMASIADO_GRANDE}).encode()
     await send({
         "type": "http.response.start",
-        "status": status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        "status": status.HTTP_413_CONTENT_TOO_LARGE,
         "headers": [
             (b"content-type", b"application/json"),
             (b"content-length", str(len(cuerpo)).encode()),

@@ -17,7 +17,7 @@ CODIGOS: dict[type[ErrorDeNegocio], int] = {
     NoEncontrado: status.HTTP_404_NOT_FOUND,
     SinPermiso: status.HTTP_403_FORBIDDEN,
     Conflicto: status.HTTP_409_CONFLICT,
-    DatosInvalidos: status.HTTP_422_UNPROCESSABLE_ENTITY,
+    DatosInvalidos: status.HTTP_422_UNPROCESSABLE_CONTENT,
     SolicitudInvalida: status.HTTP_400_BAD_REQUEST,
 }
 
