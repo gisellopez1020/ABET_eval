@@ -8,6 +8,7 @@ basta registrar las categorías: cualquier subclase usa el código de la suya.
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.utils.cifrado import DatosIlegibles
 from app.services.errores import (
     Conflicto, DatosInvalidos, ErrorDeNegocio, NoEncontrado, SinPermiso, SolicitudInvalida,
 )
@@ -24,6 +25,9 @@ CODIGOS: dict[type[ErrorDeNegocio], int] = {
 def registrar_manejadores(app: FastAPI) -> None:
     for categoria, codigo in CODIGOS.items():
         app.add_exception_handler(categoria, _manejador(codigo))
+    # Datos del estudiante cifrados con otra clave (o sin clave): 503 con un mensaje
+    # claro en vez de un 500 o de mostrar el texto cifrado como si fuera el nombre
+    app.add_exception_handler(DatosIlegibles, _manejador(status.HTTP_503_SERVICE_UNAVAILABLE))
 
 
 def _manejador(codigo: int):

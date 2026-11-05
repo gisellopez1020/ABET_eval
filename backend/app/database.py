@@ -5,7 +5,9 @@ import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://abet:abet_pass@localhost:5432/abet_eval")
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+# hide_parameters: los errores de SQL (y sus trazas en los logs) no muestran los valores
+# de la consulta, que pueden ser datos personales del estudiante (RNF-14)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, hide_parameters=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
