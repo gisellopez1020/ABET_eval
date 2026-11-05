@@ -60,6 +60,19 @@ def _atributos_cookie_sesion() -> dict:
     }
 
 
+def poner_cookie_sesion(response: Response, token: str, max_age: int) -> None:
+    """Cookie de sesión del callback y de cada renovación (RNF-16): mismos atributos.
+
+    max_age es lo que le queda al JWT, para que el navegador la descarte cuando vence.
+    """
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        max_age=max_age,
+        **_atributos_cookie_sesion(),
+    )
+
+
 @router.get("/login", summary="Redirige a la pantalla de consentimiento de Google")
 def login():
     """Inicia el flujo OAuth 2.0 Authorization Code redirigiendo a Google."""
@@ -112,12 +125,8 @@ async def callback(
 
     app_token = create_access_token(usuario["email"], usuario["nombre"])
     response = RedirectResponse(url=f"{settings.frontend_url}/auth/callback")
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=app_token,
-        max_age=settings.jwt_expire_minutes * 60,
-        **_atributos_cookie_sesion(),
-    )
+    # Recién emitido, el JWT vence a los SESION_INACTIVIDAD_MINUTOS (el tope es mayor o igual)
+    poner_cookie_sesion(response, app_token, settings.sesion_inactividad_minutos * 60)
     response.delete_cookie(
         STATE_COOKIE_NAME, path=_ruta_cookie_state(),
         secure=cookie_segura(settings.google_redirect_uri), httponly=True, samesite="lax",

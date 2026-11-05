@@ -1,11 +1,24 @@
+import logging
+from typing import Optional
+
 from cryptography.fernet import Fernet
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 from app.utils.claves import clave_maestra_valida
 from app.utils.urls import es_host_local, puede_ser_http
 
+logger = logging.getLogger(__name__)
+
 JWT_SECRET_MIN_LENGTH = 32
+# Contraseña de PostgreSQL con SKIP_AUTH=false
+POSTGRES_PASSWORD_MIN_LENGTH = 12
+# Valores públicos (de .env.example y los docker-compose) que no sirven como contraseña
+POSTGRES_PASSWORDS_PUBLICAS = frozenset({"abet_pass", "PLACEHOLDER"})
+# Tope razonable del tope absoluto de la sesión
+SESION_DURACION_MAXIMA_LIMITE_MINUTOS = 7 * 24 * 60
 # Único algoritmo con que se firman y aceptan los JWT de sesión (HMAC con JWT_SECRET_KEY)
 ALGORITMO_JWT = "HS256"
 
@@ -17,7 +30,15 @@ class Settings(BaseSettings):
     google_redirect_uri: str = "http://localhost:8000/auth/callback"
     jwt_secret_key: str = "PLACEHOLDER"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 60 * 24
+    # Obsoleta desde 1.0.0 (la reemplazan las dos siguientes): se acepta para que un
+    # .env antiguo no impida arrancar, pero se ignora con un aviso.
+    jwt_expire_minutes: Optional[int] = None
+    # RNF-16: la sesión vence tras este tiempo sin peticiones autenticadas (ventana
+    # deslizante: cada petición la renueva, a lo sumo cada 15 minutos)...
+    sesion_inactividad_minutos: int = 8 * 60
+    # ...y nunca dura más que esto desde el login, aunque haya actividad continua
+    # (una cookie robada no se puede mantener viva indefinidamente)
+    sesion_duracion_maxima_minutos: int = 24 * 60
     # Clave Fernet con que se cifra el refresh_token de Google Drive en la base de datos
     token_encryption_key: str = "PLACEHOLDER"
     # Clave maestra con que se cifran los datos personales del estudiante (RNF-14).
@@ -148,6 +169,79 @@ class Settings(BaseSettings):
                 "JWT_SECRET_KEY: cada clave protege una cosa distinta y filtrar una no "
                 "debe exponer las demás. Genera otra con: "
                 'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validar_database_password(self) -> "Settings":
+        """Con login real (SKIP_AUTH=false) la base no puede usar la contraseña de ejemplo.
+
+        'abet_pass' está en .env.example y en los docker-compose: cualquiera que llegue
+        al puerto de PostgreSQL entraría con ella. Solo se mira PostgreSQL (SQLite, el
+        de las pruebas, no tiene contraseña). Va después de los validadores de claves
+        para no tapar sus mensajes.
+        """
+        if self.skip_auth:
+            return self
+        try:
+            url = make_url(self.database_url)
+        except ArgumentError:
+            # Una URL mal escrita la rechaza SQLAlchemy al conectar, con su propio error
+            return self
+        if not url.drivername.startswith("postgresql"):
+            return self
+        contrasena = url.password or ""
+        if (
+            contrasena.strip() in POSTGRES_PASSWORDS_PUBLICAS
+            or len(contrasena) < POSTGRES_PASSWORD_MIN_LENGTH
+        ):
+            raise ValueError(
+                "La contraseña de PostgreSQL (la de DATABASE_URL, que docker compose arma "
+                "con POSTGRES_PASSWORD) es la de ejemplo 'abet_pass', 'PLACEHOLDER', está "
+                f"vacía o tiene menos de {POSTGRES_PASSWORD_MIN_LENGTH} caracteres. Con "
+                "SKIP_AUTH=false no se permite: cualquiera que llegue a la base entraría "
+                "con ella. Qué hacer: "
+                "(1) genera una con: "
+                'python -c "import secrets; print(secrets.token_urlsafe(18))" ; '
+                "(2) si la base ya existe, cámbiala también DENTRO de PostgreSQL (el "
+                "volumen guarda la contraseña inicial y no cambia sola): "
+                "docker compose -f docker-compose.prod.yml exec postgres psql -U abet "
+                "-d abet_eval -c '\\password abet' (abet es POSTGRES_USER; pide la nueva "
+                "dos veces) ; "
+                "(3) escríbela en POSTGRES_PASSWORD del .env (o en DATABASE_URL si la "
+                "defines) y vuelve a levantar con docker compose ... up -d. "
+                "Paso a paso y respaldo previo: DESPLIEGUE_PRODUCCION.md, sección "
+                "'Contraseña de PostgreSQL'."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validar_duracion_sesion(self) -> "Settings":
+        """RNF-16: inactividad y tope absoluto de la sesión, en minutos."""
+        inactividad = self.sesion_inactividad_minutos
+        tope = self.sesion_duracion_maxima_minutos
+        if inactividad <= 0 or tope <= 0:
+            raise ValueError(
+                "SESION_INACTIVIDAD_MINUTOS y SESION_DURACION_MAXIMA_MINUTOS deben ser "
+                "mayores que 0 (por defecto 480 y 1440: 8 h sin actividad, 24 h como máximo)."
+            )
+        if tope < inactividad:
+            raise ValueError(
+                "SESION_DURACION_MAXIMA_MINUTOS no puede ser menor que "
+                "SESION_INACTIVIDAD_MINUTOS: el tope absoluto de la sesión debe ser al "
+                "menos el tiempo de inactividad (por defecto 1440 y 480)."
+            )
+        if tope > SESION_DURACION_MAXIMA_LIMITE_MINUTOS:
+            raise ValueError(
+                "SESION_DURACION_MAXIMA_MINUTOS no puede pasar de "
+                f"{SESION_DURACION_MAXIMA_LIMITE_MINUTOS} (7 días): una cookie robada "
+                "seguiría sirviendo todo ese tiempo."
+            )
+        if self.jwt_expire_minutes is not None:
+            logger.warning(
+                "JWT_EXPIRE_MINUTES está obsoleta y se ignora: la sesión usa "
+                "SESION_INACTIVIDAD_MINUTOS (%s) y SESION_DURACION_MAXIMA_MINUTOS (%s).",
+                inactividad, tope,
             )
         return self
 
