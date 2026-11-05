@@ -7,7 +7,8 @@ para crear las credenciales de Google y las claves, [SETUP_GOOGLE.md](./SETUP_GO
 ABET Eval son tres contenedores: `postgres` (base de datos), `backend` (API en
 FastAPI) y `frontend` (nginx con la app compilada, que además reenvía `/api/` al
 backend). En producción **toda la comunicación entre el navegador y la app va por
-HTTPS con TLS 1.2 o 1.3** (RNF-13). Hay dos formas de lograrlo:
+HTTPS con TLS 1.2 o 1.3** (RNF-13), y los datos personales de los estudiantes se
+guardan cifrados en la base (RNF-14, sección 6). Para HTTPS hay dos formas:
 
 | | Variante A: TLS en la app | Variante B: TLS en el proxy de la universidad |
 |---|---|---|
@@ -36,6 +37,11 @@ no cambia (el profesor lo sigue usando en local por http).
 - **Puertos**: variante A, 80 y 443 abiertos hacia internet o la red de la
   universidad. Variante B, `PUERTO_PROXY` abierto solo para el proxy. El 8000
   (backend) y el 5432 (base de datos) **no** se abren.
+- **Disco cifrado** (LUKS, BitLocker o el del proveedor) donde vivan el volumen de la
+  base de datos y los respaldos: sin él, las calificaciones quedan en claro en el
+  disco (sección 6).
+- Un **lugar seguro fuera del servidor** para `DATA_ENCRYPTION_KEY` y la frase de los
+  respaldos.
 
 ## 2. Variables de entorno
 
@@ -55,9 +61,11 @@ GOOGLE_CLIENT_ID=<id>.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=<secreto>
 GOOGLE_REDIRECT_URI=https://abet.uao.edu.co/api/auth/callback
 
-# Claves (SETUP_GOOGLE.md, pasos 4 y 5)
+# Claves (SETUP_GOOGLE.md, pasos 4 y 5), las tres distintas
 JWT_SECRET_KEY=<clave>
 TOKEN_ENCRYPTION_KEY=<clave Fernet>
+# Cifra los datos de los estudiantes. SI SE PIERDE, ESOS DATOS NO SE RECUPERAN (sección 6)
+DATA_ENCRYPTION_KEY=<otra clave Fernet>
 
 # El dominio, con https (no hace falta otro origen: frontend y API comparten dominio)
 FRONTEND_URL=https://abet.uao.edu.co
@@ -100,7 +108,7 @@ Variables opcionales de los dos archivos:
      -f docker-compose.prod.yml -f docker-compose.https.yml up -d --build
    ```
 
-3. Verifica (sección 6).
+3. Verifica (sección 8).
 
 Qué configura `frontend/nginx-https.conf`:
 
@@ -173,7 +181,132 @@ servidor**, sí hay que activarlo: configura SSL en PostgreSQL (certificado y
 `ssl=on`) y agrega `?sslmode=require` (o `verify-full`) al final de `DATABASE_URL`.
 No hace falta cambiar código.
 
-## 6. Verificación
+## 6. Cifrado en reposo (RNF-14)
+
+> ### ⚠️ Si se pierde `DATA_ENCRYPTION_KEY`, los datos de los estudiantes no se pueden recuperar
+>
+> El nombre, el código y el correo de cada estudiante se guardan cifrados con
+> `DATA_ENCRYPTION_KEY`. **Sin esa clave exacta no hay forma de leerlos**, ni desde la
+> base ni desde un respaldo, y nadie (tampoco el equipo que hizo la app) puede
+> recuperarlos.
+>
+> - Guarda una copia de la clave **fuera del servidor**, en el gestor de contraseñas o
+>   la bóveda de secretos de la universidad, con al menos dos personas con acceso.
+> - **No la cambies.** La app no rota la clave: con una clave nueva, el backend no
+>   arranca porque no puede leer los datos ya cifrados.
+> - Un respaldo solo sirve junto con la clave con que se hizo. Guárdalos por separado:
+>   el respaldo en un lugar y la clave en otro.
+
+**Qué cifra la app.** En la tabla `estudiantes`: `nombre_completo`, `codigo_estudiante`
+y `email`. Se cifran con Fernet (AES-128-CBC más HMAC-SHA256 para detectar
+alteraciones), con una subclave que se deriva de `DATA_ENCRYPTION_KEY` con
+HKDF-SHA256. Cada valor se guarda como `enc:v1:<texto cifrado>` y tiene su propio
+vector aleatorio, así que dos estudiantes con el mismo nombre no se pueden reconocer
+en la base. Quien lea la base o un respaldo sin la clave ve solo texto cifrado.
+
+**Qué NO cifra la app.** Queda en claro en PostgreSQL:
+
+- Las **calificaciones**: valores de los criterios y notas calculadas. Se usan en las
+  sumas y promedios de los reportes y tienen restricciones en la base.
+- Nombres de asignaturas, secciones, actividades, rúbricas y equipos; la
+  retroalimentación guardada; el correo de los docentes.
+- La relación entre cada calificación y el `id` interno del estudiante (sin la clave no
+  se sabe de quién es, pero sí cuántas notas tiene cada id).
+
+Fuera de la base:
+
+- En memoria del backend mientras atiende una petición.
+- En lo que se descarga: Excel y PDF en el computador del docente.
+- En el **Excel de detalle**, que se sube al Google Drive del docente con nombres y
+  códigos (por HTTPS, a su cuenta institucional).
+
+Gemini **no** recibe nombres, códigos ni correos de los estudiantes; solo los textos de
+la rúbrica.
+
+**Cifrado del disco: requisito de TI, no lo garantiza la app.** Las calificaciones y el
+resto de los datos de la lista anterior solo quedan protegidos en reposo si TI cifra:
+
+- el disco o volumen donde Docker guarda el volumen `abet-eval-prod_postgres_data`
+  (por defecto en `/var/lib/docker/volumes/`): LUKS/dm-crypt en Linux, BitLocker en
+  Windows, o el cifrado de disco del proveedor si es una máquina virtual;
+- el disco o el almacenamiento donde se guardan los respaldos (sección 7), además del
+  cifrado propio de cada respaldo.
+
+La app no puede comprobar que eso esté hecho.
+
+**Cómo arranca.** En cada arranque, después de las migraciones, el backend ejecuta
+`python -m app.verificar_cifrado`:
+
+- Si hay datos cifrados y `DATA_ENCRYPTION_KEY` falta o no es la clave con que se
+  cifraron, **el backend no arranca** y el log lo dice. Nunca muestra datos
+  ilegibles ni un error 500. Si con el backend ya en marcha apareciera un dato que no
+  se puede descifrar (p. ej., se restauró debajo una base de otra instalación), las
+  pantallas con estudiantes responden 503 con ese mismo mensaje.
+- Si encuentra valores en claro (por ejemplo, una instalación que empezó sin clave),
+  los cifra.
+- Nunca escribe en el log nombres, códigos, correos ni claves; solo cantidades.
+
+Con `SKIP_AUTH=false` la clave es obligatoria. Con `SKIP_AUTH=true` (solo la
+instalación local de un profesor) es opcional: sin ella los datos se guardan **sin
+cifrar** y el arranque lo avisa.
+
+**Limitación:** como cada valor se cifra con un vector aleatorio, la base no puede
+buscar, filtrar ni ordenar por nombre, código o correo. La app ordena los nombres en
+Python, en orden alfabético español: sin distinguir tildes ni mayúsculas, y con la Ñ
+entre la N y la O. La app no tiene hoy búsquedas ni detección de duplicados en la base
+por esos campos.
+
+## 7. Respaldos y actualizaciones
+
+**Haz un respaldo antes de cada actualización.** Las migraciones corren solas al
+arrancar. La que introduce el cifrado (0012) cifra todos los estudiantes existentes
+en una sola transacción: si algo falla, la base queda como estaba. Aun así, respalda
+antes. Antes de actualizar a esta versión:
+
+1. Genera `DATA_ENCRYPTION_KEY` (ver [SETUP_GOOGLE.md](./SETUP_GOOGLE.md), paso 5),
+   guárdala fuera del servidor y agrégala a `.env.produccion`.
+2. Haz el respaldo (abajo).
+3. Actualiza y arranca. Con `SKIP_AUTH=false` y sin la clave, la migración **no corre**
+   y el backend no arranca: la base queda intacta en la versión anterior.
+
+**Crear un respaldo cifrado.** `pg_dump` guarda los datos del estudiante tal como están
+en la base, es decir cifrados, pero **las calificaciones y lo demás van en claro**.
+Cualquiera con el archivo puede leerlos con `pg_restore`, sin ninguna clave. Por eso
+el respaldo también se cifra, con una frase propia (no con `DATA_ENCRYPTION_KEY`).
+Probado con GnuPG 2.4:
+
+```sh
+# Una sola vez: frase del respaldo, guardada fuera del servidor
+openssl rand -base64 32 > /root/frase-respaldo && chmod 600 /root/frase-respaldo
+
+COMPOSE="docker compose --env-file .env.produccion -f docker-compose.prod.yml -f docker-compose.https.yml"
+$COMPOSE exec -T postgres pg_dump -U abet -d abet_eval -Fc \
+  | gpg --batch --pinentry-mode loopback --passphrase-file /root/frase-respaldo \
+        --symmetric --cipher-algo AES256 -o "abet-$(date +%F).dump.gpg"
+```
+
+Con [age](https://age-encryption.org) sería `... | age -p -o abet-$(date +%F).dump.age`
+(o `age -r <clave pública>` para no guardar ninguna frase en el servidor). No se probó
+en este proyecto.
+
+**Restaurar** (en una base vacía; si es otro servidor, con la misma `DATA_ENCRYPTION_KEY`):
+
+```sh
+$COMPOSE up -d postgres
+gpg --batch --pinentry-mode loopback --passphrase-file /root/frase-respaldo \
+    --decrypt abet-AAAA-MM-DD.dump.gpg \
+  | $COMPOSE exec -T postgres pg_restore -U abet -d abet_eval --no-owner
+$COMPOSE up -d
+```
+
+Sin la `DATA_ENCRYPTION_KEY` con que se hizo el respaldo, el backend no arranca sobre
+la base restaurada y dice por qué. **Prueba la restauración** de vez en cuando en una
+máquina aparte: un respaldo que nunca se restauró no está comprobado.
+
+**Volver a la versión anterior a la 0012** (descifra los datos y exige la clave):
+`$COMPOSE run --rm backend alembic downgrade 0011`.
+
+## 8. Verificación
 
 Con la variante A en marcha, desde otra máquina (cambia el dominio):
 
@@ -197,7 +330,7 @@ curl -m 5 http://abet.uao.edu.co:8000/health
 Después, inicia sesión con una cuenta institucional y en las herramientas del
 navegador comprueba que la cookie `session` tiene `Secure` y `HttpOnly`.
 
-## 7. Probar sin certificado real (solo pruebas)
+## 9. Probar sin certificado real (solo pruebas)
 
 `scripts/generar-cert-prueba.ps1` (Windows) o `scripts/generar-cert-prueba.sh`
 (Linux) crean en `certs/` un certificado **autofirmado, válido 30 días, solo para
@@ -212,7 +345,7 @@ FRONTEND_ORIGINS=https://localhost
 
 y registra esa URI en Google Cloud si quieres completar el login.
 
-## 8. Notas
+## 10. Notas
 
 - **Swagger (`/docs`)** queda desactivado en las dos variantes (`API_DOCS=false`):
   detrás del prefijo `/api` no carga. En la instalación local sigue en

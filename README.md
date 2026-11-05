@@ -37,6 +37,8 @@ Usa los mismos puertos que la instalación de desarrollo (5173 y 8000): no se pu
 
 Para instalar la app en un servidor de la universidad, con HTTPS y login real, ver [DESPLIEGUE_PRODUCCION.md](./DESPLIEGUE_PRODUCCION.md).
 
+El nombre, el código y el correo de los estudiantes se guardan cifrados si configuras `DATA_ENCRYPTION_KEY` en el `.env` (obligatoria con `SKIP_AUTH=false`; ver [SETUP_GOOGLE.md](./SETUP_GOOGLE.md), paso 5). Sin ella se guardan sin cifrar y el backend lo avisa al arrancar. **Si esa clave se pierde, esos datos no se pueden recuperar.**
+
 ## Instalación en 6 pasos
 
 Para programar: monta el código en los contenedores y recarga los cambios al guardar.
