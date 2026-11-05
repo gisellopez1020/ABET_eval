@@ -13,6 +13,7 @@ RNF-14: cifrado en reposo del nombre, el código y el correo del estudiante.
 """
 import io
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -37,7 +38,10 @@ from tests.test_exportar_estudiantes import _curso, _est
 from tests.test_reporte_service import ctx, drive  # noqa: F401 (fixtures)
 
 EMAIL = MOCK_USER["email"]
-RAIZ = Path(__file__).resolve().parents[2]
+# Raíz del repo (.env.example y los docker-compose). En el contenedor de desarrollo
+# solo está montado ./backend en /app: docker-compose.yml monta la raíz en /repo (solo
+# lectura) y la indica en ABET_RAIZ_REPO.
+RAIZ = Path(os.environ.get("ABET_RAIZ_REPO") or Path(__file__).resolve().parents[2])
 NOMBRE, CODIGO, CORREO = "MUÑOZ PÉREZ JOSÉ ÁNGEL", "2210456", "jose.munoz@uao.edu.co"
 
 

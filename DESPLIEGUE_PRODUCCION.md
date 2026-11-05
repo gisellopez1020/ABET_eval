@@ -53,7 +53,11 @@ Usa un archivo propio del servidor, por ejemplo `.env.produccion` (ignorado por 
 # Login real: obligatorio en producción
 SKIP_AUTH=false
 
-# Base de datos: cambia la contraseña por defecto
+# Base de datos: OBLIGATORIA. Con SKIP_AUTH=false el backend no arranca con abet_pass,
+# PLACEHOLDER o menos de 12 caracteres. Genérala con (sin caracteres que rompan la URL):
+#   python -c "import secrets; print(secrets.token_urlsafe(18))"
+# Defínela ANTES del primer `up`: el volumen de PostgreSQL guarda la contraseña inicial
+# (para cambiarla después, sección 11)
 POSTGRES_PASSWORD=<contraseña larga y aleatoria>
 
 # Google OAuth (SETUP_GOOGLE.md, pasos 1 a 3)
@@ -67,7 +71,9 @@ TOKEN_ENCRYPTION_KEY=<clave Fernet>
 # Cifra los datos de los estudiantes. SI SE PIERDE, ESOS DATOS NO SE RECUPERAN (sección 6)
 DATA_ENCRYPTION_KEY=<otra clave Fernet>
 
-# El dominio, con https (no hace falta otro origen: frontend y API comparten dominio)
+# El dominio, con https (no hace falta otro origen: frontend y API comparten dominio).
+# En la variante A, docker compose no arranca sin FRONTEND_URL: el healthcheck de nginx
+# la usa para verificar el certificado (sección 13)
 FRONTEND_URL=https://abet.uao.edu.co
 FRONTEND_ORIGINS=https://abet.uao.edu.co
 
@@ -92,6 +98,8 @@ Variables opcionales de los dos archivos:
 | `PUERTO_HTTP` / `PUERTO_HTTPS` | `80` / `443` | Variante A. |
 | `PUERTO_PROXY` | `8080` | Variante B. |
 | `PROXY_CONFIANZA` | (obligatoria en B) | IP o red CIDR del proxy de la universidad. |
+| `SESION_INACTIVIDAD_MINUTOS` | `480` | RNF-16: la sesión vence tras este tiempo sin actividad (sección 12). |
+| `SESION_DURACION_MAXIMA_MINUTOS` | `1440` | RNF-16: tope absoluto desde el login; no puede ser menor que el anterior ni pasar de 7 días. |
 
 ## 3. Variante A: TLS en la app
 
@@ -259,6 +267,15 @@ por esos campos.
 
 ## 7. Respaldos y actualizaciones
 
+**Actualizar a la 1.0.0** (además de lo de la 0012, abajo):
+
+- **Cada docente inicia sesión una vez más**: las sesiones emitidas antes de la 1.0.0
+  no traen el tope absoluto de RNF-16 y se rechazan (sección 12).
+- Si la base usa la contraseña de ejemplo `abet_pass`, cámbiala **antes** de actualizar
+  (sección 11): con `SKIP_AUTH=false` el backend nuevo no arranca con ella.
+- Reconstruye las imágenes (`up -d --build`): Python 3.13, usuario sin privilegios.
+- `JWT_EXPIRE_MINUTES` se ignora; si la tenías, bórrala (sección 12).
+
 **Haz un respaldo antes de cada actualización.** Las migraciones corren solas al
 arrancar. La que introduce el cifrado (0012) cifra todos los estudiantes existentes
 en una sola transacción: si algo falla, la base queda como estaba. Aun así, respalda
@@ -326,6 +343,15 @@ curl -I https://abet.uao.edu.co/
 curl -s -o /dev/null -D - https://abet.uao.edu.co/api/auth/login | grep -i set-cookie
 # El backend no está publicado: debe fallar la conexión
 curl -m 5 http://abet.uao.edu.co:8000/health
+# Límite de intentos: de 15 logins seguidos, los primeros ~11 dan 307 y el resto 429
+for i in $(seq 1 15); do curl -s -o /dev/null -w "%{http_code} " https://abet.uao.edu.co/api/auth/login; done; echo
+```
+
+En el servidor, los tres contenedores deben estar `healthy` (sección 13):
+
+```sh
+docker compose --env-file .env.produccion -f docker-compose.prod.yml \
+  -f docker-compose.https.yml ps
 ```
 
 Después, inicia sesión con una cuenta institucional y en las herramientas del
@@ -365,3 +391,211 @@ y registra esa URI en Google Cloud si quieres completar el login.
   de la CSP. La alternativa mantenida, `html2canvas-pro` (misma API), obliga a volver a
   validar el ajuste de la leyenda (`conTextoAlineado`, `frontend/src/pages/Reports/pdf.ts`)
   y la CSP. Revisar si aparece un aviso de seguridad para html2canvas.
+
+## 11. Contraseña de PostgreSQL
+
+Con `SKIP_AUTH=false` el backend **no arranca** si la contraseña de `DATABASE_URL` (la
+que docker compose arma con `POSTGRES_PASSWORD`) es `abet_pass`, `PLACEHOLDER`, está
+vacía o tiene menos de 12 caracteres. El log dice qué hacer.
+
+**Instalación nueva:** define `POSTGRES_PASSWORD` antes del primer `up`. Genera una sin
+caracteres que rompan la URL de conexión (`@`, `/`, `:`):
+
+```sh
+python -c "import secrets; print(secrets.token_urlsafe(18))"
+```
+
+En Windows, sin Python (PowerShell 5.1 o 7):
+
+```powershell
+$b = New-Object byte[] 18; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')
+```
+
+**Instalación existente:** el volumen de PostgreSQL guarda la contraseña con que se
+creó y **no cambia sola** al editar `POSTGRES_PASSWORD`: hay que cambiarla también
+dentro de la base. Probado con PostgreSQL 16.15 sobre una base con datos:
+
+```sh
+COMPOSE="docker compose --env-file .env.produccion -f docker-compose.prod.yml -f docker-compose.https.yml"
+
+# 1. Respaldo (sección 7). Si el backend está en reinicio por el error, postgres sigue arriba
+$COMPOSE up -d postgres
+
+# 2. Cambiar la contraseña dentro de PostgreSQL. Pide la nueva dos veces y no la deja
+#    en el historial del shell. No pide la anterior: dentro del contenedor, psql entra
+#    por el socket local. Se guarda como SCRAM-SHA-256.
+$COMPOSE exec postgres psql -U abet -d abet_eval -c '\password abet'
+
+# 3. Poner la misma en POSTGRES_PASSWORD de .env.produccion. Si además defines
+#    DATABASE_URL a mano, cámbiala ahí también (tiene prioridad sobre POSTGRES_PASSWORD).
+
+# 4. Levantar: el backend se recrea con la contraseña nueva
+$COMPOSE up -d
+$COMPOSE ps          # los tres "healthy"
+```
+
+`abet` es el `POSTGRES_USER` por defecto y `abet_eval` el `POSTGRES_DB`. La contraseña
+anterior deja de funcionar en cuanto termina el paso 2: haz los pasos 2 a 4 seguidos.
+Si te equivocas al escribirla, repite el paso 2.
+
+## 12. Sesión (RNF-16)
+
+La sesión **vence tras 8 horas sin actividad** y **nunca dura más de 24 horas** desde
+el login, aunque haya actividad continua. Configurable con `SESION_INACTIVIDAD_MINUTOS`
+(480) y `SESION_DURACION_MAXIMA_MINUTOS` (1440); el backend no arranca si el tope es
+menor que la inactividad, si alguno es 0 o negativo, o si el tope pasa de 7 días.
+
+Cómo funciona:
+
+- El JWT de la cookie lleva `iat` (cuándo se emitió), `exp` (vencimiento) y `ses_max`
+  (el tope, fijado en el login). `exp` es `iat` + la inactividad, sin pasar de `ses_max`.
+- Cada petición autenticada **renueva** la cookie si el token tiene al menos 15 minutos:
+  `iat` pasa a ser ahora y `exp`, ahora + 8 h (sin pasar del tope). Por eso la sesión
+  vence **entre 7 h 45 min y 8 h** después de la última petición. No se renueva en cada
+  respuesta: el frontend consulta `/auth/me` a menudo.
+- La renovación conserva el token CSRF y el tope. `ses_max` está firmado y se copia tal
+  cual: no hay forma de extenderlo.
+- Una sesión vencida responde 401 con el mensaje genérico de siempre (el motivo solo va
+  al log del backend) y el frontend lleva al login.
+- `logout` y `SKIP_AUTH=true` no cambian.
+
+**Al actualizar a la 1.0.0**, las sesiones anteriores no traen `ses_max` y se rechazan:
+**cada docente inicia sesión una vez más**. `JWT_EXPIRE_MINUTES` queda obsoleta: se
+acepta para que un `.env` antiguo no impida arrancar, pero se ignora con un aviso.
+
+Limitación: el JWT no tiene estado en el servidor. Cerrar sesión borra la cookie, pero
+una copia robada sirve hasta su vencimiento (como mucho 8 h sin uso o 24 h en total).
+
+## 13. Contenedores
+
+| Contenedor | Usuario | Healthcheck |
+|---|---|---|
+| `postgres` | `postgres` (UID 70; la imagen baja de root al arrancar) | `pg_isready` |
+| `backend` | `app`, **UID/GID 10001**, sin privilegios. El código es de root y solo de lectura para la app | `GET /health` con Python (la imagen no trae curl), `start_period` de 60 s por las migraciones |
+| `frontend` | nginx: proceso maestro root (lee el certificado y abre los puertos 80/443), workers como `nginx` | Local y variante B: `/nginx-salud` por http. Variante A: por **https en el 443, verificando el certificado** (abajo) |
+
+Los tres llevan `security_opt: no-new-privileges:true`: ningún proceso puede ganar
+privilegios con un binario setuid. Se comprobó que los tres arrancan así
+(`grep NoNewPrivs /proc/1/status` da `1`).
+
+`/nginx-salud` solo responde a la IP `127.0.0.1` de la conexión (desde dentro del
+contenedor); desde fuera da 404. Evalúa nginx, no el backend: si el backend cae, nginx
+sigue sirviendo la app. El frontend solo espera a que el backend **exista** (no a que
+esté sano), para que un backend lento no impida ver la app.
+
+**Healthcheck de la variante A.** `curl` (incluido en la imagen de nginx) se conecta al
+443 con el nombre de `FRONTEND_URL` (`--resolve NOMBRE:443:127.0.0.1`) y verifica el
+certificado contra `certs/fullchain.pem`, sin desactivar la verificación:
+
+- falla si el nombre no coincide con el certificado o si **el certificado venció**: el
+  contenedor queda `unhealthy` (probado: con un certificado vencido, a los 74 s), aunque
+  nginx sigue sirviendo;
+- sirve igual con el autofirmado de prueba y con uno de una autoridad (probado con una
+  cadena raíz → intermedia → servidor: curl acepta como ancla el intermedio del archivo);
+- **no** comprueba que el navegador confíe en la autoridad. Eso se vigila desde fuera
+  (sección 15).
+
+**La imagen de producción del backend** (`backend/Dockerfile`, etapa `prod`) no lleva
+pruebas, pytest, setuptools ni secretos. `.dockerignore` excluye `.env*`, `*.pem`,
+`certs/`, `.git` y las pruebas en las dos imágenes. Las pruebas van en la etapa `dev`
+(`requirements-dev.txt`), que usa `docker-compose.yml`.
+
+**psycopg2-binary.** El driver de PostgreSQL es la rueda `-binary`, que trae dentro su
+propia libpq, OpenSSL y otras bibliotecas de C, no las de Debian: sus parches llegan al
+subir la versión de `psycopg2-binary` en `requirements.txt`, no con `apt`. Compilarlo
+desde fuente contra la libpq del sistema (`psycopg2`, con una etapa de build con `gcc` y
+`libpq-dev`) es una mejora futura.
+
+### Actualizar las imágenes base
+
+Las imágenes tienen **versión fija** (no `latest` ni `16-alpine`), para que una
+reconstrucción no cambie de versión sin que nadie lo decida:
+
+| Imagen | Dónde | Etiqueta |
+|---|---|---|
+| Python | `backend/Dockerfile` | `python:3.13.18-slim-trixie` |
+| Node (solo para compilar) | `frontend/Dockerfile`, `frontend/Dockerfile.prod` | `node:24.22.2-alpine3.24` |
+| nginx (rama estable) | `frontend/Dockerfile.prod` | `nginx:1.30.6-alpine3.24` |
+| PostgreSQL | `docker-compose.yml`, `docker-compose.prod.yml` | `postgres:16.15-alpine3.24` |
+
+Para actualizar (p. ej. cada mes o cuando haya un aviso de seguridad):
+
+1. Busca la etiqueta nueva en Docker Hub. Sube solo el **parche** (3.13.18 → 3.13.19,
+   16.15 → 16.16) o la versión de Alpine/Debian; un cambio de versión menor o mayor
+   (Python 3.14, Node 26) es un cambio de código que hay que probar.
+2. Cámbiala en los archivos de la tabla.
+3. Corre las pruebas (README) y reconstruye: `docker compose ... up -d --build --pull always`.
+4. Escanea (abajo).
+
+**PostgreSQL: no cambies la versión mayor (16) así.** Pasar a 17 exige volcar la base
+con `pg_dump`, crear un volumen nuevo y restaurarla (sección 7); con el volumen de la 16,
+la 17 no arranca.
+
+Aunque la etiqueta sea fija, los parches de Alpine del frontend se aplican al construir
+(`apk upgrade` en `Dockerfile.prod`): reconstruir trae los nuevos.
+
+**Escaneo de vulnerabilidades** de las imágenes (Trivy, sin instalar nada):
+
+```sh
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image \
+  --scanners vuln --severity HIGH,CRITICAL abet-eval-prod-backend
+```
+
+Resultado en la 1.0.0 (5 de noviembre de 2026):
+
+- **frontend:** 0 HIGH/CRITICAL (antes del `apk upgrade` había 1 CRITICAL en brotli y 5
+  HIGH en curl y expat, con arreglo publicado).
+- **backend:** 46 HIGH en paquetes de Debian 13 (util-linux, ncurses, systemd, sqlite,
+  perl-base, zlib) **sin arreglo publicado**; la app no usa esos componentes
+  directamente (no monta discos, no usa la terminal ni sqlite en producción). Las
+  dependencias de Python: sin vulnerabilidades (`pip-audit`). Trivy marca además
+  `setuptools 70.3.0`, que es el `pkg_resources` que pip trae dentro
+  (`pip/_vendor/vendor.txt`): el módulo vulnerable (`setuptools/package_index.py`,
+  CVE-2025-47273) no está en la imagen.
+- **postgres:** paquetes de Alpine sin HIGH/CRITICAL; 1 CRITICAL y 25 HIGH en la
+  biblioteca estándar de Go del binario `gosu` de la imagen oficial. `gosu` solo se
+  ejecuta al arrancar para bajar de root a `postgres` y no abre conexiones. Se corrige
+  cuando la imagen oficial lo recompile: actualizar la etiqueta.
+
+## 14. Límite de intentos (nginx)
+
+Los tres archivos de nginx (`nginx.conf`, `nginx-https.conf`,
+`nginx-detras-de-proxy.conf.template`) limitan por IP, con respuesta **429**:
+
+| Rutas | Límite |
+|---|---|
+| `/api/auth/login`, `/api/auth/callback` | 10 por minuto, ráfaga de 10 |
+| Subidas: `POST /api/secciones/{id}/estudiantes/csv` y `/vista-previa`, `/api/actividades/{id}/criterios/importar-excel`, `/api/catalogo/ra-abet/importar` | 20 por minuto, ráfaga de 10 |
+
+El resto de la API y los archivos estáticos **no** se limitan. Un login normal son 2
+peticiones. Probado en la variante A: 240 peticiones de navegación en ráfaga, 40
+guardados, 6 subidas, 20 exportaciones y 20 reportes, sin ningún 429; de 40 logins
+seguidos (después de un login normal) pasan 9 y el resto da 429.
+
+- Detrás del proxy (variante B) la clave es la **IP real del docente**: `realip` la toma
+  del `X-Forwarded-For` del proxy antes de contar. Probado: el docente que pasa el
+  límite recibe 429 y otro docente entra normalmente; agregar IP falsas al inicio de
+  `X-Forwarded-For` no lo evita.
+- Los intentos rechazados quedan en el log de nginx (`limiting requests ... zone "login"`).
+- **En la instalación local** (`http://localhost`) el límite no aplica: el frontend llama
+  al backend directamente por el puerto 8000, sin pasar por nginx.
+- Si muchos docentes salen por la misma IP (NAT), comparten el cupo: unos 30 logins en
+  un minuto siguen funcionando. Si no alcanza, sube `rate` y `burst` en la zona `login`.
+
+## 15. Monitoreo (RNF-17)
+
+Con lo que ya trae la app, TI puede **medir** la disponibilidad (no garantizarla: es un
+solo servidor con un solo PostgreSQL):
+
+- **Chequeo externo cada minuto** (Uptime Kuma, Zabbix o el monitor de TI) contra
+  `https://DOMINIO/` (nginx) y `https://DOMINIO/api/health` (backend), con alerta tras
+  2 o 3 fallos seguidos. Es la medida de RNF-17: 98 % equivale a unas 14,6 horas de
+  caída al mes.
+- **Estado de los contenedores:** `docker compose ... ps` (deben estar `healthy`) o
+  `docker events --filter event=health_status`.
+- **Reinicios:** `restart: unless-stopped` levanta solo un contenedor que cae; un número
+  de reinicios que sube (`docker inspect -f '{{.RestartCount}}' <contenedor>`) indica un
+  problema aunque la app responda.
+- **Vencimiento del certificado** (variante A): alerta 30 días antes. El healthcheck lo
+  detecta, pero solo cuando ya venció.
+- **Disco** del volumen de PostgreSQL y de los respaldos, y que el respaldo diario exista.

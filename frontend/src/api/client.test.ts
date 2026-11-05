@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AxiosRequestConfig } from 'axios';
 
 // Sesión en cookie httpOnly: el cliente nunca envía Authorization, manda las
@@ -98,6 +98,62 @@ describe('apiClient con sesión en cookie', () => {
     await apiClient.post('/cursos', {});
     expect(peticiones.map((p) => p.url)).toEqual(['/cursos']);
     expect(peticiones[0].headers[CSRF_HEADER]).toBeUndefined();
+  });
+});
+
+// RNF-16: el backend responde 401 cuando la sesión vence (8 h sin actividad o 24 h
+// desde el login). El cliente olvida al docente y vuelve a /login; no hay nada más
+// que hacer en el frontend: la renovación es una cookie httpOnly que pone el backend.
+describe('apiClient con la sesión vencida', () => {
+  const ventanaOriginal = Object.getOwnPropertyDescriptor(globalThis, 'window');
+
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    if (ventanaOriginal) Object.defineProperty(globalThis, 'window', ventanaOriginal);
+    else delete (globalThis as { window?: unknown }).window;
+  });
+
+  async function conVentanaEn(pathname: string) {
+    const cliente = await cargarCliente();
+    const location = { pathname, href: pathname };
+    Object.defineProperty(globalThis, 'window', {
+      value: { location, localStorage: globalThis.localStorage },
+      configurable: true,
+    });
+    cliente.apiClient.defaults.adapter = async (config: AxiosRequestConfig) => {
+      const error = Object.assign(new Error('Request failed with status code 401'), {
+        isAxiosError: true,
+        config,
+        response: {
+          status: 401,
+          data: { detail: 'Sesión inválida o expirada; inicia sesión de nuevo' },
+          headers: {},
+          config,
+          statusText: 'Unauthorized',
+        },
+      });
+      throw error;
+    };
+    return { ...cliente, location };
+  }
+
+  it('un 401 olvida al docente y su token CSRF y redirige al login', async () => {
+    const { apiClient, useAuthStore, location } = await conVentanaEn('/cursos/3');
+    useAuthStore.setState({ csrfToken: 'tok' });
+
+    await expect(apiClient.get('/auth/me')).rejects.toMatchObject({ response: { status: 401 } });
+
+    expect(useAuthStore.getState().csrfToken).toBeNull();
+    expect(location.href).toBe('/login');
+  });
+
+  it('en /login no vuelve a redirigir (sin bucle)', async () => {
+    const { apiClient, location } = await conVentanaEn('/login');
+    await expect(apiClient.get('/auth/me')).rejects.toBeTruthy();
+    expect(location.href).toBe('/login');
   });
 });
 

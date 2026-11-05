@@ -6,12 +6,36 @@
 
 server_tokens off;
 
+# ── Límite de intentos (429) ────────────────────────────────────────────────
+# Solo en el login con Google y en las subidas de archivos; el resto de la API y los
+# archivos estáticos no tienen límite (la SPA hace muchas peticiones al navegar).
+# La clave es la IP del cliente real del docente: realip (set_real_ip_from, abajo) cambia
+# $binary_remote_addr por la IP del X-Forwarded-For del proxy antes de contarla. Fuera de esas rutas la clave queda vacía y
+# nginx no cuenta la petición. $uri ya viene decodificado y sin barras repetidas:
+# /api/auth/%6Cogin o //api/auth/login cuentan igual.
+map $uri $limite_login {
+    ~^/api/auth/(login|callback)$  $binary_remote_addr;
+    default                        "";
+}
+map "$request_method:$uri" $limite_subidas {
+    ~^POST:/api/(secciones/[^/]+/estudiantes/(csv|vista-previa)|actividades/[^/]+/criterios/importar-excel|catalogo/ra-abet/importar)$  $binary_remote_addr;
+    default  "";
+}
+# Login: 10 por minuto por IP, con ráfaga de 10 (un login normal son 2 peticiones:
+# /login y /callback). Subidas: 20 por minuto, ráfaga de 10.
+limit_req_zone $limite_login   zone=login:10m   rate=10r/m;
+limit_req_zone $limite_subidas zone=subidas:10m rate=20r/m;
+limit_req_status 429;
+limit_req_log_level warn;
+
 # ¿La conexión viene del proxy de confianza? Se mira la IP de la conexión TCP
 # ($realip_remote_addr), no $remote_addr: set_real_ip_from (abajo) cambia $remote_addr
 # por la IP del docente antes de llegar a este control de acceso.
 geo $realip_remote_addr $desde_proxy_de_confianza {
     default 0;
     ${PROXY_CONFIANZA} 1;
+    # El healthcheck del propio contenedor (solo /nginx-salud responde a esa IP con 200)
+    127.0.0.1 1;
 }
 
 server {
@@ -38,7 +62,20 @@ server {
 
     client_max_body_size 3m;
 
+    # Healthcheck del contenedor (docker compose): solo desde dentro del contenedor.
+    # $realip_remote_addr es la IP de la conexión TCP (nunca la de X-Forwarded-For).
+    location = /nginx-salud {
+        access_log off;
+        if ($realip_remote_addr != "127.0.0.1") {
+            return 404;
+        }
+        default_type text/plain;
+        return 200 "ok";
+    }
+
     location /api/ {
+        limit_req zone=login   burst=10 nodelay;
+        limit_req zone=subidas burst=10 nodelay;
         proxy_pass http://backend:8000/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

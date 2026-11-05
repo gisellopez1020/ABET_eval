@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.dependencies import CSRF_HEADER
+from app.auth.renovacion import RenovarSesion
 from app.config import settings
 from app.archivos import LimiteCuerpoSubidas
 from app.errores_http import registrar_manejadores
@@ -26,6 +27,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["Content-Type", CSRF_HEADER],
 )
+
+# RNF-16: pone en la respuesta la cookie de sesión renovada por get_current_user.
+# Middleware ASGI y no Response de la dependencia: así también va en las descargas (StreamingResponse).
+app.add_middleware(RenovarSesion)
 
 # Corta las subidas de archivos demasiado grandes antes de que lleguen al disco
 app.add_middleware(LimiteCuerpoSubidas)

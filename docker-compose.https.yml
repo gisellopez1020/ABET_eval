@@ -36,6 +36,22 @@ services:
       - ./frontend/nginx-https.conf:/etc/nginx/conf.d/default.conf:ro
       - ./frontend/nginx-cabeceras-seguridad.conf:/etc/nginx/snippets/cabeceras-seguridad.conf:ro
       - ./certs:/etc/nginx/certs:ro
+    # Salud al 443 (el 80 solo redirige), CON verificación del certificado: el nombre
+    # de FRONTEND_URL debe coincidir y el certificado no puede estar vencido; si vence,
+    # el contenedor queda "unhealthy". --cacert con el propio fullchain.pem: sirve igual
+    # para el autofirmado de prueba y para uno de una CA (curl acepta como ancla un
+    # certificado intermedio del archivo). No comprueba que el navegador confíe en la
+    # CA: eso se vigila desde fuera (DESPLIEGUE_PRODUCCION.md, Monitoreo).
+    environment:
+      URL_PUBLICA: ${FRONTEND_URL:?Define FRONTEND_URL (https://DOMINIO) en el archivo de variables}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          h=$${URL_PUBLICA#*://}; h=$${h%%[:/]*};
+          curl -fsS --max-time 4 --proto =https --tlsv1.2
+          --cacert /etc/nginx/certs/fullchain.pem
+          --resolve "$$h:443:127.0.0.1" "https://$$h/nginx-salud" -o /dev/null
     networks:
       interna:
         ipv4_address: ${NGINX_IP:-172.30.80.10}

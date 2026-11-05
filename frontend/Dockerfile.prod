@@ -1,6 +1,8 @@
 # Instalación para usar la app (docker-compose.prod.yml): compila el frontend y lo sirve
 # con nginx, que además hace de proxy de /api al backend. Para desarrollo, ver Dockerfile.
-FROM node:24-alpine AS build
+# Versiones fijas de las imágenes base: actualizarlas es un cambio explícito
+# (DESPLIEGUE_PRODUCCION.md, "Actualizar las imágenes base")
+FROM node:24.22.2-alpine3.24 AS build
 
 WORKDIR /app
 
@@ -16,9 +18,20 @@ ENV VITE_API_URL=$VITE_API_URL \
 
 RUN npm run build
 
-FROM nginx:alpine
+# Rama estable de nginx (las pares: 1.30), no la mainline que trae "nginx:alpine"
+FROM nginx:1.30.6-alpine3.24
+
+# Parches de seguridad de Alpine publicados después de la imagen de nginx (p. ej.
+# brotli, curl, expat): la etiqueta fija la versión de nginx y de Alpine, no la de
+# cada paquete. Se aplican al construir; reconstruir con --pull trae los nuevos.
+RUN apk upgrade --no-cache
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
+
+# Salud de nginx (no del backend: si este cae, nginx sigue sirviendo la app y su 502).
+# Modo HTTPS: docker-compose.https.yml lo cambia por uno al 443 que verifica el certificado.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1/nginx-salud || exit 1

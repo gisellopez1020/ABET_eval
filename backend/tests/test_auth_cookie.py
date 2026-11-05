@@ -128,7 +128,8 @@ class TestCallbackPoneCookie:
         assert "httponly" in cookie
         assert "samesite=lax" in cookie
         assert "path=/;" in cookie or cookie.endswith("path=/")
-        assert f"max-age={settings.jwt_expire_minutes * 60}" in cookie
+        # RNF-16: dura lo que la inactividad permitida (8 h), no el tope absoluto
+        assert f"max-age={settings.sesion_inactividad_minutos * 60}" in cookie
         assert "secure" not in cookie  # GOOGLE_REDIRECT_URI es localhost
 
     def test_secure_fuera_de_localhost(self, client, monkeypatch):
@@ -247,8 +248,9 @@ class TestCSRF:
         assert ejecutados == ["post"]
 
     def test_jwt_sin_claim_csrf_no_puede_modificar(self, client, monkeypatch):
-        # Con exp: sin él el JWT ya se rechaza con 401 antes de llegar al CSRF
-        token = _jwt({"email": EMAIL, "nombre": "Doc", "exp": _en(60)})
+        # Con exp, iat y ses_max: sin ellos el JWT ya se rechaza con 401 antes del CSRF
+        ahora = int(_en(0).timestamp())
+        token = _jwt({"email": EMAIL, "nombre": "Doc", "iat": ahora, "exp": ahora + 3600, "ses_max": ahora + 7200})
         client.cookies.set(SESSION_COOKIE_NAME, token)
         assert client.post("/protegido", headers={CSRF_HEADER: ""}).status_code == 403
         assert client.post("/protegido", headers={CSRF_HEADER: "None"}).status_code == 403

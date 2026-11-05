@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # Mayor fija en 16: pasar a 17 exige volcar y restaurar el volumen (DESPLIEGUE_PRODUCCION.md)
+    image: postgres:16.15-alpine3.24
     container_name: abet-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-abet}
@@ -20,6 +21,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Etapa con pytest (requirements-dev.txt); la de producción no lo trae
+      target: dev
     container_name: abet-backend
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-abet}:${POSTGRES_PASSWORD:-abet_pass}@postgres:5432/${POSTGRES_DB:-abet_eval}}
@@ -36,11 +39,17 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-PLACEHOLDER}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       GEMINI_THINKING_LEVEL: ${GEMINI_THINKING_LEVEL:-low}
+      SESION_INACTIVIDAD_MINUTOS: ${SESION_INACTIVIDAD_MINUTOS:-480}
+      SESION_DURACION_MAXIMA_MINUTOS: ${SESION_DURACION_MAXIMA_MINUTOS:-1440}
+      # Las pruebas que revisan .env.example y los docker-compose los leen de aquí
+      ABET_RAIZ_REPO: /repo
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
       - /app/venv
+      # Raíz del repo, solo lectura: para `docker-compose exec backend pytest`
+      - ./:/repo:ro
     depends_on:
       postgres:
         condition: service_healthy

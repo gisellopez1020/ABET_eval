@@ -8,7 +8,8 @@ name: abet-eval-prod
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Mayor fija en 16: pasar a 17 exige volcar y restaurar el volumen (DESPLIEGUE_PRODUCCION.md)
+    image: postgres:16.15-alpine3.24
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-abet}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-abet_pass}
@@ -21,11 +22,17 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    # Ningún proceso del contenedor puede ganar privilegios (setuid, capacidades de
+    # archivo). Igual en backend y frontend.
+    security_opt:
+      - no-new-privileges:true
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Sin pruebas ni pytest; corre con el usuario sin privilegios app (UID 10001)
+      target: prod
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-abet}:${POSTGRES_PASSWORD:-abet_pass}@postgres:5432/${POSTGRES_DB:-abet_eval}}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-PLACEHOLDER}
@@ -41,6 +48,9 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-PLACEHOLDER}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       GEMINI_THINKING_LEVEL: ${GEMINI_THINKING_LEVEL:-low}
+      # RNF-16: la sesión vence tras 8 h sin actividad y nunca dura más de 24 h
+      SESION_INACTIVIDAD_MINUTOS: ${SESION_INACTIVIDAD_MINUTOS:-480}
+      SESION_DURACION_MAXIMA_MINUTOS: ${SESION_DURACION_MAXIMA_MINUTOS:-1440}
     # Las migraciones corren solas en cada arranque (no hay que ejecutar alembic a mano);
     # después se comprueba la clave de los datos cifrados (app/verificar_cifrado.py)
     command: sh -c "alembic upgrade head && python -m app.verificar_cifrado && exec uvicorn main:app --host 0.0.0.0 --port 8000"
@@ -50,7 +60,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # El endpoint /health, con Python (la imagen no trae curl). start_period: las
+    # migraciones corren antes de uvicorn
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   frontend:
     build:
@@ -62,9 +82,20 @@ services:
     # Mismo puerto que en desarrollo: FRONTEND_URL y FRONTEND_ORIGINS del .env siguen valiendo
     ports:
       - "5173:80"
+    # Solo que el backend exista (nginx resuelve "backend" al arrancar), no que esté
+    # sano: así un backend lento o caído no impide que se vea la app
     depends_on:
       - backend
+    # Salud de nginx (no del backend). El modo HTTPS lo cambia por uno al 443
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/nginx-salud || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   postgres_data:

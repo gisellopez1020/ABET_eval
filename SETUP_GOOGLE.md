@@ -165,9 +165,11 @@ distinguen puertos. En producción, la API se sirve bajo el dominio del frontend
 [DESPLIEGUE_PRODUCCION.md](./DESPLIEGUE_PRODUCCION.md). Si el backend viviera en
 otro dominio, la cookie no llegaría a las peticiones del frontend.
 
-El JWT no tiene estado en el servidor: cerrar sesión borra la cookie del
-navegador, pero una copia del token seguiría siendo válida hasta su
-vencimiento (`JWT_EXPIRE_MINUTES`, 24 h por defecto).
+La sesión vence tras 8 h sin actividad y nunca dura más de 24 h desde el login
+(`SESION_INACTIVIDAD_MINUTOS` y `SESION_DURACION_MAXIMA_MINUTOS`; ver
+[DESPLIEGUE_PRODUCCION.md](./DESPLIEGUE_PRODUCCION.md), sección 12). El JWT no
+tiene estado en el servidor: cerrar sesión borra la cookie del navegador, pero una
+copia del token seguiría siendo válida hasta su vencimiento.
 
 ## 8. Sincronización con Google Drive
 
