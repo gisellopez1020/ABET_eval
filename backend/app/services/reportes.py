@@ -33,6 +33,7 @@ from app.services.calculo_reportes import (
 )
 from app.services.errores import ActividadFueraDelCurso
 from app.services.google_drive import subir_archivo
+from app.utils.orden import clave_estudiante
 from app.services.reporte_excel import (
     AspectoDetalle, HojaDetalle, MIME_XLSX, libro_detalle, libro_resumen, nombre_archivo,
 )
@@ -265,9 +266,10 @@ class ReporteService:
                     e.id,
                     e.nombre,
                     partial(calificaciones.valores_de_equipo, e.id),
-                    sorted(
-                        (f"{m.estudiante.nombre_completo} ({m.estudiante.codigo_estudiante})" for m in e.miembros),
-                    ),
+                    [
+                        f"{m.estudiante.nombre_completo} ({m.estudiante.codigo_estudiante})"
+                        for m in sorted(e.miembros, key=lambda m: clave_estudiante(m.estudiante))
+                    ],
                 )
                 for e in EquipoRepository(self.db).de_actividad_ordenados(actividad.id, seccion_id)
             ]
