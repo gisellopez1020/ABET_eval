@@ -25,11 +25,18 @@ Para quien solo va a usar la app en su computador, sin modificar el código. Ocu
    cd ABET_eval
    cp .env.example .env
    ```
+   **Antes del primer arranque, pon tu propia contraseña de la base de datos** en `POSTGRES_PASSWORD` del `.env` (mínimo 12 caracteres). Con el login real de Google (`SKIP_AUTH=false`) el backend no arranca con la de ejemplo, `abet_pass`, y una vez creada la base ya no cambia editando el `.env`. Para generarla en PowerShell:
+   ```powershell
+   $b = New-Object byte[] 18; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')
+   ```
+   Si ya tenías la app instalada con `abet_pass`, sigue el paso a paso de [DESPLIEGUE_PRODUCCION.md](./DESPLIEGUE_PRODUCCION.md), sección 11 (con respaldo previo).
 3. Levanta la app (la primera vez tarda unos minutos):
    ```bash
    docker compose -f docker-compose.prod.yml up -d --build
    ```
 4. Abre http://localhost:5173. La base de datos se prepara sola al arrancar. Antes de crear cursos, carga el catálogo de Student Outcomes como se explica en el [paso 4](#4-cargar-el-catálogo-de-student-outcomes-abet).
+
+Con el login real, la sesión se cierra sola tras 8 horas sin usar la app (y como máximo a las 24 horas de iniciarla); basta con volver a entrar con Google. Al actualizar a la versión 1.0.0 hay que iniciar sesión una vez más.
 
 La app vuelve a arrancar sola al reiniciar el computador mientras Docker Desktop esté abierto. Para detenerla: `docker compose -f docker-compose.prod.yml down`. Los datos se conservan; **no** agregues `-v` a ese comando, porque borra la base de datos.
 
@@ -104,19 +111,34 @@ Para configurar el login real con Google y la sincronización con Google Drive (
 
 Las pruebas usan SQLite en memoria: no necesitan PostgreSQL ni datos cargados. Se pueden correr de dos formas.
 
-**Dentro del contenedor** (con los servicios levantados):
+**Dentro del contenedor** (con los servicios de desarrollo levantados, `docker-compose.yml`):
 ```bash
 docker-compose exec backend pytest
 ```
 
-**Con un entorno virtual local** (desde `backend/`):
+Funciona porque `docker-compose.yml` construye la etapa `dev` del Dockerfile (con pytest, de `requirements-dev.txt`), monta `./backend` con las pruebas y la raíz del repo en `/repo` (solo lectura) para las que revisan `.env.example` y los docker-compose. La imagen de `docker-compose.prod.yml` **no** trae pruebas ni pytest.
+
+**Con un entorno virtual local** (desde `backend/`), con **Python 3.13**, la versión de la imagen:
 ```bash
-python -m venv venv
-venv\Scripts\python -m pip install -r requirements.txt   # Linux/macOS: venv/bin/python -m pip ...
-venv\Scripts\python -m pytest                            # Linux/macOS: venv/bin/python -m pytest
+py -3.13 -m venv venv                                        # Linux/macOS: python3.13 -m venv venv
+venv\Scripts\python -m pip install -r requirements-dev.txt   # Linux/macOS: venv/bin/python -m pip ...
+venv\Scripts\python -m pytest                                # Linux/macOS: venv/bin/python -m pytest
 ```
 
-Con el entorno ya creado, solo hace falta la última línea. Para correr un solo archivo: `pytest tests/test_estadisticas.py`.
+Con el entorno ya creado, solo hace falta la última línea. `requirements-dev.txt` incluye `requirements.txt` y añade pytest. Para correr un solo archivo: `pytest tests/test_estadisticas.py`.
+
+---
+
+## Pruebas del frontend
+
+Con **Node 22 o superior** (las imágenes usan Node 24; `frontend/.nvmrc`), desde `frontend/`:
+
+```bash
+npm ci
+npx vitest run
+```
+
+`npm ci` instala exactamente las versiones de `package-lock.json`: úsalo también después de cada `git pull` que cambie dependencias (con un `node_modules` viejo las pruebas fallan).
 
 ---
 
@@ -145,8 +167,11 @@ ABET_eval/
 ├── .env.example
 ├── SETUP_GOOGLE.md
 ├── DESPLIEGUE_PRODUCCION.md      # Guía para TI: HTTPS, certificados, verificación
+├── SECURITY.md                   # Cómo reportar vulnerabilidades y controles implementados
+├── CHANGELOG.md                  # Registro de cambios por versión
+├── THIRD_PARTY_LICENSES.md       # Licencias de las dependencias de producción
 ├── scripts/                      # generar-cert-prueba (certificado SOLO para pruebas)
-├── backend/                      # FastAPI + Python 3.11
+├── backend/                      # FastAPI + Python 3.13
 │   ├── main.py
 │   ├── app/
 │   │   ├── auth/                 # Middleware y dependencias de autenticación
