@@ -6,7 +6,7 @@ import { cargarLogo, conTextoAlineado } from './pdf';
 /**
  * jsdom no decodifica imágenes: este Image dispara onload con unas medidas fijas (u onerror si
  * la ruta contiene "no-existe"). La decodificación real y que jsPDF acepte el canvas no se
- * prueban aquí; el bug del decodificador de jsPDF queda fijado en pdf.jspdf.test.ts.
+ * prueban aquí; cómo trata jsPDF el PNG del logo queda documentado en pdf.jspdf.test.ts.
  */
 class ImagenFalsa {
   onload: (() => void) | null = null;

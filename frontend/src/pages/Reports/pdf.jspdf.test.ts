@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import jsPDF from 'jspdf';
 
-// Regresión que documenta por qué cargarLogo (pdf.ts) pasa el logo por un canvas en vez de darle
-// a addImage los bytes del archivo: el decodificador PNG de jsPDF falla con paletas de 1/2/4 bits
-// con transparencia parcial (tRNS), que es el formato de logo-uao.png (decodePixels supone al menos
-// 8 bits por píxel). Si esta prueba deja de pasar, jsPDF lo corrigió y se podría simplificar.
+// Documenta el formato del logo y cómo lo trata jsPDF. Hasta jsPDF 2.x, addImage con los bytes
+// crudos de logo-uao.png lanzaba RangeError: su decodificador PNG no soportaba paletas de 1/2/4
+// bits con transparencia parcial (tRNS). Desde jsPDF 3 (decodificador fast-png) los acepta.
+// cargarLogo (pdf.ts) sigue pasando el logo por un canvas a propósito: así el PDF del reporte
+// sale idéntico al de antes de la actualización (misma imagen RGBA y compresión 'FAST').
 describe('jsPDF con el logo real', () => {
   let logo: Uint8Array;
 
@@ -25,7 +26,7 @@ describe('jsPDF con el logo real', () => {
     expect(alfas.some((a) => a > 0 && a < 255)).toBe(true);
   });
 
-  it('addImage con los bytes crudos del PNG lanza RangeError', () => {
-    expect(() => new jsPDF().addImage(logo, 'PNG', 0, 0, 10, 10)).toThrow(RangeError);
+  it('addImage ya acepta los bytes crudos del PNG (jsPDF >= 3)', () => {
+    expect(() => new jsPDF().addImage(logo, 'PNG', 0, 0, 10, 10)).not.toThrow();
   });
 });

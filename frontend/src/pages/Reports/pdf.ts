@@ -22,9 +22,10 @@ export interface LogoPDF {
 
 /**
  * Carga el logo con el navegador y lo dibuja en un canvas, que es lo que recibe addImage.
- * No se le pasan a jsPDF los bytes del archivo: su decodificador PNG falla (RangeError) con
- * paletas de 1/2/4 bits con transparencia parcial, que es justo el formato de logo-uao.png
- * (ver pdf.jspdf.test.ts). Si no carga (404, error de red o el index.html que devuelve el
+ * Se pasó por canvas porque el decodificador PNG de jsPDF 2.x fallaba (RangeError) con
+ * paletas de 1/2/4 bits con transparencia parcial, el formato de logo-uao.png. jsPDF 3+ ya
+ * los acepta (ver pdf.jspdf.test.ts), pero se mantiene el canvas para que el PDF del reporte
+ * no cambie (misma imagen y compresión). Si no carga (404, error de red o el index.html que devuelve el
  * servidor para rutas desconocidas: todos disparan onerror) devuelve null y el PDF se
  * genera sin logo.
  */
