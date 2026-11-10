@@ -274,8 +274,9 @@ El detalle de cada pantalla está en **Ayuda** (al pie del menú). En resumen:
    ABET*, los Resultados de Aprendizaje del curso.
 2. Abre la asignatura y crea sus **secciones**. En cada sección, agrega estudiantes uno
    por uno o con **Importar CSV / Excel** (con vista previa antes de guardar).
-   **Importar dos veces la misma lista duplica a los estudiantes**: la app no detecta
-   duplicados, ni siquiera dentro del mismo archivo. Revisa la vista previa.
+   Puedes volver a importar la misma lista sin duplicar a nadie: los estudiantes cuyo
+   código ya está en la sección (o repetido dentro del archivo) se omiten, y la vista
+   previa te dice cuáles antes de importar.
 3. Crea las **actividades** del curso y su rúbrica en **Rúbrica ABET** (a mano o
    importándola de CSV o Excel). Los pesos deben sumar 100 %.
 4. Para actividades grupales, arma los equipos en **Proyectos y equipos**.
