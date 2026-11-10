@@ -1,0 +1,88 @@
+# Actualizaciones de dependencias: un PR semanal agrupado por ecosistema, con las
+# versiones minor y patch. Las versiones mayores (React 19, Vite 6, Python 3.14...)
+# son migraciones que se deciden a mano: se ignoran en las actualizaciones de versión.
+# Las reglas `ignore` por update-types solo afectan a las actualizaciones de versión:
+# los parches de seguridad (Dependabot security updates, activable en Settings →
+# Code security) llegan igual, aunque sean de una versión mayor.
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Imágenes base de backend/Dockerfile y de frontend/Dockerfile y Dockerfile.prod
+  - package-ecosystem: docker
+    directories: [/backend, /frontend]
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      imagenes:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+      # 3.13.x -> 3.14 es "minor" para Dependabot, pero es otra versión de Python
+      - dependency-name: python
+        update-types: [version-update:semver-minor]
+      # nginx: las versiones menores impares son la rama mainline, no la estable
+      - dependency-name: nginx
+        update-types: [version-update:semver-minor]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # La imagen de PostgreSQL de los docker-compose*.yml de la raíz (16.x -> 16.y sí; 17, no)
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Las acciones de .github/workflows, fijadas por SHA: Dependabot actualiza el SHA y
+  # el comentario con la versión
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      acciones:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: "chore(ci)"
