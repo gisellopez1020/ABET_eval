@@ -12,7 +12,7 @@ from app.schemas.estudiante import EstudianteCreado, EstudianteUpdate, VistaPrev
 from app.services.estudiantes import EstudianteConAviso, EstudianteService
 from app.services.lista_estudiantes import MIME_XLSX
 
-# Los errores de negocio (404, 403, 422) los lanza EstudianteService y los traduce
+# Los errores de negocio (404, 403, 409, 422) los lanza EstudianteService y los traduce
 # a HTTP el manejador global registrado en main.py (app/errores_http.py)
 router = APIRouter(tags=["Estudiantes"])
 
@@ -56,7 +56,9 @@ def agregar_estudiante(
     """
     Agrega un único estudiante a la sección. El correo es opcional; si no tiene
     formato de correo el estudiante se crea igual, con el correo en blanco y un `aviso`.
-    404 si la sección no existe, 403 si es de otro docente.
+    Si ya hay otro estudiante con el mismo nombre (y otro código) se crea igual, con un `aviso`.
+    404 si la sección no existe, 403 si es de otro docente, 409 si otro estudiante de la
+    sección ya tiene ese código (comparado como en la importación).
     """
     return _creado(EstudianteService(db).agregar(
         seccion_id, usuario["email"], body.nombre_completo, body.codigo_estudiante, body.email,
@@ -87,13 +89,19 @@ async def importar_csv(
     de la URL) y solo genera un aviso si no coincide con ella.
     También acepta un .xlsx con las mismas dos columnas en la primera hoja
     (se detecta por la extensión o el content_type).
+    Una fila cuyo código ya tiene un estudiante de la sección, o que repite el código
+    de una fila anterior del archivo, no se importa: se cuenta en `omitidos` y se
+    avisa en `errores`. El código se compara sin espacios, sin distinguir mayúsculas
+    y, si es numérico, sin ceros a la izquierda.
     404 si la sección no existe, 403 si es de otro docente, 422 si el archivo no
     se puede leer o le faltan las columnas obligatorias.
     """
     resultado = EstudianteService(db).importar(
         seccion_id, usuario["email"], await leer_archivo_limitado(archivo), archivo.filename, archivo.content_type,
     )
-    return ImportacionCSVResultado(importados=resultado.importados, errores=resultado.avisos)
+    return ImportacionCSVResultado(
+        importados=resultado.importados, errores=resultado.avisos, omitidos=resultado.omitidos,
+    )
 
 
 @router.post(
@@ -109,8 +117,9 @@ async def vista_previa_estudiantes(
 ):
     """
     Devuelve los estudiantes que importaría POST .../estudiantes/csv con el mismo
-    archivo, sin guardarlos. El frontend la usa para la vista previa de un .xlsx
-    (la de un CSV se sigue calculando en el navegador). Mismos errores que la importación.
+    archivo, sin guardarlos, y en `omitidos` las filas que se saltaría por código
+    repetido (con el nombre que se conserva y el que se descarta). El frontend la usa
+    para la vista previa de CSV y Excel. Mismos errores que la importación.
     """
     return EstudianteService(db).vista_previa(
         seccion_id, usuario["email"], await leer_archivo_limitado(archivo), archivo.filename, archivo.content_type,
@@ -164,7 +173,8 @@ def editar_estudiante(
     El correo se normaliza como en el alta (`null` o vacío lo borra). Uno sin formato
     de correo no bloquea la edición: se conserva el que había (en blanco si no había)
     y la respuesta trae un `aviso`.
-    404 si el estudiante no existe, 403 si es de otro docente.
+    404 si el estudiante no existe, 403 si es de otro docente, 409 si el código nuevo
+    ya lo tiene otro estudiante de la sección.
     """
     cambios = body.model_dump(include=body.model_fields_set)
     return _creado(EstudianteService(db).editar(estudiante_id, usuario["email"], cambios))

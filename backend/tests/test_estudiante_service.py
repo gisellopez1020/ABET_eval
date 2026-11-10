@@ -4,6 +4,7 @@ una sesión SQLite y se verifica el error de negocio que lanza, o el resultado c
 """
 import ast
 import io
+import time
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,8 @@ from openpyxl import load_workbook
 
 from app.models import Estudiante
 from app.services.errores import (
-    ArchivoInvalido, AsignaturaNoEncontrada, EstudianteNoEncontrado, SeccionFueraDeAsignatura,
-    SeccionNoEncontrada, SinPermiso,
+    ArchivoInvalido, AsignaturaNoEncontrada, CodigoEstudianteRepetido, Conflicto, EstudianteNoEncontrado,
+    SeccionFueraDeAsignatura, SeccionNoEncontrada, SinPermiso,
 )
 from app.services.estudiantes import EstudianteConAviso, EstudianteService, ResultadoImportacion
 from tests.test_catalogo_ra_abet import MOCK_USER, db_session  # noqa: F401 (fixtures)
@@ -92,6 +93,36 @@ class TestAgregar:
         assert r.aviso == "El correo 'ana@' no es válido, se dejó en blanco"
         assert _guardados(db_session, s1) == [("ANA", "1", None)]
 
+    @pytest.mark.parametrize("codigo", ["2021001", " 2021001 ", "02021001", "2021 001"])
+    def test_codigo_repetido_en_la_seccion_409_sin_guardar(self, servicio, db_session, s1, codigo):
+        _est(db_session, s1, "ANA", "2021001")
+        with pytest.raises(CodigoEstudianteRepetido, match="^Ya hay otro estudiante con ese código en esta sección$"):
+            servicio.agregar(s1.id, EMAIL, "Beto", codigo, None)
+        assert _guardados(db_session, s1) == [("ANA", "2021001", None)]
+
+    def test_el_error_no_lleva_datos_del_estudiante(self, servicio, db_session, s1):
+        _est(db_session, s1, "ANA RUIZ", "AB-77")
+        with pytest.raises(CodigoEstudianteRepetido) as exc:
+            servicio.agregar(s1.id, EMAIL, "Beto", "ab-77", None)
+        assert "AB-77" not in str(exc.value).upper() and "ANA" not in str(exc.value)
+        assert issubclass(CodigoEstudianteRepetido, Conflicto)
+
+    def test_mismo_codigo_en_otra_seccion_se_permite(self, servicio, db_session):
+        _, [s1, s2] = _curso(db_session, secciones=("S1", "S2"))
+        _est(db_session, s1, "ANA", "1")
+        r = servicio.agregar(s2.id, EMAIL, "Ana", "1", None)
+        assert r.aviso is None
+        assert _guardados(db_session, s2) == [("ANA", "1", None)]
+
+    def test_mismo_nombre_con_otro_codigo_crea_y_avisa(self, servicio, db_session, s1):
+        _est(db_session, s1, "ANA RUIZ", "1")
+        r = servicio.agregar(s1.id, EMAIL, "Ana Ruíz", "2", "ana@")
+        assert r.aviso == (
+            "El correo 'ana@' no es válido, se dejó en blanco; "
+            "Ya hay otro estudiante llamado 'ANA RUÍZ' en la sección, con el código '1'"
+        )
+        assert len(_guardados(db_session, s1)) == 2
+
 
 class TestEditar:
     def test_solo_cambia_lo_enviado(self, servicio, db_session, s1):
@@ -119,6 +150,37 @@ class TestEditar:
     def test_inexistente(self, servicio):
         with pytest.raises(EstudianteNoEncontrado, match="^Estudiante no encontrado$"):
             servicio.editar(99999, EMAIL, {"nombre_completo": "X"})
+
+    def test_codigo_de_otro_de_la_seccion_409_sin_cambiar(self, servicio, db_session, s1):
+        ana = _est(db_session, s1, "ANA", "1")
+        _est(db_session, s1, "BETO", "002")
+        with pytest.raises(CodigoEstudianteRepetido):
+            servicio.editar(ana.id, EMAIL, {"codigo_estudiante": "2", "nombre_completo": "Ana Ruiz"})
+        assert _guardados(db_session, s1) == [("ANA", "1", None), ("BETO", "002", None)]
+
+    def test_su_propio_codigo_reescrito_no_es_repetido(self, servicio, db_session, s1):
+        ana = _est(db_session, s1, "ANA", "00123")
+        r = servicio.editar(ana.id, EMAIL, {"codigo_estudiante": "123"})
+        assert (r.estudiante.codigo_estudiante, r.aviso) == ("123", None)
+
+    def test_codigo_de_otra_seccion_se_permite(self, servicio, db_session):
+        _, [s1, s2] = _curso(db_session, secciones=("S1", "S2"))
+        ana = _est(db_session, s1, "ANA", "1")
+        _est(db_session, s2, "BETO", "2")
+        assert servicio.editar(ana.id, EMAIL, {"codigo_estudiante": "2"}).estudiante.codigo_estudiante == "2"
+
+    def test_repetidos_que_ya_existian_se_editan_sin_cambiar_el_codigo(self, servicio, db_session, s1):
+        ana = _est(db_session, s1, "ANA", "1")
+        _est(db_session, s1, "ANA BIS", "1")
+        r = servicio.editar(ana.id, EMAIL, {"codigo_estudiante": "1", "email": "ana@uao.edu.co"})
+        assert r.estudiante.email == "ana@uao.edu.co"
+
+    def test_nombre_de_otro_se_guarda_y_avisa(self, servicio, db_session, s1):
+        ana = _est(db_session, s1, "ANA", "1")
+        _est(db_session, s1, "BETO DIAZ", "2")
+        r = servicio.editar(ana.id, EMAIL, {"nombre_completo": "Beto Díaz"})
+        assert r.aviso == "Ya hay otro estudiante llamado 'BETO DÍAZ' en la sección, con el código '2'"
+        assert r.estudiante.nombre_completo == "BETO DÍAZ"
 
     def test_de_otro_docente_no_cambia(self, servicio, db_session, ajena):
         zoe = _est(db_session, ajena, "ZOE", "9")
@@ -167,7 +229,72 @@ class TestImportar:
     def test_vista_previa_no_guarda(self, servicio, db_session, s1):
         vista = servicio.vista_previa(s1.id, EMAIL, b"Nombre,Codigo\nAna,1\n", "lista.csv", CSV)
         assert [e.nombre for e in vista.estudiantes] == ["ANA"]
+        assert vista.omitidos == []
         assert _guardados(db_session, s1) == []
+
+    def test_omite_los_de_la_seccion_y_los_repetidos_del_archivo(self, servicio, db_session, s1):
+        _est(db_session, s1, "ANA RUIZ", "00123")
+        csv = b"Nombre,Codigo\nAna R,123\nBeto,2\nBetty,2 \nCarla,3\n"
+        r = servicio.importar(s1.id, EMAIL, csv, "lista.csv", CSV)
+        assert r == ResultadoImportacion(
+            importados=2,
+            omitidos=2,
+            avisos=[
+                "Se omite 1 estudiante cuyo código ya está en la sección: 123",
+                "Se omite 1 fila con un código repetido en el archivo (se conserva la primera): fila 4",
+            ],
+        )
+        assert _guardados(db_session, s1) == [
+            ("ANA RUIZ", "00123", None), ("BETO", "2", None), ("CARLA", "3", None),
+        ]
+
+    def test_vista_previa_dice_cuales_se_omitiran_y_que_nombre_queda(self, servicio, db_session, s1):
+        _est(db_session, s1, "ANA RUIZ", "123")
+        csv = b"Nombre,Codigo\nAna R,123\nBeto,2\nBetty,2\n"
+        vista = servicio.vista_previa(s1.id, EMAIL, csv, "lista.csv", CSV)
+        assert [e.nombre for e in vista.estudiantes] == ["BETO"]
+        assert [o.model_dump() for o in vista.omitidos] == [
+            {"fila": 2, "nombre": "ANA R", "codigo": "123", "motivo": "en_seccion",
+             "nombre_conservado": "ANA RUIZ", "fila_conservada": None},
+            {"fila": 4, "nombre": "BETTY", "codigo": "2", "motivo": "en_archivo",
+             "nombre_conservado": "BETO", "fila_conservada": 3},
+        ]
+        assert _guardados(db_session, s1) == [("ANA RUIZ", "123", None)]
+
+    def test_vista_previa_e_importacion_coinciden(self, servicio, db_session, s1):
+        _est(db_session, s1, "ANA", "1")
+        csv = b"Nombre,Codigo\nAna,1\nBeto,2\nBeto,2\n"
+        vista = servicio.vista_previa(s1.id, EMAIL, csv, "lista.csv", CSV)
+        r = servicio.importar(s1.id, EMAIL, csv, "lista.csv", CSV)
+        assert (len(vista.estudiantes), len(vista.omitidos), vista.errores) == (r.importados, r.omitidos, r.avisos)
+
+    def test_importar_dos_veces_no_cambia_el_conteo(self, servicio, db_session, s1):
+        csv = b"Nombre,Codigo,Email\nAna,1,ana@uao.edu.co\nBeto,2,\n"
+        assert servicio.importar(s1.id, EMAIL, csv, "lista.csv", CSV).importados == 2
+        segunda = servicio.importar(s1.id, EMAIL, csv, "lista.csv", CSV)
+        assert (segunda.importados, segunda.omitidos) == (0, 2)
+        assert len(_guardados(db_session, s1)) == 2
+
+    def test_mismo_codigo_en_otra_seccion_se_importa(self, servicio, db_session):
+        _, [s1, s2] = _curso(db_session, secciones=("S1", "S2"))
+        _est(db_session, s1, "ANA", "1")
+        r = servicio.importar(s2.id, EMAIL, b"Nombre,Codigo\nAna,1\n", "lista.csv", CSV)
+        assert (r.importados, r.omitidos, r.avisos) == (1, 0, [])
+
+    def test_todas_las_filas_invalidas_no_guarda_nada(self, servicio, db_session, s1):
+        r = servicio.importar(s1.id, EMAIL, b"Nombre,Codigo\n,1\nAna,\n", "lista.csv", CSV)
+        assert (r.importados, r.omitidos) == (0, 0)
+        assert _guardados(db_session, s1) == []
+
+    def test_importar_200_estudiantes_rapido(self, servicio, db_session, s1):
+        """La segunda vez la sección ya está llena: la búsqueda de repetidos descifra todo lo guardado."""
+        filas = "".join(f"Estudiante Número {i},{2026000 + i},e{i}@uao.edu.co\n" for i in range(200))
+        csv = ("Nombre,Codigo,Email\n" + filas).encode()
+        inicio = time.perf_counter()
+        primera = servicio.importar(s1.id, EMAIL, csv, "lista.csv", CSV)
+        segunda = servicio.importar(s1.id, EMAIL, csv, "lista.csv", CSV)
+        assert time.perf_counter() - inicio < 10
+        assert (primera.importados, segunda.importados, segunda.omitidos) == (200, 0, 200)
 
 
 # ── Exportar ─────────────────────────────────────────────────────────────────

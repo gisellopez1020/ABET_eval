@@ -8,7 +8,10 @@ import pytest
 from openpyxl import Workbook
 
 from app.services.errores import ArchivoInvalido, DatosInvalidos
-from app.services.lista_estudiantes import MIME_XLSX, es_excel, leer_lista, normalizar_email
+from app.services.lista_estudiantes import (
+    MIME_XLSX, EnSeccion, Omitido, es_excel, leer_lista, leer_lista_con_filas, normalizar_codigo, normalizar_email,
+    separar_repetidos,
+)
 
 
 def _xlsx(filas, fusionar=()):
@@ -123,3 +126,113 @@ class TestArchivoInvalido:
 
     def test_es_datos_invalidos(self):
         assert issubclass(ArchivoInvalido, DatosInvalidos)
+
+
+# ── Repetidos: normalización del código y separación ─────────────────────────
+
+class TestNormalizarCodigo:
+    @pytest.mark.parametrize("crudo,esperado", [
+        (" 2021001 ", "2021001"),
+        ("20 21 001", "2021001"),
+        ("00123", "123"),
+        ("123", "123"),
+        ("000", "0"),
+        ("ab-12", "AB-12"),
+        (" Ab 012 ", "AB012"),  # con letras no se tocan los ceros
+        ("0A12", "0A12"),
+        ("١٢٣", "١٢٣"),  # dígitos no ASCII: no se tratan como número
+    ])
+    def test_casos(self, crudo, esperado):
+        assert normalizar_codigo(crudo) == esperado
+
+
+def _filas(*estudiantes):
+    """[(fila, (nombre, código, None))] numeradas desde la 2, como en el archivo."""
+    return [(i, (n, c, None)) for i, (n, c) in enumerate(estudiantes, start=2)]
+
+
+class TestSepararRepetidos:
+    def test_sin_repetidos_no_cambia_nada(self):
+        validos = _filas(("ANA", "1"), ("BETO", "2"))
+        assert separar_repetidos(validos, []) == ([("ANA", "1", None), ("BETO", "2", None)], [], [])
+
+    def test_repetido_contra_la_seccion_con_nombre_distinto(self):
+        a_importar, omitidos, avisos = separar_repetidos(
+            _filas(("ANA R", " 00123 "), ("BETO", "2")), [EnSeccion("123", "ANA RUIZ")],
+        )
+        assert a_importar == [("BETO", "2", None)]
+        assert omitidos == [Omitido(2, "ANA R", " 00123 ", "en_seccion", "ANA RUIZ")]
+        assert avisos == ["Se omite 1 estudiante cuyo código ya está en la sección:  00123 "]
+
+    def test_repetido_dentro_del_archivo_gana_la_primera(self):
+        a_importar, omitidos, avisos = separar_repetidos(
+            _filas(("ANA", "ab1"), ("BETO", "2"), ("ANITA", "AB 1"), ("ANA", "AB1")), [],
+        )
+        assert a_importar == [("ANA", "ab1", None), ("BETO", "2", None)]
+        assert omitidos == [
+            Omitido(4, "ANITA", "AB 1", "en_archivo", "ANA", 2),
+            Omitido(5, "ANA", "AB1", "en_archivo", "ANA", 2),
+        ]
+        assert avisos == [
+            "Se omiten 2 filas con un código repetido en el archivo (se conserva la primera): filas 4, 5"
+        ]
+
+    def test_la_seccion_gana_al_archivo(self):
+        """Si el código ya está guardado, todas las filas que lo traen son 'en_seccion'."""
+        _, omitidos, _ = separar_repetidos(_filas(("ANA", "1"), ("ANA", "1")), [EnSeccion("1", "ANA")])
+        assert [o.motivo for o in omitidos] == ["en_seccion", "en_seccion"]
+
+    def test_aviso_agrupado_corta_en_diez(self):
+        guardados = [EnSeccion(str(i), f"E{i}") for i in range(1, 13)]
+        _, omitidos, avisos = separar_repetidos(_filas(*[(f"E{i}", str(i)) for i in range(1, 13)]), guardados)
+        assert len(omitidos) == 12
+        assert avisos == [
+            "Se omiten 12 estudiantes cuyo código ya está en la sección: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 y 2 más"
+        ]
+
+    def test_mismo_nombre_con_otro_codigo_se_importa_y_avisa(self):
+        a_importar, omitidos, avisos = separar_repetidos(
+            _filas(("Ana Ruíz", "2"), ("BETO", "3"), ("BETO", "4")), [EnSeccion("1", "ANA RUIZ")],
+        )
+        assert [c for _, c, _ in a_importar] == ["2", "3", "4"]
+        assert omitidos == []
+        assert avisos == [
+            "Fila 2: 'Ana Ruíz' ya está en la sección con el código '1'; se importa igual con el código '2'",
+            "Fila 4: 'BETO' también está en la fila 3 con otro código ('3'); se importan los dos",
+        ]
+
+
+class TestLeerConFilas:
+    def test_numera_como_el_archivo_saltando_las_invalidas(self):
+        validos, _ = leer_lista_con_filas(b"Nombre,Codigo\nAna,1\n,2\nBeto,3\n", "l.csv", "text/csv")
+        assert validos == [(2, ("ANA", "1", None)), (4, ("BETO", "3", None))]
+
+
+class TestCodigosNumericosDeExcel:
+    """Cómo llegan los códigos de un .xlsx real (openpyxl) y cómo se comparan."""
+
+    def _libro(self):
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Nombre", "Codigo"])
+        ws.append(["Ana", 123.0])       # número entero guardado como float
+        ws.append(["Beto", "00123"])    # texto con ceros a la izquierda
+        ws.append(["Carla", 123])
+        ws["B4"].number_format = "00000"  # se ve 00123, pero el valor es 123
+        ws.append(["Dora", 123.5])      # no entero: se conserva el decimal
+        salida = io.BytesIO()
+        wb.save(salida)
+        return salida.getvalue()
+
+    def test_valores_leidos(self):
+        validos, _ = leer_lista(self._libro(), "l.xlsx", None)
+        assert [c for _, c, _ in validos] == ["123", "00123", "123", "123.5"]
+
+    def test_los_tres_primeros_son_el_mismo_codigo(self):
+        validos, _ = leer_lista_con_filas(self._libro(), "l.xlsx", None)
+        a_importar, omitidos, _ = separar_repetidos(validos, [])
+        assert [n for n, _, _ in a_importar] == ["ANA", "DORA"]
+        assert [(o.fila, o.motivo, o.fila_conservada) for o in omitidos] == [
+            (3, "en_archivo", 2), (4, "en_archivo", 2),
+        ]

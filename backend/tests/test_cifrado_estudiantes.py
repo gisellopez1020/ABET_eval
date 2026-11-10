@@ -256,21 +256,36 @@ class TestEnLaBase:
         from app.database import engine
         assert engine.hide_parameters is True
 
-    def test_importacion_csv_cifra_todo_y_los_repetidos_se_importan_como_antes(self, client, db_session):
-        """Sin detección de duplicados (decisión del equipo): importar repetidos sigue igual que antes."""
+    def test_importacion_csv_cifra_todo_y_omite_los_repetidos(self, client, db_session):
+        """
+        Los repetidos se detectan descifrando en Python (el cifrado aleatorio impide un
+        UNIQUE): dentro del archivo y contra lo guardado. Lo guardado sigue cifrado.
+        """
         _, [s1] = _curso(db_session)
         csv = f"Nombre,Codigo,Email\n{NOMBRE},{CODIGO},{CORREO}\n{NOMBRE},{CODIGO},{CORREO}\nPEÑA ANA,1,\n"
-        resp = client.post(
-            f"/secciones/{s1.id}/estudiantes/csv",
-            files={"archivo": ("lista.csv", csv.encode("utf-8"), "text/csv")},
-        )
-        assert resp.status_code in (200, 201), resp.text
-        assert resp.json()["importados"] == 3
+        archivo = {"archivo": ("lista.csv", csv.encode("utf-8"), "text/csv")}
+        resp = client.post(f"/secciones/{s1.id}/estudiantes/csv", files=archivo)
+        assert resp.status_code == 201, resp.text
+        assert (resp.json()["importados"], resp.json()["omitidos"]) == (2, 1)
+
+        resp = client.post(f"/secciones/{s1.id}/estudiantes/csv", files=archivo)
+        assert (resp.json()["importados"], resp.json()["omitidos"]) == (0, 3)
+
         filas = db_session.execute(text("SELECT nombre_completo, codigo_estudiante FROM estudiantes")).all()
-        assert len(filas) == 3
+        assert len(filas) == 2
         assert all(v.startswith("enc:v1:") for fila in filas for v in fila)
         nombres = [e["nombre_completo"] for e in client.get(f"/secciones/{s1.id}/estudiantes").json()]
-        assert nombres == [NOMBRE, NOMBRE, "PEÑA ANA"]
+        assert nombres == [NOMBRE, "PEÑA ANA"]
+
+    def test_alta_con_codigo_repetido_409_y_el_guardado_sigue_cifrado(self, client, db_session):
+        _, [s1] = _curso(db_session)
+        est = _est(db_session, s1, NOMBRE, CODIGO, CORREO)
+        resp = client.post(
+            f"/secciones/{s1.id}/estudiantes", json={"nombre_completo": "Otro", "codigo_estudiante": f" {CODIGO} "},
+        )
+        assert resp.status_code == 409
+        assert CODIGO not in resp.text and "MUÑOZ" not in resp.text
+        assert all(v.startswith("enc:v1:") for v in _crudo(db_session, est.id))
 
 
 # ── Clave equivocada en ejecución: 503 controlado ────────────────────────────

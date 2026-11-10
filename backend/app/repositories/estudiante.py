@@ -23,6 +23,15 @@ class EstudianteRepository:
             self.db.query(Estudiante).filter(Estudiante.seccion_id == seccion_id).all()
         )
 
+    def codigos_y_nombres(self, seccion_id: int) -> List[Tuple[int, str, str]]:
+        """(id, código, nombre) ya descifrados de la sección, sin orden: para buscar repetidos."""
+        return [
+            (eid, codigo, nombre)
+            for eid, codigo, nombre in self.db.query(
+                Estudiante.id, Estudiante.codigo_estudiante, Estudiante.nombre_completo
+            ).filter(Estudiante.seccion_id == seccion_id)
+        ]
+
     def de_curso(self, curso_id: int, seccion_id: Optional[int] = None) -> List[Estudiante]:
         """Estudiantes del curso (o solo de la sección) ordenados por nombre completo."""
         return ordenar_por_nombre(self._de_curso(self.db.query(Estudiante), curso_id, seccion_id).all())
