@@ -55,6 +55,17 @@ class EstudianteNoEncontrado(NoEncontrado):
         super().__init__("Estudiante no encontrado")
 
 
+class CodigoEstudianteRepetido(Conflicto):
+    """
+    Alta o edición manual con un código que ya tiene otro estudiante de la sección
+    (comparado con lista_estudiantes.normalizar_codigo). El mensaje no lleva el código
+    ni el nombre: son datos personales cifrados y una excepción puede acabar en un log.
+    """
+
+    def __init__(self):
+        super().__init__("Ya hay otro estudiante con ese código en esta sección")
+
+
 class AsignaturaNoEncontrada(NoEncontrado):
     """El curso pedido como filtro de la exportación no existe (en esa pantalla se llama asignatura)."""
 

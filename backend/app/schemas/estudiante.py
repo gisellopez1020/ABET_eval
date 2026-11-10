@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
@@ -47,6 +47,8 @@ class EstudianteListadoOut(EstudianteOut):
 class ImportacionCSVResultado(BaseModel):
     importados: int
     errores: List[str] = []
+    # Filas que no se importaron por tener un código ya presente en la sección o repetido en el archivo
+    omitidos: int = 0
 
 
 class EstudianteLeido(BaseModel):
@@ -55,7 +57,23 @@ class EstudianteLeido(BaseModel):
     email: Optional[str] = None
 
 
+class EstudianteOmitido(BaseModel):
+    """
+    Fila que la importación no guardaría: su código ya está en la sección ("en_seccion")
+    o en una fila anterior del archivo ("en_archivo"). `nombre` y `codigo` son los de la
+    fila descartada; `nombre_conservado` el del estudiante que se queda (el guardado, o
+    el de `fila_conservada` del archivo).
+    """
+    fila: int
+    nombre: str
+    codigo: str
+    motivo: Literal["en_seccion", "en_archivo"]
+    nombre_conservado: str
+    fila_conservada: Optional[int] = None
+
+
 class VistaPreviaEstudiantes(BaseModel):
-    """Lo que importaría el archivo, sin guardarlo."""
+    """Lo que importaría el archivo, sin guardarlo: `estudiantes` ya sin los `omitidos`."""
     estudiantes: List[EstudianteLeido]
     errores: List[str] = []
+    omitidos: List[EstudianteOmitido] = []

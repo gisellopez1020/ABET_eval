@@ -149,6 +149,51 @@ class TestArchivoInvalido:
         assert _contar(db_session, s1) == 0
 
 
+# ── Códigos repetidos en la sección ──────────────────────────────────────────
+
+class TestRepetidos:
+    def test_alta_con_codigo_repetido_409(self, client, db_session):
+        _, [s1] = _curso(db_session)
+        _est(db_session, s1, "ANA", "AB-1")
+        resp = client.post(
+            f"/secciones/{s1.id}/estudiantes", json={"nombre_completo": "Beto", "codigo_estudiante": "ab-1 "},
+        )
+        assert resp.status_code == 409
+        assert resp.json() == {"detail": "Ya hay otro estudiante con ese código en esta sección"}
+        assert _contar(db_session, s1) == 1
+
+    def test_vista_previa_e_importacion_con_omitidos(self, client, db_session):
+        _, [s1] = _curso(db_session)
+        _est(db_session, s1, "ANA RUIZ", "1")
+        archivo = _xlsx([("Nombre", "Codigo"), ("Ana R", 1), ("Beto", 2), ("Betty", "002")])
+
+        vista = client.post(f"/secciones/{s1.id}/estudiantes/vista-previa", files=archivo)
+        assert vista.status_code == 200
+        assert vista.json() == {
+            "estudiantes": [{"nombre": "BETO", "codigo": "2", "email": None}],
+            "errores": [
+                "Se omite 1 estudiante cuyo código ya está en la sección: 1",
+                "Se omite 1 fila con un código repetido en el archivo (se conserva la primera): fila 4",
+            ],
+            "omitidos": [
+                {"fila": 2, "nombre": "ANA R", "codigo": "1", "motivo": "en_seccion",
+                 "nombre_conservado": "ANA RUIZ", "fila_conservada": None},
+                {"fila": 4, "nombre": "BETTY", "codigo": "002", "motivo": "en_archivo",
+                 "nombre_conservado": "BETO", "fila_conservada": 3},
+            ],
+        }
+
+        resp = client.post(f"/secciones/{s1.id}/estudiantes/csv", files=archivo)
+        assert resp.status_code == 201
+        assert resp.json() == {"importados": 1, "errores": vista.json()["errores"], "omitidos": 2}
+        assert _contar(db_session, s1) == 2
+
+    def test_sin_repetidos_la_respuesta_trae_omitidos_en_cero(self, client, db_session):
+        _, [s1] = _curso(db_session)
+        resp = client.post(f"/secciones/{s1.id}/estudiantes/csv", files=_csv())
+        assert resp.json() == {"importados": 1, "errores": [], "omitidos": 0}
+
+
 # ── Exportar: mensajes de 404 y 403 ──────────────────────────────────────────
 
 class TestExportarErrores:

@@ -240,7 +240,7 @@ class TestEstudiantesExcel:
         r_excel = client.post(f"/secciones/{s_excel.id}/estudiantes/csv", files=_subir_xlsx(contenido))
 
         assert r_csv.status_code == r_excel.status_code == 201
-        assert r_excel.json() == r_csv.json() == {"importados": 2, "errores": []}
+        assert r_excel.json() == r_csv.json() == {"importados": 2, "errores": [], "omitidos": 0}
         assert _listado(client, s_excel.id) == _listado(client, s_csv.id) == [
             ("ANA RUIZ", "2021002"), ("OSCAR EVELIO PRADA", "2021001"),
         ]
@@ -255,7 +255,7 @@ class TestEstudiantesExcel:
         s1, _ = secciones
         contenido = _xlsx([("Nombre", "Codigo"), ("Ana Ruiz", "1"), ("Sin código", None)])
         resp = client.post(f"/secciones/{s1.id}/estudiantes/csv", files=_subir_xlsx(contenido))
-        assert resp.json() == {"importados": 1, "errores": ["Fila 3: nombre o código vacío, se omite"]}
+        assert resp.json() == {"importados": 1, "errores": ["Fila 3: nombre o código vacío, se omite"], "omitidos": 0}
 
     def test_vista_previa_excel_no_guarda(self, client, secciones):
         s1, _ = secciones
@@ -263,6 +263,7 @@ class TestEstudiantesExcel:
         resp = client.post(f"/secciones/{s1.id}/estudiantes/vista-previa", files=_subir_xlsx(contenido))
         assert resp.status_code == 200
         assert resp.json() == {
+            "omitidos": [],
             "estudiantes": [{"nombre": "ANA RUIZ", "codigo": "2021002", "email": None}],
             "errores": ["Fila 3: nombre o código vacío, se omite"],
         }

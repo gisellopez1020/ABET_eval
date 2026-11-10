@@ -262,8 +262,9 @@ cifrar** y el arranque lo avisa.
 **Limitación:** como cada valor se cifra con un vector aleatorio, la base no puede
 buscar, filtrar ni ordenar por nombre, código o correo. La app ordena los nombres en
 Python, en orden alfabético español: sin distinguir tildes ni mayúsculas, y con la Ñ
-entre la N y la O. La app no tiene hoy búsquedas ni detección de duplicados en la base
-por esos campos.
+entre la N y la O. Por la misma razón no puede haber una restricción UNIQUE sobre el
+código: los estudiantes repetidos se detectan en Python, descifrando los de la sección
+al importar o al dar de alta (con la sección bloqueada mientras tanto).
 
 ## 7. Respaldos y actualizaciones
 

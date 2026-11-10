@@ -56,12 +56,13 @@ class TestEditar:
         resp = _editar(client, beto, email="beto@uao.edu.co")
         assert (resp.json()["email"], resp.json()["aviso"]) == ("beto@uao.edu.co", None)
 
-    def test_codigo_editable_aunque_otro_lo_tenga(self, client, db_session, ana):
-        """Hoy el código no es único (ni en la base ni en la importación): editar no lo exige."""
+    def test_codigo_de_otro_de_la_seccion_409_sin_cambiar(self, client, db_session, ana):
+        """El código no se repite en una sección (comparado sin espacios ni ceros a la izquierda)."""
         otro = _est(db_session, db_session.get(Estudiante, ana.id).seccion, "BETO DIAZ", "2021002")
-        resp = _editar(client, ana, codigo_estudiante=" 2021002 ")
-        assert resp.status_code == 200
-        assert _guardado(db_session, ana)[1] == "2021002"
+        resp = _editar(client, ana, codigo_estudiante=" 02021002 ", nombre_completo="Otra")
+        assert resp.status_code == 409
+        assert resp.json() == {"detail": "Ya hay otro estudiante con ese código en esta sección"}
+        assert _guardado(db_session, ana) == ("ANA RUIZ", "2021001", "ana@uao.edu.co")
         assert _guardado(db_session, otro)[1] == "2021002"
 
     @pytest.mark.parametrize("vacio", [None, "", "   "], ids=["null", "vacio", "espacios"])

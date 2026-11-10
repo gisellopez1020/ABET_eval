@@ -24,11 +24,29 @@ export interface EstudianteCreado extends Estudiante {
 export interface ImportacionCSVResultado {
   importados: number;
   errores: string[];
+  /** Filas no importadas por tener un código que ya estaba en la sección o repetido en el archivo. */
+  omitidos?: number;
+}
+
+/**
+ * Fila que la importación no guardará por código repetido: `en_seccion` (ya hay un
+ * estudiante con ese código) o `en_archivo` (lo trae una fila anterior). `nombre` y
+ * `codigo` son los de la fila descartada; `nombre_conservado`, el del que se queda.
+ */
+export interface EstudianteOmitido {
+  fila: number;
+  nombre: string;
+  codigo: string;
+  motivo: 'en_seccion' | 'en_archivo';
+  nombre_conservado: string;
+  fila_conservada?: number | null;
 }
 
 export interface VistaPreviaEstudiantes {
+  /** Solo los que se importarían (sin los omitidos). */
   estudiantes: { nombre: string; codigo: string; email?: string | null }[];
   errores: string[];
+  omitidos?: EstudianteOmitido[];
 }
 
 export const estudiantesApi = {

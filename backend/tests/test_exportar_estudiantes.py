@@ -220,7 +220,7 @@ class TestImportarCorreo:
         csv = f"Nombre,Codigo,{encabezado}\nAna Ruiz,1, Ana.Ruiz@UAO.edu.co \nBeto Diaz,2,\n"
         resp = client.post(f"/secciones/{s1.id}/estudiantes/csv",
                            files={"archivo": ("e.csv", csv.encode(), "text/csv")})
-        assert resp.json() == {"importados": 2, "errores": []}
+        assert resp.json() == {"importados": 2, "errores": [], "omitidos": 0}
         assert _correos(db_session, s1) == {"1": "ana.ruiz@uao.edu.co", "2": None}
 
     def test_csv_sin_columna_de_correo_queda_null(self, client, db_session):
@@ -234,7 +234,7 @@ class TestImportarCorreo:
         _, [s1] = _curso(db_session)
         contenido = _xlsx([("Nombre", "Código", "Correo"), ("Ana Ruiz", 1, "ana@uao.edu.co"), ("Beto Diaz", 2, None)])
         resp = client.post(f"/secciones/{s1.id}/estudiantes/csv", files={"archivo": ("e.xlsx", contenido, MIME_XLSX)})
-        assert resp.json() == {"importados": 2, "errores": []}
+        assert resp.json() == {"importados": 2, "errores": [], "omitidos": 0}
         assert _correos(db_session, s1) == {"1": "ana@uao.edu.co", "2": None}
 
     def test_correo_invalido_importa_al_estudiante_sin_correo_y_avisa(self, client, db_session):
@@ -244,6 +244,7 @@ class TestImportarCorreo:
                            files={"archivo": ("e.csv", csv.encode(), "text/csv")})
         assert resp.json() == {
             "importados": 2,
+            "omitidos": 0,
             "errores": ["Fila 2: correo 'ana ruiz' no válido, se deja en blanco"],
         }
         assert _correos(db_session, s1) == {"1": None, "2": "beto@uao.edu.co"}

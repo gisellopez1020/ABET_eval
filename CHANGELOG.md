@@ -7,6 +7,24 @@ usa [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Añadido
+
+- **Estudiantes repetidos:** la importación (CSV o Excel) omite las filas cuyo código ya
+  tiene un estudiante de la sección o que repiten el código de una fila anterior del
+  archivo, y avisa cuántas y cuáles. La vista previa las muestra antes de importar,
+  con el nombre que se conserva y el que se descarta. El código se compara sin espacios,
+  sin distinguir mayúsculas y, si es numérico, sin ceros a la izquierda (`00123` = `123`,
+  como lo guarda Excel); se guarda tal como viene. El mismo código en otra sección se
+  permite, y el mismo nombre con otro código solo genera un aviso.
+
+### Cambiado
+
+- El alta y la edición manual de un estudiante responden **409** si otro estudiante de la
+  sección ya tiene ese código (antes se guardaba repetido). Los repetidos que ya existían
+  no se tocan y se pueden seguir editando sin cambiar su código.
+- La respuesta de la importación trae `omitidos` (cantidad) y la de la vista previa,
+  `omitidos` (filas, con su motivo). Son campos nuevos: los existentes no cambian.
+
 ## [1.0.0] - 2026-11-05
 
 Primera versión publicada. Reúne el desarrollo desde el inicio del proyecto (mayo de 2026),

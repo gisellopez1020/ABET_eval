@@ -360,6 +360,84 @@ describe('SectionPage — importar CSV / Excel', () => {
     expect(await d.findByText('Importados: 1. Fila 3: código repetido')).toBeTruthy();
     expect(estudiantesApi.list).toHaveBeenCalledTimes(2);
   });
+
+  it('la vista previa muestra cuántos se omitirán por código repetido y qué nombre se conserva', async () => {
+    vi.mocked(estudiantesApi.vistaPrevia).mockResolvedValue({
+      estudiantes: [{ nombre: 'CARLOS RUIZ', codigo: '2210009' }],
+      errores: ['Se omite 1 estudiante cuyo código ya está en la sección: 2210001'],
+      omitidos: [
+        { fila: 2, nombre: 'ANA R', codigo: '2210001', motivo: 'en_seccion', nombre_conservado: 'ANA RUIZ' },
+        { fila: 4, nombre: 'CARLOS RUIZ', codigo: '2210009', motivo: 'en_archivo',
+          nombre_conservado: 'CARLOS RUIZ', fila_conservada: 3 },
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    const d = await abrirImportar(user);
+
+    await user.upload(inputArchivo(), archivo('lista.csv'));
+
+    expect(await d.findByText('· 2 se omitirán por código repetido', { exact: false })).toBeTruthy();
+    expect(d.getByText('No se importarán (2, código repetido)')).toBeTruthy();
+    expect(d.getByText('ya está en la sección como ANA RUIZ; se conserva ese')).toBeTruthy();
+    expect(d.getByText('repite el código de la fila 3')).toBeTruthy();
+    expect(d.getByText('ANA R')).toBeTruthy();
+  });
+
+  it('si todo el archivo ya estaba, la vista previa lista solo los omitidos', async () => {
+    vi.mocked(estudiantesApi.vistaPrevia).mockResolvedValue({
+      estudiantes: [],
+      errores: ['Se omite 1 estudiante cuyo código ya está en la sección: 2210001'],
+      omitidos: [{ fila: 2, nombre: 'ANA RUIZ', codigo: '2210001', motivo: 'en_seccion', nombre_conservado: 'ANA RUIZ' }],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    const d = await abrirImportar(user);
+
+    await user.upload(inputArchivo(), archivo('lista.csv'));
+
+    expect(await d.findByText('No se importará (1, código repetido)')).toBeTruthy();
+    expect(d.getByText('ya está en la sección')).toBeTruthy();
+    expect(d.queryByText(/^Vista previa/)).toBeNull();
+  });
+
+  it('al elegir otro archivo se limpian los omitidos del anterior', async () => {
+    vi.mocked(estudiantesApi.vistaPrevia)
+      .mockResolvedValueOnce({
+        estudiantes: [],
+        errores: [],
+        omitidos: [{ fila: 2, nombre: 'ANA RUIZ', codigo: '1', motivo: 'en_seccion', nombre_conservado: 'ANA RUIZ' }],
+      })
+      .mockResolvedValueOnce({ estudiantes: [{ nombre: 'NUEVO', codigo: '9' }], errores: [] });
+    const user = userEvent.setup();
+    renderPage();
+    const d = await abrirImportar(user);
+
+    await user.upload(inputArchivo(), archivo('primero.csv'));
+    await d.findByText('No se importará (1, código repetido)');
+    await user.upload(inputArchivo(), archivo('segundo.csv'));
+
+    expect(await d.findByText('NUEVO')).toBeTruthy();
+    expect(d.queryByText(/código repetido/)).toBeNull();
+  });
+
+  it('el resumen de la importación dice cuántos se omitieron', async () => {
+    vi.mocked(estudiantesApi.vistaPrevia).mockResolvedValue({ estudiantes: [{ nombre: 'CARLOS RUIZ', codigo: '2210009' }], errores: [] });
+    vi.mocked(estudiantesApi.importCsv).mockResolvedValue({
+      importados: 0, omitidos: 1, errores: ['Se omite 1 estudiante cuyo código ya está en la sección: 2210009'],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    const d = await abrirImportar(user);
+    await user.upload(inputArchivo(), archivo('lista.csv'));
+    await d.findByText('Vista previa (1 estudiante)');
+
+    await user.click(d.getByRole('button', { name: 'Importar' }));
+
+    expect(await d.findByText(
+      'Importados: 0. Se omite 1 estudiante cuyo código ya está en la sección: 2210009',
+    )).toBeTruthy();
+  });
 });
 
 describe('SectionPage — exportar', () => {

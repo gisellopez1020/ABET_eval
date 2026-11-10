@@ -44,6 +44,7 @@ export function SectionPage() {
     setCsvModal,
     csvFile,
     csvPreview,
+    csvOmitidos,
     csvLoading,
     csvError,
     fileRef,
@@ -274,6 +275,7 @@ export function SectionPage() {
         onFile={handleCsvSelect}
         fileRef={fileRef}
         preview={csvPreview}
+        omitidos={csvOmitidos}
         error={csvError}
         loading={csvLoading}
         onImport={handleCsvImport}

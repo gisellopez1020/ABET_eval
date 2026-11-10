@@ -42,7 +42,7 @@ def recibido(monkeypatch):
 
     def importar(self, seccion_id, email, contenido, nombre, content_type):
         llamadas.append(contenido)
-        return SimpleNamespace(importados=0, avisos=[])
+        return SimpleNamespace(importados=0, avisos=[], omitidos=0)
 
     def vista_previa(self, seccion_id, email, contenido, nombre, content_type):
         llamadas.append(contenido)

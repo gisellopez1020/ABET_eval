@@ -56,7 +56,7 @@ class TestFormatoLista:
         r1 = _subir(client, separado, armar(filas_separado), excel)
         r2 = _subir(client, junto, armar(filas_junto), excel)
         assert r1.status_code == r2.status_code == 201
-        assert r1.json() == r2.json() == {"importados": 2, "errores": []}
+        assert r1.json() == r2.json() == {"importados": 2, "errores": [], "omitidos": 0}
         assert _guardados(db_session, separado) == _guardados(db_session, junto) == ESPERADO
 
     @pytest.mark.parametrize("encabezado", [
@@ -69,7 +69,7 @@ class TestFormatoLista:
     def test_alias_de_columnas(self, client, db_session, encabezado):
         _, [s1] = _curso(db_session)
         resp = _subir(client, s1, _csv(encabezado, *FILAS))
-        assert resp.json() == {"importados": 2, "errores": []}
+        assert resp.json() == {"importados": 2, "errores": [], "omitidos": 0}
         assert _guardados(db_session, s1) == ESPERADO
 
     def test_apellidos_no_se_confunde_con_la_columna_de_id(self):
@@ -90,7 +90,7 @@ class TestFormatoLista:
     def test_fila_sin_nombre_ni_apellidos_se_omite(self, client, db_session):
         _, [s1] = _curso(db_session)
         resp = _subir(client, s1, _csv(ENCABEZADO, ("", "", "1", "", "S1"), ("Ana", "Ruiz", "2", "", "S1")))
-        assert resp.json() == {"importados": 1, "errores": ["Fila 2: nombre o código vacío, se omite"]}
+        assert resp.json() == {"importados": 1, "errores": ["Fila 2: nombre o código vacío, se omite"], "omitidos": 0}
 
     def test_sin_columna_de_codigo_ni_id_422(self, client, db_session):
         _, [s1] = _curso(db_session)
@@ -116,7 +116,7 @@ class TestFormatoDeSiempre:
         _, [s1] = _curso(db_session)
         resp = _subir(client, s1, b"Nombre,Codigo\nOscar Evelio Prada Ceballos,2021001\nAna Ruiz,2021002\n")
         assert resp.status_code == 201
-        assert resp.json() == {"importados": 2, "errores": []}
+        assert resp.json() == {"importados": 2, "errores": [], "omitidos": 0}
         assert _guardados(db_session, s1) == [
             ("ANA RUIZ", "2021002", None), ("OSCAR EVELIO PRADA CEBALLOS", "2021001", None),
         ]
@@ -134,6 +134,7 @@ class TestVistaPrevia:
         resp = _subir(client, s1, contenido, excel, ruta="vista-previa")
         assert resp.status_code == 200
         assert resp.json() == {
+            "omitidos": [],
             "estudiantes": [
                 {"nombre": "VALENTINA ROJAS MEDINA", "codigo": "2021001", "email": "valentina@uao.edu.co"},
                 {"nombre": "JUAN ESTEBAN OSPINA CÁRDENAS", "codigo": "2021002", "email": None},
@@ -163,6 +164,7 @@ class TestAvisoDeGrupo:
         assert resp.status_code == 201
         assert resp.json() == {
             "importados": 4,
+            "omitidos": 0,
             "errores": [
                 "2 filas tienen Grupo 'G02', distinto de esta sección ('S1'); se importan igual",
                 "1 fila tiene Grupo 'G03', distinto de esta sección ('S1'); se importa igual",
@@ -173,7 +175,7 @@ class TestAvisoDeGrupo:
     def test_grupo_igual_sin_aviso_aunque_cambien_mayusculas_o_espacios(self, client, db_session):
         _, [s1] = _curso(db_session, secciones=("Grupo 01",))
         contenido = _csv(ENCABEZADO, ("Ana", "Ruiz", "1", "", " grupo  01 "), ("Beto", "Diaz", "2", "", "GRUPO 01"))
-        assert _subir(client, s1, contenido).json() == {"importados": 2, "errores": []}
+        assert _subir(client, s1, contenido).json() == {"importados": 2, "errores": [], "omitidos": 0}
 
     def test_grupo_vacio_o_sin_columna_sin_aviso(self, client, db_session):
         _, [s1, s2] = _curso(db_session, secciones=("S1", "S2"))
@@ -191,4 +193,4 @@ class TestAvisoDeGrupo:
     def test_fila_omitida_no_cuenta_para_el_aviso(self, client, db_session):
         _, [s1] = _curso(db_session)
         resp = _subir(client, s1, _csv(ENCABEZADO, ("", "", "1", "", "G02")))
-        assert resp.json() == {"importados": 0, "errores": ["Fila 2: nombre o código vacío, se omite"]}
+        assert resp.json() == {"importados": 0, "errores": ["Fila 2: nombre o código vacío, se omite"], "omitidos": 0}
