@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-import { estudiantesApi } from '../../../api/estudiantes';
+import { EstudianteOmitido, estudiantesApi } from '../../../api/estudiantes';
 import { apiErrorMessage } from '../../../api/errors';
 import { Estudiante } from '../../../types';
 import { FilaVistaPrevia } from '../components/ImportStudentsModal';
@@ -12,6 +12,8 @@ export function useImportarEstudiantes(sid: number, onImportados: (lista: Estudi
   const [csvModal, setCsvModal] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreview, setCsvPreview] = useState<FilaVistaPrevia[]>([]);
+  // Filas que la importación saltará por código repetido (en la sección o en el archivo)
+  const [csvOmitidos, setCsvOmitidos] = useState<EstudianteOmitido[]>([]);
   const [csvLoading, setCsvLoading] = useState(false);
   const [csvError, setCsvError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -24,9 +26,10 @@ export function useImportarEstudiantes(sid: number, onImportados: (lista: Estudi
   const previewArchivo = async (file: File) => {
     const seq = ++previewSeq.current;
     try {
-      const { estudiantes: filas, errores } = await estudiantesApi.vistaPrevia(sid, file);
+      const { estudiantes: filas, errores, omitidos = [] } = await estudiantesApi.vistaPrevia(sid, file);
       if (seq !== previewSeq.current) return;
       setCsvPreview(filas);
+      setCsvOmitidos(omitidos);
       if (errores.length > 0) setCsvError(errores.join(' · '));
     } catch (e: any) {
       if (seq === previewSeq.current) setCsvError(apiErrorMessage(e, 'No se pudo leer el archivo'));
@@ -36,6 +39,7 @@ export function useImportarEstudiantes(sid: number, onImportados: (lista: Estudi
   const handleCsvSelect = (file: File) => {
     setCsvFile(file);
     setCsvPreview([]);
+    setCsvOmitidos([]);
     setCsvError('');
     previewArchivo(file);
   };
@@ -47,6 +51,7 @@ export function useImportarEstudiantes(sid: number, onImportados: (lista: Estudi
     try {
       const result = await estudiantesApi.importCsv(sid, csvFile);
       onImportados(await estudiantesApi.list(sid));
+      // Si hubo omitidos por código repetido, uno de los avisos lo dice con la cantidad
       if (result.errores.length > 0) {
         setCsvError(`Importados: ${result.importados}. ${result.errores.join(' · ')}`);
         return;
@@ -54,6 +59,7 @@ export function useImportarEstudiantes(sid: number, onImportados: (lista: Estudi
       setCsvModal(false);
       setCsvFile(null);
       setCsvPreview([]);
+      setCsvOmitidos([]);
     } catch (e: any) {
       setCsvError(apiErrorMessage(e, 'Error al importar el archivo'));
     } finally {
@@ -66,6 +72,7 @@ export function useImportarEstudiantes(sid: number, onImportados: (lista: Estudi
     setCsvModal,
     csvFile,
     csvPreview,
+    csvOmitidos,
     csvLoading,
     csvError,
     fileRef,
