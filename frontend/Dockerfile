@@ -1,5 +1,5 @@
 # Desarrollo (docker-compose.yml). Misma versión de Node que Dockerfile.prod
-FROM node:24.22.2-alpine3.24
+FROM node:24.22.3-alpine3.24
 
 WORKDIR /app
 
