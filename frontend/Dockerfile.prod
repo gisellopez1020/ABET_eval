@@ -2,7 +2,7 @@
 # con nginx, que además hace de proxy de /api al backend. Para desarrollo, ver Dockerfile.
 # Versiones fijas de las imágenes base: actualizarlas es un cambio explícito
 # (DESPLIEGUE_PRODUCCION.md, "Actualizar las imágenes base")
-FROM node:24.22.2-alpine3.24 AS build
+FROM node:24.22.3-alpine3.24 AS build
 
 WORKDIR /app
 
