@@ -633,7 +633,8 @@ describe('ProjectsPage — asignatura y parámetros de la URL', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole('button', { name: /equipo bd/i })).toBeTruthy();
+    // El filtro empieza en "Proyecto BD", que no tiene equipos ("Equipo BD" es de "Taller BD")
+    expect(await screen.findByText('La actividad «Proyecto BD» aún no tiene equipos')).toBeTruthy();
     expect((screen.getByLabelText('Asignatura') as HTMLSelectElement).value).toBe('2');
 
     await user.click(screen.getByRole('button', { name: /nuevo proyecto/i }));
@@ -734,5 +735,199 @@ describe('ProjectsPage — alcance de secciones de las actividades', () => {
     const [seccion, actividad] = within(screen.getByRole('dialog')).getAllByRole('combobox') as HTMLSelectElement[];
     expect(Array.from(seccion.options).map((o) => o.textContent)).toEqual(['Grupo A', 'Grupo B']);
     expect(Array.from(actividad.options).map((o) => o.textContent)).toEqual(['Proyecto final']);
+  });
+});
+
+describe('ProjectsPage — filtro por actividad', () => {
+  const CURSO_2 = {
+    id: 2, nombre: 'Bases de Datos', codigo: 'BD1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+    programa: 'Ingeniería Informática',
+    ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01',
+  };
+  const actividad = (
+    id: number, nombre: string, cursoId = 1, secciones_ids: number[] = [], tipo: 'grupal' | 'individual' = 'grupal'
+  ) => ({
+    id, nombre, tipo, peso_nota_final: 30, curso_id: cursoId, created_at: '2026-01-01',
+    total_peso_criterios: '100.00', aplica_todas_secciones: secciones_ids.length === 0, secciones_ids,
+  });
+  // Curso 1: "Proyecto final" en las dos secciones, "Taller B" solo en Grupo B y "Exposición" sin equipos
+  const ACTIVIDADES_1 = [actividad(100, 'Proyecto final'), actividad(101, 'Taller B', 1, [11]), actividad(102, 'Exposición')];
+
+  beforeEach(() => {
+    vi.mocked(cursosApi.list).mockResolvedValue([
+      { id: 1, nombre: 'Ingeniería de Software', codigo: 'IS1', periodo: '2026-2', docente_email: 'd@uao.edu.co',
+        programa: 'Ingeniería Informática',
+        ra_abet: [], rangos_calificacion: [], activo: true, created_at: '2026-01-01' },
+      CURSO_2,
+    ]);
+    vi.mocked(seccionesApi.list).mockImplementation(async (cursoId) =>
+      cursoId === 1
+        ? [{ id: 10, nombre: 'Grupo A', curso_id: 1, activo: true }, { id: 11, nombre: 'Grupo B', curso_id: 1, activo: true }]
+        : [{ id: 20, nombre: 'Grupo BD', curso_id: 2, activo: true }]
+    );
+    vi.mocked(actividadesApi.list).mockImplementation(async (cursoId) =>
+      cursoId === 1 ? ACTIVIDADES_1 : [actividad(200, 'Taller BD', 2)]
+    );
+    vi.mocked(equiposApi.list).mockImplementation(async (actividadId, seccionId) => {
+      if (actividadId === 100 && seccionId === 10) return [EQUIPO];
+      if (actividadId === 100 && seccionId === 11) {
+        return [{ ...EQUIPO, id: 60, nombre: 'Equipo Gamma', seccion_id: 11, calificado: true, criterios_calificados: 5 }];
+      }
+      if (actividadId === 101 && seccionId === 11) {
+        return [{ ...EQUIPO, id: 51, nombre: 'Equipo Beta', actividad_id: 101, seccion_id: 11 }];
+      }
+      if (actividadId === 200) return [{ ...EQUIPO, id: 70, nombre: 'Equipo BD', actividad_id: 200, seccion_id: 20 }];
+      return [];
+    });
+  });
+
+  const tarjetas = () =>
+    screen.queryAllByRole('button').filter((b) => b.tagName === 'ARTICLE').map((b) => b.querySelector('h2')?.textContent);
+  const selectActividad = () => screen.getByLabelText('Actividad') as HTMLSelectElement;
+  const opciones = (select: HTMLSelectElement) => Array.from(select.options).map((o) => o.textContent);
+  const renderEn = (url: string) =>
+    render(
+      <MemoryRouter initialEntries={[url]}>
+        <Routes>
+          <Route path="/proyectos" element={<ProjectsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+  it('muestra solo los equipos de la actividad elegida; "Todas las actividades" los vuelve a mostrar', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo beta/i });
+    expect(selectActividad().value).toBe('');
+    expect(opciones(selectActividad())).toEqual(['Todas las actividades', 'Proyecto final', 'Taller B', 'Exposición']);
+
+    await user.selectOptions(selectActividad(), '101');
+    expect(tarjetas()).toEqual(['Equipo Beta']);
+
+    await user.selectOptions(selectActividad(), '100');
+    expect(tarjetas()).toEqual(['Equipo Alfa', 'Equipo Gamma']);
+
+    await user.selectOptions(selectActividad(), '');
+    expect(tarjetas()).toEqual(['Equipo Alfa', 'Equipo Gamma', 'Equipo Beta']);
+  });
+
+  it('se combina (AND) con la búsqueda, la sección y el estado', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo beta/i });
+
+    await user.selectOptions(selectActividad(), '100');
+    await user.selectOptions(screen.getByLabelText('Sección'), '11');
+    expect(tarjetas()).toEqual(['Equipo Gamma']);
+
+    await user.selectOptions(screen.getByLabelText('Estado'), 'evaluado');
+    expect(tarjetas()).toEqual(['Equipo Gamma']);
+
+    // La actividad sí tiene equipos en la sección: el vacío por el estado conserva el texto general
+    await user.selectOptions(screen.getByLabelText('Estado'), 'pendiente');
+    expect(tarjetas()).toEqual([]);
+    expect(screen.getByText('No hay proyectos disponibles')).toBeTruthy();
+
+    await user.selectOptions(screen.getByLabelText('Estado'), 'all');
+    await user.selectOptions(screen.getByLabelText('Sección'), '');
+    await user.type(screen.getByPlaceholderText('Buscar proyecto...'), 'alfa');
+    expect(tarjetas()).toEqual(['Equipo Alfa']);
+  });
+
+  it('con una sección elegida ofrece solo las actividades que aplican a ella y, si la elegida no aplica, vuelve a "Todas"', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo beta/i });
+
+    await user.selectOptions(selectActividad(), '101'); // "Taller B" solo aplica a Grupo B
+    await user.selectOptions(screen.getByLabelText('Sección'), '10');
+    expect(opciones(selectActividad())).toEqual(['Todas las actividades', 'Proyecto final', 'Exposición']);
+    expect(selectActividad().value).toBe('');
+    expect(tarjetas()).toEqual(['Equipo Alfa']);
+
+    // No reaparece al volver a "Todas las secciones"
+    await user.selectOptions(screen.getByLabelText('Sección'), '');
+    expect(selectActividad().value).toBe('');
+    expect(tarjetas()).toEqual(['Equipo Alfa', 'Equipo Gamma', 'Equipo Beta']);
+
+    // Una actividad que sí aplica se conserva al elegir la sección
+    await user.selectOptions(selectActividad(), '101');
+    await user.selectOptions(screen.getByLabelText('Sección'), '11');
+    expect(selectActividad().value).toBe('101');
+    expect(tarjetas()).toEqual(['Equipo Beta']);
+  });
+
+  it('cambiar de asignatura vuelve a "Todas las actividades" con las actividades de la nueva', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo beta/i });
+    await user.selectOptions(selectActividad(), '100');
+
+    await user.selectOptions(screen.getByLabelText('Asignatura'), '2');
+
+    expect(await screen.findByRole('button', { name: /equipo bd/i })).toBeTruthy();
+    expect(selectActividad().value).toBe('');
+    expect(opciones(selectActividad())).toEqual(['Todas las actividades', 'Taller BD']);
+    expect(tarjetas()).toEqual(['Equipo BD']);
+  });
+
+  it('una actividad sin equipos lo dice con su nombre (y la sección, si hay una elegida)', async () => {
+    const user = userEvent.setup();
+    renderConRutas();
+    await screen.findByRole('button', { name: /equipo beta/i });
+
+    await user.selectOptions(selectActividad(), '102');
+    expect(tarjetas()).toEqual([]);
+    expect(screen.getByText('La actividad «Exposición» aún no tiene equipos')).toBeTruthy();
+    expect(screen.getByText('Créalos con «Nuevo proyecto».')).toBeTruthy();
+    expect(screen.queryByText('No hay proyectos disponibles')).toBeNull();
+
+    await user.selectOptions(screen.getByLabelText('Sección'), '10');
+    expect(screen.getByText('La actividad «Exposición» aún no tiene equipos en Grupo A')).toBeTruthy();
+  });
+
+  it('?actividadId inicia el filtro en esa actividad y la sigue preseleccionando al crear', async () => {
+    vi.mocked(actividadesApi.get).mockResolvedValue(ACTIVIDADES_1[2]);
+    const user = userEvent.setup();
+    renderEn('/proyectos?actividadId=102');
+
+    expect(await screen.findByText('La actividad «Exposición» aún no tiene equipos')).toBeTruthy();
+    expect(selectActividad().value).toBe('102');
+
+    await user.click(screen.getByRole('button', { name: /nuevo proyecto/i }));
+    const dialog = screen.getByRole('dialog', { name: 'Nuevo proyecto' });
+    const actividadModal = within(dialog).getAllByRole('combobox')[1] as HTMLSelectElement;
+    expect(actividadModal.value).toBe('102'); // no la primera ("Proyecto final")
+  });
+
+  it('?actividadId se aplica cuando las actividades terminan de cargar (no se pierde en el primer render)', async () => {
+    vi.mocked(actividadesApi.get).mockResolvedValue(ACTIVIDADES_1[1]);
+    let resolverActividades: (actividades: typeof ACTIVIDADES_1) => void = () => {};
+    vi.mocked(actividadesApi.list).mockImplementation(
+      () => new Promise((resolve) => { resolverActividades = resolve; })
+    );
+    renderEn('/proyectos?actividadId=101');
+
+    await waitFor(() => expect(actividadesApi.list).toHaveBeenCalledWith(1));
+    // Aún sin actividades: el selector solo tiene "Todas" y no hay equipos
+    expect(opciones(selectActividad())).toEqual(['Todas las actividades']);
+    expect(selectActividad().value).toBe('');
+
+    resolverActividades(ACTIVIDADES_1);
+
+    expect(await screen.findByRole('button', { name: /equipo beta/i })).toBeTruthy();
+    expect(selectActividad().value).toBe('101');
+    expect(tarjetas()).toEqual(['Equipo Beta']);
+  });
+
+  it('un ?actividadId que no es una actividad grupal de la asignatura no filtra', async () => {
+    const individual = actividad(103, 'Quiz', 1, [], 'individual');
+    vi.mocked(actividadesApi.get).mockResolvedValue(individual);
+    vi.mocked(actividadesApi.list).mockResolvedValue([...ACTIVIDADES_1, individual]);
+    renderEn('/proyectos?actividadId=103');
+
+    expect(await screen.findByRole('button', { name: /equipo beta/i })).toBeTruthy();
+    expect(selectActividad().value).toBe('');
+    expect(tarjetas()).toEqual(['Equipo Alfa', 'Equipo Gamma', 'Equipo Beta']);
   });
 });

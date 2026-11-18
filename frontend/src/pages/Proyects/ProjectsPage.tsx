@@ -8,7 +8,7 @@ import { actividadesApi } from '../../api/actividades';
 import { equiposApi } from '../../api/equipos';
 import { apiErrorMessage } from '../../api/errors';
 import { useCourseStore } from '../../store/courseStore';
-import { Curso } from '../../types';
+import { Curso, aplicaEnSeccion } from '../../types';
 
 import { CreateProjectModal } from '../Proyects/components/CreateProjectModal';
 import { DeleteProjectModal } from './components/DeleteProjectModal';
@@ -43,8 +43,20 @@ export function ProjectsPage() {
   const [courses, setCourses] = useState<Curso[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<number | null>(null);
   const [sectionFilter, setSectionFilter] = useState<number | null>(null); // null = Todas
+  // null = Todas. Con ?actividadId= empieza en esa actividad; solo filtra mientras esté en
+  // filterActivities (ver activeActivity), así que se aplica cuando las actividades terminan de cargar
+  const [activityFilter, setActivityFilter] = useState<number | null>(null);
 
   const { sections, activities, projects, setProjects, loading, setLoading, loadProjects } = useProjects();
+
+  // Con una sección elegida solo se ofrecen las actividades que aplican a ella (como en el
+  // backend y en CreateProjectModal): las demás nunca tendrían equipos en esa sección
+  const filterActivities = useMemo(
+    () => (sectionFilter === null ? activities : activities.filter((a) => aplicaEnSeccion(a, sectionFilter))),
+    [activities, sectionFilter]
+  );
+  // Una actividad que no está en la lista (aún cargando, de otra asignatura o individual) no filtra
+  const activeActivity = filterActivities.find((activity) => activity.id === activityFilter) ?? null;
 
   useEffect(() => {
     const loadInitialCourse = async () => {
@@ -68,6 +80,7 @@ export function ProjectsPage() {
 
         setSelectedCourse(effectiveCourseId);
         setSectionFilter(null);
+        setActivityFilter(actividadIdParam);
 
         await loadProjects(effectiveCourseId);
       } catch (error) {
@@ -82,9 +95,20 @@ export function ProjectsPage() {
   const handleCourseChange = (value: string) => {
     const courseId = value ? Number(value) : null;
     setSelectedCourse(courseId);
-    // Las secciones son de la asignatura anterior: vuelve a "Todas"
+    // Las secciones y las actividades son de la asignatura anterior: vuelven a "Todas"
     setSectionFilter(null);
+    setActivityFilter(null);
     void loadProjects(courseId);
+  };
+
+  const handleSectionFilter = (seccionId: number | null) => {
+    setSectionFilter(seccionId);
+    // Si la actividad elegida no aplica a la nueva sección, vuelve a "Todas las actividades"
+    // (si no, reaparecería al volver a "Todas las secciones")
+    const actividad = activities.find((activity) => activity.id === activityFilter);
+    if (seccionId !== null && actividad && !aplicaEnSeccion(actividad, seccionId)) {
+      setActivityFilter(null);
+    }
   };
 
   const filteredProjects = useMemo(() => {
@@ -101,10 +125,28 @@ export function ProjectsPage() {
 
       const matchesStatus = statusFilter === 'all' || projectEstado(project) === statusFilter;
       const matchesSection = sectionFilter === null || project.seccionId === sectionFilter;
+      const matchesActivity = activeActivity === null || project.actividadId === activeActivity.id;
 
-      return matchesSearch && matchesStatus && matchesSection;
+      return matchesSearch && matchesStatus && matchesSection && matchesActivity;
     });
-  }, [projects, search, statusFilter, sectionFilter]);
+  }, [projects, search, statusFilter, sectionFilter, activeActivity]);
+
+  // Vacío porque la actividad elegida no tiene equipos (en la sección elegida, si hay una),
+  // sin contar búsqueda ni estado. Los demás vacíos conservan el texto general de ProjectsList.
+  const emptyMessage = useMemo(() => {
+    if (!activeActivity) return undefined;
+    const tieneEquipos = projects.some(
+      (project) =>
+        project.actividadId === activeActivity.id &&
+        (sectionFilter === null || project.seccionId === sectionFilter)
+    );
+    if (tieneEquipos) return undefined;
+    const seccion = sections.find((section) => section.id === sectionFilter);
+    return {
+      title: `La actividad «${activeActivity.nombre}» aún no tiene equipos${seccion ? ` en ${seccion.nombre}` : ''}`,
+      hint: 'Créalos con «Nuevo proyecto».',
+    };
+  }, [activeActivity, projects, sectionFilter, sections]);
 
   const handleCreateProject = async (
     payload: CreateProjectPayload
@@ -220,7 +262,10 @@ export function ProjectsPage() {
           onCourseChange={handleCourseChange}
           sections={sections}
           sectionFilter={sectionFilter}
-          onSectionFilter={setSectionFilter}
+          onSectionFilter={handleSectionFilter}
+          activities={filterActivities}
+          activityFilter={activeActivity?.id ?? null}
+          onActivityFilter={setActivityFilter}
           statusFilter={statusFilter}
           onStatusFilter={setStatusFilter}
           onNew={() => setCreateModalOpen(true)}
@@ -232,6 +277,7 @@ export function ProjectsPage() {
           loading={loading}
           filteredProjects={filteredProjects}
           openProjectModal={openProjectModal}
+          emptyMessage={emptyMessage}
         />
       </div>
 
@@ -274,10 +320,12 @@ export function ProjectsPage() {
         open={createModalOpen}
         sections={sections}
         activities={activities}
+        // La actividad del filtro y, sin filtro, la de ?actividadId= (como antes)
         initialActividadId={
-          activities.some((activity) => activity.id === actividadIdParam)
+          activeActivity?.id ??
+          (activities.some((activity) => activity.id === actividadIdParam)
             ? actividadIdParam ?? undefined
-            : undefined
+            : undefined)
         }
         initialSeccionId={sectionFilter ?? undefined}
         onClose={() => setCreateModalOpen(false)}
