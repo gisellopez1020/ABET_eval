@@ -505,7 +505,8 @@ pruebas, pytest, setuptools ni secretos. `.dockerignore` excluye `.env*`, `*.pem
 propia libpq, OpenSSL y otras bibliotecas de C, no las de Debian: sus parches llegan al
 subir la versión de `psycopg2-binary` en `requirements.txt`, no con `apt`. Compilarlo
 desde fuente contra la libpq del sistema (`psycopg2`, con una etapa de build con `gcc` y
-`libpq-dev`) es una mejora futura.
+`libpq-dev`) es una mejora futura. SQLAlchemy se mantiene en 2.0.x: en 2.1 las URL
+`postgresql://` usan por defecto psycopg 3 en lugar de este driver.
 
 ### Actualizar las imágenes base
 

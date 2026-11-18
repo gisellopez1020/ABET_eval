@@ -31,6 +31,9 @@ usa [versionado semántico](https://semver.org/lang/es/).
   no se tocan y se pueden seguir editando sin cambiar su código.
 - La respuesta de la importación trae `omitidos` (cantidad) y la de la vista previa,
   `omitidos` (filas, con su motivo). Son campos nuevos: los existentes no cambian.
+- Dependabot ya no propone SQLAlchemy 2.1 (sí los parches 2.0.x): en 2.1 las URL
+  `postgresql://` usan por defecto psycopg 3 en lugar de `psycopg2-binary`, y la app no
+  arrancaría. Cambiar de driver se decide a mano.
 
 ## [1.0.0] - 2026-11-05
 
