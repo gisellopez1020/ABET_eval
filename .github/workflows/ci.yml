@@ -1,0 +1,238 @@
+# Integración continua: pruebas del backend y del frontend en cada Pull Request y en
+# cada push a main, ejecutando solo la parte del monorepo que cambió.
+#
+# Por qué un solo workflow sin `paths:` en los disparadores: si un workflow requerido
+# se salta por filtro de ruta, su comprobación queda "Pending" y bloquea el merge
+# (GitHub Docs, "Troubleshooting required status checks"). Aquí el workflow siempre
+# corre; el job `changes` decide qué jobs se ejecutan y `ci-ok` resume el resultado.
+# En la protección de main solo se marca como requerida la comprobación `ci-ok`.
+#
+# Acciones fijadas por SHA completo (con la versión en el comentario); Dependabot
+# (.github/dependabot.yml, ecosistema github-actions) propone las actualizaciones.
+# Sin secretos: las pruebas usan SQLite en memoria y servicios externos simulados.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Relanzar todo a mano (Actions → CI → Run workflow): ejecuta todos los jobs
+  workflow_dispatch:
+
+# Cada push nuevo a un PR cancela la ejecución anterior de ese PR. En main no se
+# cancela: cada commit conserva su resultado.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lista los archivos del PR con la API
+    outputs:
+      backend: ${{ steps.todo.outputs.todo == 'true' || steps.filtro.outputs.backend == 'true' || steps.filtro.outputs.infra == 'true' }}
+      frontend: ${{ steps.todo.outputs.todo == 'true' || steps.filtro.outputs.frontend == 'true' || steps.filtro.outputs.infra == 'true' }}
+      docker: ${{ steps.todo.outputs.todo == 'true' || steps.filtro.outputs.docker == 'true' || steps.filtro.outputs.infra == 'true' }}
+      # El gate comprueba que esta salida exista: sin ella, la detección no corrió
+      detectado: ${{ steps.fin.outputs.detectado }}
+    steps:
+      - name: Ejecución manual (todo)
+        id: todo
+        run: echo "todo=${{ github.event_name == 'workflow_dispatch' }}" >> "$GITHUB_OUTPUT"
+
+      # En un push, paths-filter compara con git: necesita el repositorio
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'push'
+        with:
+          persist-credentials: false
+
+      - name: Detectar qué cambió
+        id: filtro
+        if: steps.todo.outputs.todo != 'true'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            # Las pruebas del backend también validan estos archivos de fuera de backend/
+            # (tests/test_endurecimiento_config.py y test_cifrado_estudiantes.py)
+            backend:
+              - 'backend/**'
+              - 'frontend/nginx*'
+              - 'frontend/Dockerfile*'
+              - 'frontend/.dockerignore'
+              - '.env.example'
+            frontend:
+              - 'frontend/**'
+            # Cambios que pueden afectar a todo: se ejecuta todo
+            infra:
+              - '.github/**'
+              - 'docker-compose*.yml'
+              - 'scripts/**'
+            # Lo que entra en las imágenes de producción
+            docker:
+              - 'backend/Dockerfile'
+              - 'backend/.dockerignore'
+              - 'backend/requirements*.txt'
+              - 'frontend/Dockerfile*'
+              - 'frontend/.dockerignore'
+              - 'frontend/package.json'
+              - 'frontend/package-lock.json'
+              - 'frontend/nginx*'
+
+      - name: Resumen
+        id: fin
+        run: |
+          echo "detectado=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Qué se ejecuta"
+            echo "| Parte | ¿Se ejecuta? |"
+            echo "|---|---|"
+            echo "| backend | ${{ steps.todo.outputs.todo == 'true' || steps.filtro.outputs.backend == 'true' || steps.filtro.outputs.infra == 'true' }} |"
+            echo "| frontend | ${{ steps.todo.outputs.todo == 'true' || steps.filtro.outputs.frontend == 'true' || steps.filtro.outputs.infra == 'true' }} |"
+            echo "| docker-build | ${{ steps.todo.outputs.todo == 'true' || steps.filtro.outputs.docker == 'true' || steps.filtro.outputs.infra == 'true' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  backend:
+    name: backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # La misma versión menor que la imagen (backend/Dockerfile: python:3.13.x)
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: python -m pip install -r requirements-dev.txt
+
+      # -ra: resumen final con cada prueba fallida y el motivo; --tb=short: traza corta.
+      # Sin .env: conftest.py fija las variables de prueba (SQLite en memoria).
+      # Cobertura medida el 2026-11-10 (Python 3.13, sin red ni .env): 98 % de app/
+      # (3976 sentencias, 72 sin cubrir). Todavía sin umbral (--cov-fail-under).
+      - name: Pruebas (pytest)
+        run: >-
+          python -m pytest -ra --tb=short
+          --cov=app --cov-report=term --cov-report=xml
+          --junitxml=junit.xml
+
+      # También si fallan pruebas: la cobertura se midió igual
+      - name: Cobertura en el resumen
+        if: ${{ !cancelled() }}
+        run: |
+          [ -f .coverage ] || exit 0
+          {
+            echo "### Cobertura del backend"
+            python -m coverage report --format=markdown
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar reportes si falla
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backend-reportes
+          path: |
+            backend/junit.xml
+            backend/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend:
+    name: frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # La versión de frontend/.nvmrc (24), la misma que las imágenes
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # tsc (tipos) + vite build: lo mismo que hace Dockerfile.prod
+      - name: Compilar (tsc + vite build)
+        run: npm run build
+
+      # Vitest no interactivo. Con GITHUB_ACTIONS=true añade solo el reporter
+      # github-actions: cada prueba fallida aparece anotada en el PR.
+      - name: Pruebas (Vitest)
+        run: npm test -- --run
+
+  docker-build:
+    name: docker-build
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Las imágenes de producción de docker-compose.prod.yml, sin publicarlas
+      - name: Imagen del backend (target prod)
+        run: docker build --target prod --tag abet-eval-backend:ci backend
+
+      - name: Imagen del frontend (Dockerfile.prod)
+        run: docker build --file frontend/Dockerfile.prod --tag abet-eval-frontend:ci frontend
+
+  # La única comprobación requerida en la protección de main. Corre siempre
+  # (if: always()): sin eso, si un job falla este quedaría "skipped", y "skipped"
+  # cuenta como aprobado.
+  ci-ok:
+    name: ci-ok
+    needs: [changes, backend, frontend, docker-build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Comprobar el resultado de los jobs
+        env:
+          RESULTADOS: ${{ toJSON(needs) }}
+          CHANGES: ${{ needs.changes.result }}
+          DETECTADO: ${{ needs.changes.outputs.detectado }}
+        run: |
+          echo "$RESULTADOS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          # changes tiene que haber terminado bien y producido su salida: si se saltó o
+          # no la produjo, los demás jobs se saltarían sin haber decidido nada
+          if [ "$CHANGES" != "success" ] || [ "$DETECTADO" != "true" ]; then
+            echo "::error::El job changes no terminó bien (resultado: $CHANGES) o no produjo su salida"
+            exit 1
+          fi
+          # Un job saltado está bien (no le tocaba); fallido o cancelado, no
+          fallidos=$(echo "$RESULTADOS" | jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key')
+          if [ -n "$fallidos" ]; then
+            echo "::error::Jobs fallidos o cancelados: $(echo "$fallidos" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "Todo en orden"

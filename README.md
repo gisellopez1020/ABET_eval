@@ -144,6 +144,29 @@ npx vitest run
 
 ---
 
+## Integración continua (GitHub Actions)
+
+Cada Pull Request y cada push a `main` ejecutan el workflow **CI** (`.github/workflows/ci.yml`), que corre **solo la parte que cambió**:
+
+| Job | Cuándo corre | Qué hace |
+|-----|--------------|----------|
+| `changes` | Siempre | Detecta qué cambió (backend, frontend, imágenes, infraestructura). |
+| `backend` | `backend/**`, los `nginx*`, `Dockerfile*` y `.dockerignore` del frontend, `.env.example` (las pruebas del backend los validan) | Python 3.13: `pytest` con cobertura. La cobertura sale en el resumen de la ejecución; si falla, se guardan `junit.xml` y `coverage.xml` 7 días. |
+| `frontend` | `frontend/**` | Node 24 (`frontend/.nvmrc`): `npm ci`, `npm run build` (tsc + vite) y Vitest. Cada prueba fallida aparece anotada en el PR. |
+| `docker-build` | Dockerfile, `.dockerignore`, dependencias o `nginx*` | Construye las imágenes de producción, sin publicarlas. |
+| `ci-ok` | Siempre | Falla si algún job falló o se canceló, o si `changes` no corrió. **Es la única comprobación requerida para fusionar en `main`.** |
+
+Un cambio en `.github/`, `docker-compose*.yml` o `scripts/` ejecuta todo; uno solo de documentación ejecuta solo `changes` y `ci-ok` (menos de un minuto). Las pruebas no necesitan secretos, red ni `.env`.
+
+**Relanzar todo a mano:** en GitHub, pestaña **Actions** → **CI** (a la izquierda) → **Run workflow** → elegir la rama → **Run workflow**. Así se ejecutan todos los jobs, aunque no haya cambios. Para repetir una ejecución que falló, ábrela y pulsa **Re-run jobs** → **Re-run failed jobs**.
+
+Además:
+
+- **Seguridad** (`.github/workflows/seguridad.yml`): los lunes, `pip-audit` sobre `backend/requirements.txt` y `npm audit --omit=dev` sobre el frontend. No bloquea los PR; si encuentra algo, GitHub avisa por correo. También se lanza a mano con **Run workflow**.
+- **Dependabot** (`.github/dependabot.yml`): los lunes abre un PR agrupado por ecosistema (pip, npm, Docker, docker-compose, acciones) con versiones minor y patch. Las versiones mayores se actualizan a mano; los parches de seguridad llegan igual.
+
+---
+
 ## Credenciales de desarrollo
 
 | Campo | Valor |
@@ -162,6 +185,7 @@ npx vitest run
 
 ```
 ABET_eval/
+├── .github/                      # CI (workflows de GitHub Actions) y Dependabot
 ├── docker-compose.yml            # Desarrollo (código montado, recarga al guardar)
 ├── docker-compose.prod.yml       # Instalación para usar la app
 ├── docker-compose.https.yml      # Producción: encima de prod.yml, TLS en nginx

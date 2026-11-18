@@ -16,6 +16,13 @@ usa [versionado semántico](https://semver.org/lang/es/).
   sin distinguir mayúsculas y, si es numérico, sin ceros a la izquierda (`00123` = `123`,
   como lo guarda Excel); se guarda tal como viene. El mismo código en otra sección se
   permite, y el mismo nombre con otro código solo genera un aviso.
+- **Integración continua (GitHub Actions):** el workflow CI ejecuta en cada Pull Request y
+  en cada push a `main` las pruebas del backend (Python 3.13, con cobertura) y del
+  frontend (Node 24: compilación y Vitest), solo de la parte que cambió, y construye las
+  imágenes de producción cuando cambian sus Dockerfile o dependencias. La comprobación
+  `ci-ok` resume el resultado y es la que se exige para fusionar. Auditoría semanal de
+  vulnerabilidades (`pip-audit`, `npm audit`) y Dependabot semanal agrupado. Detalle en el
+  README, «Integración continua».
 
 ### Cambiado
 
