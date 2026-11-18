@@ -163,7 +163,7 @@ Un cambio en `.github/`, `docker-compose*.yml` o `scripts/` ejecuta todo; uno so
 Además:
 
 - **Seguridad** (`.github/workflows/seguridad.yml`): los lunes, `pip-audit` sobre `backend/requirements.txt` y `npm audit --omit=dev` sobre el frontend. No bloquea los PR; si encuentra algo, GitHub avisa por correo. También se lanza a mano con **Run workflow**.
-- **Dependabot** (`.github/dependabot.yml`): los lunes abre un PR agrupado por ecosistema (pip, npm, Docker, docker-compose, acciones) con versiones minor y patch. Las versiones mayores se actualizan a mano; los parches de seguridad llegan igual.
+- **Dependabot** (`.github/dependabot.yml`): los lunes abre un PR agrupado por ecosistema (pip, npm, Docker, docker-compose, acciones) con versiones minor y patch. Las versiones mayores se actualizan a mano, igual que SQLAlchemy 2.1 (cambia el driver de PostgreSQL); los parches de seguridad llegan igual.
 
 ---
 
