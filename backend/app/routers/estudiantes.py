@@ -3,6 +3,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Response, UploadFile, File, status
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.archivos import leer_archivo_limitado
 from app.database import get_db
@@ -96,8 +97,12 @@ async def importar_csv(
     404 si la sección no existe, 403 si es de otro docente, 422 si el archivo no
     se puede leer o le faltan las columnas obligatorias.
     """
-    resultado = EstudianteService(db).importar(
-        seccion_id, usuario["email"], await leer_archivo_limitado(archivo), archivo.filename, archivo.content_type,
+    # async solo para leer el archivo; el servicio (parseo, BD, cifrado) es síncrono y va
+    # en un hilo: en el event loop dejaría parado al resto de peticiones mientras dura
+    contenido = await leer_archivo_limitado(archivo)
+    resultado = await run_in_threadpool(
+        EstudianteService(db).importar,
+        seccion_id, usuario["email"], contenido, archivo.filename, archivo.content_type,
     )
     return ImportacionCSVResultado(
         importados=resultado.importados, errores=resultado.avisos, omitidos=resultado.omitidos,
@@ -121,8 +126,11 @@ async def vista_previa_estudiantes(
     repetido (con el nombre que se conserva y el que se descarta). El frontend la usa
     para la vista previa de CSV y Excel. Mismos errores que la importación.
     """
-    return EstudianteService(db).vista_previa(
-        seccion_id, usuario["email"], await leer_archivo_limitado(archivo), archivo.filename, archivo.content_type,
+    # Como importar_csv: el archivo se lee en el event loop y el servicio va en un hilo
+    contenido = await leer_archivo_limitado(archivo)
+    return await run_in_threadpool(
+        EstudianteService(db).vista_previa,
+        seccion_id, usuario["email"], contenido, archivo.filename, archivo.content_type,
     )
 
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.archivos import leer_archivo_limitado
 from app.database import get_db
@@ -77,7 +78,10 @@ async def importar_excel_criterios(
     el formato esperado o los pesos no suman 100%. Los aspectos llegan sin codigo_abet.
     404 si la actividad no existe, 403 si es de otro docente.
     """
-    return CriterioService(db).leer_excel(actividad_id, usuario["email"], await leer_archivo_limitado(archivo))
+    # async solo para leer el archivo; leer el Excel (openpyxl, BD) es síncrono y va en un
+    # hilo: en el event loop dejaría parado al resto de peticiones mientras dura
+    contenido = await leer_archivo_limitado(archivo)
+    return await run_in_threadpool(CriterioService(db).leer_excel, actividad_id, usuario["email"], contenido)
 
 
 @router.patch(
