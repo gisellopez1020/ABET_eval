@@ -23,6 +23,13 @@ usa [versionado semántico](https://semver.org/lang/es/).
   `ci-ok` resume el resultado y es la que se exige para fusionar. Auditoría semanal de
   vulnerabilidades (`pip-audit`, `npm audit`) y Dependabot semanal agrupado. Detalle en el
   README, «Integración continua».
+- **Filtro por actividad en Proyectos:** un selector «Actividad» junto al de sección, que
+  se combina con la búsqueda, la sección y el estado. Con una sección elegida solo ofrece
+  las actividades que aplican a ella, y vuelve a «Todas las actividades» al cambiar de
+  asignatura. Al llegar con `?actividadId=` (desde la rúbrica o desde Evaluaciones,
+  «Crear equipos») empieza en esa actividad, que sigue preseleccionada al crear un
+  equipo. Si la actividad elegida aún no tiene equipos, la pantalla lo dice con su
+  nombre.
 
 ### Cambiado
 

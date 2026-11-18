@@ -1,7 +1,7 @@
 import { Filter, Plus, Search } from 'lucide-react';
 
 import { Button } from '../../../components/ui/Button';
-import { Curso, Seccion } from '../../../types';
+import { Actividad, Curso, Seccion } from '../../../types';
 import { ProjectStatusFilter } from '../types';
 
 interface ProjectsToolbarProps {
@@ -14,12 +14,17 @@ interface ProjectsToolbarProps {
   /** null = Todas las secciones */
   sectionFilter: number | null;
   onSectionFilter: (seccionId: number | null) => void;
+  /** Actividades grupales que se ofrecen (las que aplican a la sección elegida) */
+  activities: Actividad[];
+  /** null = Todas las actividades */
+  activityFilter: number | null;
+  onActivityFilter: (actividadId: number | null) => void;
   statusFilter: ProjectStatusFilter;
   onStatusFilter: (value: ProjectStatusFilter) => void;
   onNew: () => void;
 }
 
-// Búsqueda, filtros (asignatura, sección, estado) y "Nuevo proyecto" de ProjectsPage.
+// Búsqueda, filtros (asignatura, sección, actividad, estado) y "Nuevo proyecto" de ProjectsPage.
 // El botón "Filtrar" no tiene acción (como antes de extraerlo).
 export function ProjectsToolbar({
   search,
@@ -30,6 +35,9 @@ export function ProjectsToolbar({
   sections,
   sectionFilter,
   onSectionFilter,
+  activities,
+  activityFilter,
+  onActivityFilter,
   statusFilter,
   onStatusFilter,
   onNew,
@@ -137,6 +145,49 @@ export function ProjectsToolbar({
                 {sections.map((section) => (
                 <option key={section.id} value={section.id}>
                     {section.nombre}
+                </option>
+                ))}
+            </select>
+            </div>
+
+            {/* Actividad */}
+            <div
+            className="
+                flex h-10 min-w-[220px] items-center gap-2
+                rounded-xl border border-gray-200
+                bg-white px-3
+                text-sm text-gray-700 shadow-sm
+                transition
+                hover:border-[#9E0B0F]
+                focus-within:border-[#9E0B0F]
+                focus-within:ring-2
+                focus-within:ring-[#9E0B0F]/10
+            "
+            >
+            <label
+                htmlFor="activity-select"
+                className="shrink-0 text-gray-500"
+            >
+                Actividad
+            </label>
+
+            <select
+                id="activity-select"
+                value={activityFilter ?? ''}
+                onChange={(event) =>
+                onActivityFilter(event.target.value ? Number(event.target.value) : null)
+                }
+                className="
+                min-w-0 flex-1
+                bg-transparent
+                text-sm text-gray-700
+                outline-none
+                "
+            >
+                <option value="">Todas las actividades</option>
+                {activities.map((activity) => (
+                <option key={activity.id} value={activity.id}>
+                    {activity.nombre}
                 </option>
                 ))}
             </select>

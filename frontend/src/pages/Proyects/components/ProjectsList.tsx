@@ -5,13 +5,15 @@ import { ProjectCard } from './ProjectCard';
 
 interface ProjectsListProps {
   loading: boolean;
-  /** Proyectos ya filtrados por búsqueda, sección y estado */
+  /** Proyectos ya filtrados por búsqueda, sección, actividad y estado */
   filteredProjects: ProjectRow[];
   openProjectModal: (project: ProjectRow) => void;
+  /** Texto del estado vacío en vez del general (p. ej. una actividad sin equipos) */
+  emptyMessage?: { title: string; hint: string };
 }
 
 // Contenido de ProjectsPage: esqueleto de carga, estado vacío o las tarjetas
-export function ProjectsList({ loading, filteredProjects, openProjectModal }: ProjectsListProps) {
+export function ProjectsList({ loading, filteredProjects, openProjectModal, emptyMessage }: ProjectsListProps) {
   const noProjects =
     !loading && filteredProjects.length === 0;
 
@@ -47,12 +49,11 @@ export function ProjectsList({ loading, filteredProjects, openProjectModal }: Pr
             />
 
             <p className="text-base font-semibold text-gray-700">
-              No hay proyectos disponibles
+              {emptyMessage?.title ?? 'No hay proyectos disponibles'}
             </p>
 
             <p className="mt-1 text-sm text-gray-500">
-              Crea un equipo o una actividad grupal para ver
-              los proyectos aquí.
+              {emptyMessage?.hint ?? 'Crea un equipo o una actividad grupal para ver los proyectos aquí.'}
             </p>
           </div>
         ) : (

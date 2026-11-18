@@ -31,7 +31,7 @@ const SECCIONES: SeccionAyuda[] = [
   {
     titulo: 'Proyectos y equipos',
     texto:
-      'Para actividades grupales, crea los equipos de trabajo desde esta pantalla antes de poder calificar — elige la asignatura, la actividad y los estudiantes que forman cada equipo. Una actividad individual no necesita equipos: se califica directamente por estudiante.',
+      'Para actividades grupales, crea los equipos de trabajo desde esta pantalla antes de poder calificar — elige la asignatura, la actividad y los estudiantes que forman cada equipo. Una actividad individual no necesita equipos: se califica directamente por estudiante. La lista de equipos se puede filtrar por sección, por actividad y por estado.',
   },
   {
     titulo: 'Evaluación',
