@@ -19,6 +19,10 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: [version-update:semver-major]
+      # 2.1 cambia el driver por defecto de postgresql:// (psycopg 3 en vez de psycopg2):
+      # subirla es un cambio de driver que se decide a mano
+      - dependency-name: sqlalchemy
+        update-types: [version-update:semver-minor]
     commit-message:
       prefix: "chore(deps)"
 

@@ -2,6 +2,8 @@
 fastapi==0.162.0
 starlette==1.10.0
 uvicorn[standard]==0.29.0
+# Se queda en 2.0.x: en 2.1 una URL postgresql:// usa psycopg 3 por defecto, no el
+# psycopg2-binary de abajo (subirla es un cambio de driver; .github/dependabot.yml)
 sqlalchemy==2.0.57
 alembic==1.13.1
 # -binary trae dentro de la rueda su propia libpq, OpenSSL y otras bibliotecas de C (no
