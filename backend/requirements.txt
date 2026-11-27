@@ -1,17 +1,17 @@
 # Dependencias de producción (las que van en la imagen). Pruebas: requirements-dev.txt
-fastapi==0.163.1
+fastapi==0.165.0
 starlette==1.10.0
 uvicorn[standard]==0.54.0
 # Se queda en 2.0.x: en 2.1 una URL postgresql:// usa psycopg 3 por defecto, no el
 # psycopg2-binary de abajo (subirla es un cambio de driver; .github/dependabot.yml)
-sqlalchemy==2.0.57
+sqlalchemy==2.0.58
 alembic==1.20.1
 # -binary trae dentro de la rueda su propia libpq, OpenSSL y otras bibliotecas de C (no
 # las de la imagen):
 # sus parches llegan al subir esta versión, no con apt. Compilar psycopg2 desde
 # fuente contra la libpq de Debian es una mejora futura (DESPLIEGUE_PRODUCCION.md).
 psycopg2-binary==2.9.13
-pydantic==2.14.3
+pydantic==2.14.4
 pydantic-settings==2.16.3
 python-dotenv==1.2.4
 PyJWT==2.15.1
@@ -19,7 +19,7 @@ cryptography==50.0.2
 httpx==0.28.1
 openpyxl==3.1.5
 Pillow==13.0.0
-python-multipart==0.0.33
+python-multipart==0.0.34
 google-auth==2.62.2
 google-auth-oauthlib==1.5.0
 google-api-python-client==2.202.0
