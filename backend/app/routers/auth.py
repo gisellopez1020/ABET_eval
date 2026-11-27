@@ -5,6 +5,7 @@ from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Re
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import (
     CSRF_HEADER,
@@ -120,8 +121,10 @@ async def callback(
             detail="La respuesta de Google no incluyó id_token",
         )
 
-    usuario = verify_id_token(id_token_str)
-    guardar_tokens_drive(db, usuario["email"], tokens)
+    # Síncronas (red hacia Google para los certificados; BD y cifrado): en un hilo, para
+    # no detener el event loop. Solo exchange_code_for_tokens es async (httpx.AsyncClient)
+    usuario = await run_in_threadpool(verify_id_token, id_token_str)
+    await run_in_threadpool(guardar_tokens_drive, db, usuario["email"], tokens)
 
     app_token = create_access_token(usuario["email"], usuario["nombre"])
     response = RedirectResponse(url=f"{settings.frontend_url}/auth/callback")

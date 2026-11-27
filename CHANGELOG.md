@@ -41,6 +41,9 @@ usa [versionado semántico](https://semver.org/lang/es/).
 - Dependabot ya no propone SQLAlchemy 2.1 (sí los parches 2.0.x): en 2.1 las URL
   `postgresql://` usan por defecto psycopg 3 en lugar de `psycopg2-binary`, y la app no
   arrancaría. Cambiar de driver se decide a mano.
+- Importar estudiantes (o su vista previa), leer una rúbrica desde Excel y el inicio de
+  sesión con Google ya no detienen al resto de las peticiones mientras duran: su trabajo
+  se hace en un hilo aparte. Las respuestas no cambian.
 
 ## [1.0.0] - 2026-11-05
 
