@@ -45,6 +45,12 @@ usa [versionado semántico](https://semver.org/lang/es/).
   sesión con Google ya no detienen al resto de las peticiones mientras duran: su trabajo
   se hace en un hilo aparte. Las respuestas no cambian.
 
+### Corregido
+
+- Documentación: el CSV de Ingeniería Informática trae 17 Resultados de Aprendizaje
+  (8 Student Outcomes) y 39 Criterios, no 8 y 17 como decían el README y el manual de
+  inicio rápido.
+
 ## [1.0.0] - 2026-11-05
 
 Primera versión publicada. Reúne el desarrollo desde el inicio del proyecto (mayo de 2026),

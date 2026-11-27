@@ -260,9 +260,9 @@ Evaluación de tu programa.
 1. Menú **Student Outcomes → Importar CSV**.
 2. Elige la colección de tu carrera, o *Crear una nueva colección…*.
 3. Sube el CSV del programa. Para Ingeniería Informática de la UAO viene con la app:
-   `backend\scripts\student_outcomes_ingenieria_informatica.csv` (8 Resultados de
-   Aprendizaje y 17 Criterios). Para otro programa, el formato está en **Ayuda →
-   Student Outcomes**.
+   `backend\scripts\student_outcomes_ingenieria_informatica.csv` (17 Resultados de
+   Aprendizaje, agrupados en los 8 Student Outcomes, y 39 Criterios de Evaluación).
+   Para otro programa, el formato está en **Ayuda → Student Outcomes**.
 
 ---
 
